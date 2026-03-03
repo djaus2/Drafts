@@ -1,0 +1,207 @@
+﻿@page "/drafts"
+@using Drafts.Services
+@inject DraftsService GameService
+@inject NavigationManager Nav
+@inject Microsoft.JSInterop.IJSRuntime JS
+
+<h3>Drafts (Checkers)</h3>
+
+@if (string.IsNullOrEmpty(_gameId))
+{
+    <div>
+        <button @onclick="CreateGame">Create new game</button>
+        <div style="margin-top:8px;">
+            <input @bind="_joinId" placeholder="Enter Game ID" />
+            <button @onclick="JoinById">Join</button>
+        </div>
+    </div>
+}
+else if (!_connected)
+{
+    <div>
+        <p>Joining game <b>@_gameId</b>…</p>
+        <p>@_status</p>
+    </div>
+}
+else
+{
+    <div>
+        <p>Game: <b>@_gameId</b> — You are player <b>@_playerNumber</b>. Current turn: <b>@_game?.CurrentTurn</b></p>
+        <p>
+            Share this link with the other player:
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <input style="width:260px" value="@JoinLink" readonly />
+            <button @onclick="CopyJoinLink">Copy</button>
+            <a class="btn" href="@JoinLink" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:6px 10px;border:1px solid #888;background:#f3f3f3;text-decoration:none;color:inherit;border-radius:4px;">Open in new window</a>
+            @if (_copied)
+            {
+                <span style="color:green;margin-left:6px;">Copied!</span>
+            }
+        </div>
+        <table style="border-collapse:collapse;">
+            @for (int r = 0; r < 8; r++)
+            {
+                <tr>
+                    @for (int c = 0; c < 8; c++)
+                    {
+                        // guard nullable _game to satisfy analyzer
+                        var cell = _game is not null ? _game.Board[r, c] : 0;
+                        var isDark = ((r + c) % 2 != 0);
+                        var bg = isDark ? "#7B5E3B" : "#EEE8D5";
+                        string content = cell switch
+                        {
+                            1 => "●",
+                            2 => "○",
+                            3 => "♔",
+                            4 => "♚",
+                            _ => ""
+                        };
+                        var border = (_selectedR == r && _selectedC == c) ? "3px solid yellow" : "1px solid #444";
+                        <td style="width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
+                            @onclick="(()=> OnCellClick(r,c))">
+                            <div style="font-size:22px">@content</div>
+                        </td>
+                    }
+                </tr>
+            }
+        </table>
+        <p style="margin-top:8px;">@_message</p>
+    </div>
+}
+
+@code {
+    private string? _gameId;
+    private string _joinId = "";
+    private Drafts.Services.DraftsGame? _game;
+    private bool _connected = false;
+    private int _playerNumber;
+    private int? _selectedR;
+    private int? _selectedC;
+    private string _message = "";
+    private string _status = "";
+    private bool _copied = false;
+
+    private string JoinLink => Nav.BaseUri.TrimEnd('/') + $"/drafts?gameId={_gameId ?? ""}";
+
+    protected override void OnInitialized()
+    {
+        // Read query parameter
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("gameId", out var gid))
+        {
+            _gameId = gid;
+            // join only when gameId is present (this is the component instance that should join)
+            BeginJoin(_gameId!);
+            return;
+        }
+
+        // Auto-create a game and navigate to its URL. Do NOT call BeginJoin here
+        // because the navigation will load a fresh component instance that will join.
+        _gameId = GameService.CreateGame();
+        Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+    }
+
+    private async void CreateGame()
+    {
+        _gameId = GameService.CreateGame();
+        // navigate to same page with query param so the link is shareable
+        // do NOT BeginJoin here — let the navigated instance join
+        Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void JoinById()
+    {
+        if (string.IsNullOrWhiteSpace(_joinId)) return;
+        _gameId = _joinId.Trim();
+        Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        // BeginJoin will be executed in the navigated instance (OnInitialized)
+    }
+
+    private void BeginJoin(string id)
+    {
+        _status = "Joining...";
+        var player = GameService.TryJoinGame(id);
+        if (player == 0)
+        {
+            _status = "Unable to join (game full or not found).";
+            _connected = false;
+            return;
+        }
+        _playerNumber = player;
+        _game = GameService.GetGame(id);
+        _connected = true;
+        _status = "";
+        GameService.GameUpdated += OnGameUpdated;
+        _message = "Connected.";
+    }
+
+    private void OnGameUpdated(string id)
+    {
+        if (id != _gameId) return;
+        _game = GameService.GetGame(id);
+        // re-render on the UI thread
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CopyJoinLink()
+    {
+        if (string.IsNullOrEmpty(JoinLink)) return;
+        try
+        {
+            // Use clipboard API
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", JoinLink);
+            _copied = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(1500);
+            _copied = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // fallback: open a prompt if clipboard fails (not typical in modern browsers)
+            await JS.InvokeVoidAsync("prompt", "Copy this link", JoinLink);
+        }
+    }
+
+    private async void OnCellClick(int r, int c)
+    {
+        if (_game == null) return;
+        if (!_selectedR.HasValue)
+        {
+            var cell = _game.Board[r, c];
+            if (cell == 0) { _message = "Select one of your pieces."; await InvokeAsync(StateHasChanged); return; }
+            if (!BelongsToPlayer(cell, _playerNumber)) { _message = "That's not your piece."; await InvokeAsync(StateHasChanged); return; }
+            _selectedR = r; _selectedC = c;
+            _message = $"Selected {r},{c}";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        else
+        {
+            // analyzer: _selectedR/_selectedC are guaranteed non-null here; use null-forgiving operator
+            var fr = _selectedR!.Value;
+            var fc = _selectedC!.Value;
+            var (ok, msg) = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
+            if (!ok) _message = msg ?? "Invalid move";
+            else
+            {
+                _message = "";
+            }
+            _selectedR = null; _selectedC = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static bool BelongsToPlayer(int piece, int player)
+    {
+        if (player == 1) return piece == 1 || piece == 3;
+        return piece == 2 || piece == 4;
+    }
+
+    public void Dispose()
+    {
+        GameService.GameUpdated -= OnGameUpdated;
+    }
+}
