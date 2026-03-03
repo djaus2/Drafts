@@ -1,8 +1,29 @@
 ﻿@page "/drafts"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using Drafts.Services
 @inject DraftsService GameService
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
+
+<style>
+  /* Pieces sized to 75% of a 48px cell => 36px diameter */
+  .piece-wrapper { display:flex; align-items:center; justify-content:center; height:100%; }
+  .piece {
+    width:36px;
+    height:36px;
+    border-radius:50%;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+    user-select:none;
+    font-weight:700;
+    pointer-events: auto;
+  }
+  .p1 { background:#111; color:#fff; border:2px solid rgba(0,0,0,0.6); }
+  .p2 { background:#fff; color:#000; border:2px solid #222; }
+  .king-symbol { font-size:16px; line-height:1; pointer-events:none; }
+</style>
 
 <h3>Drafts (Checkers)</h3>
 
@@ -45,30 +66,60 @@ else
                 <tr>
                     @for (int c = 0; c < 8; c++)
                     {
-                        // guard nullable _game to satisfy analyzer
-                        var cell = _game is not null ? _game.Board[r, c] : 0;
-                        var isDark = ((r + c) % 2 != 0);
+                        var rr = r;
+                        var cc = c;
+
+                        var cell = _game is not null ? _game.Board[rr, cc] : 0;
+                        var isDark = ((rr + cc) % 2 != 0);
                         var bg = isDark ? "#7B5E3B" : "#EEE8D5";
-                        string content = cell switch
-                        {
-                            1 => "●",
-                            2 => "○",
-                            3 => "♔",
-                            4 => "♚",
-                            _ => ""
-                        };
-                        var border = (_selectedR == r && _selectedC == c) ? "3px solid yellow" : "1px solid #444";
-                        <td style="width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
-                            @onclick="(()=> OnCellClick(r,c))">
-                            <div style="font-size:22px">@content</div>
+                        var border = (_selectedR == rr && _selectedC == cc) ? "3px solid yellow" : "1px solid #444";
+
+                        <td data-r="@rr" data-c="@cc"
+                            style="width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
+                            @onclick="() => OnCellClick(rr, cc)">
+                            <div class="piece-wrapper"
+                                 @onclick="() => OnCellClick(rr, cc)"
+                                 @onclick:stopPropagation="true">
+                                @if (cell != 0)
+                                {
+                                    var isP1 = (cell == 1 || cell == 3);
+                                    var pieceClass = isP1 ? "p1" : "p2";
+                                    var isKing = (cell == 3 || cell == 4);
+                                    <div class="piece @pieceClass">
+                                        @if (isKing)
+                                        {
+                                            <span class="king-symbol">@((cell == 3) ? "♔" : "♚")</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
                         </td>
                     }
                 </tr>
             }
         </table>
+
         <p style="margin-top:8px;">@_message</p>
     </div>
 }
+
+<!-- Diagnostic client-side script: logs clicks on any square to browser console.
+     Remove after debugging. -->
+<script>
+  (function () {
+    document.addEventListener('click', function (ev) {
+      try {
+        var td = ev.target.closest && ev.target.closest('td[data-r]');
+        if (!td) return;
+        var r = td.getAttribute('data-r');
+        var c = td.getAttribute('data-c');
+        console.log('[Drafts] client click on cell', r, c, 'target=', ev.target.tagName);
+      } catch (e) {
+        console.error('[Drafts] click logging error', e);
+      }
+    }, true);
+  })();
+</script>
 
 @code {
     private string? _gameId;
@@ -76,6 +127,7 @@ else
     private Drafts.Services.DraftsGame? _game;
     private bool _connected = false;
     private int _playerNumber;
+    private bool _joined = false;
     private int? _selectedR;
     private int? _selectedC;
     private string _message = "";
@@ -86,28 +138,25 @@ else
 
     protected override void OnInitialized()
     {
-        // Read query parameter
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("gameId", out var gid))
         {
             _gameId = gid;
-            // join only when gameId is present (this is the component instance that should join)
             BeginJoin(_gameId!);
             return;
         }
 
-        // Auto-create a game and navigate to its URL. Do NOT call BeginJoin here
-        // because the navigation will load a fresh component instance that will join.
+        // Auto-create and navigate; navigated instance will join.
         _gameId = GameService.CreateGame();
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        BeginJoin(_gameId);
     }
 
     private async void CreateGame()
     {
         _gameId = GameService.CreateGame();
-        // navigate to same page with query param so the link is shareable
-        // do NOT BeginJoin here — let the navigated instance join
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        BeginJoin(_gameId);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -116,12 +165,23 @@ else
         if (string.IsNullOrWhiteSpace(_joinId)) return;
         _gameId = _joinId.Trim();
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
-        // BeginJoin will be executed in the navigated instance (OnInitialized)
     }
 
     private void BeginJoin(string id)
     {
+        if (_joined && _connected && string.Equals(_gameId, id, StringComparison.Ordinal))
+        {
+            _game = GameService.GetGame(id);
+            _status = "";
+            GameService.GameUpdated -= OnGameUpdated;
+            GameService.GameUpdated += OnGameUpdated;
+            _message = "Connected.";
+            return;
+        }
+
         _status = "Joining...";
+        GameService.GameUpdated -= OnGameUpdated;
+        GameService.GameUpdated += OnGameUpdated;
         var player = GameService.TryJoinGame(id);
         if (player == 0)
         {
@@ -132,6 +192,7 @@ else
         _playerNumber = player;
         _game = GameService.GetGame(id);
         _connected = true;
+        _joined = true;
         _status = "";
         GameService.GameUpdated += OnGameUpdated;
         _message = "Connected.";
@@ -141,7 +202,6 @@ else
     {
         if (id != _gameId) return;
         _game = GameService.GetGame(id);
-        // re-render on the UI thread
         InvokeAsync(StateHasChanged);
     }
 
@@ -150,7 +210,6 @@ else
         if (string.IsNullOrEmpty(JoinLink)) return;
         try
         {
-            // Use clipboard API
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", JoinLink);
             _copied = true;
             await InvokeAsync(StateHasChanged);
@@ -160,38 +219,65 @@ else
         }
         catch
         {
-            // fallback: open a prompt if clipboard fails (not typical in modern browsers)
             await JS.InvokeVoidAsync("prompt", "Copy this link", JoinLink);
         }
     }
 
-    private async void OnCellClick(int r, int c)
+    private async Task OnCellClick(int r, int c)
     {
-        if (_game == null) return;
-        if (!_selectedR.HasValue)
+        // Immediate debug feedback so you can see the click reached server.
+        var cell = _game is not null ? _game.Board[r, c] : 0;
+        _message = $"Click received: ({r},{c}) cell={cell} player={_playerNumber} connected={_connected}";
+        await InvokeAsync(StateHasChanged);
+
+        if (_game == null)
         {
-            var cell = _game.Board[r, c];
-            if (cell == 0) { _message = "Select one of your pieces."; await InvokeAsync(StateHasChanged); return; }
-            if (!BelongsToPlayer(cell, _playerNumber)) { _message = "That's not your piece."; await InvokeAsync(StateHasChanged); return; }
-            _selectedR = r; _selectedC = c;
-            _message = $"Selected {r},{c}";
+            _message = "No game loaded.";
             await InvokeAsync(StateHasChanged);
             return;
         }
-        else
+
+        var belongs = (cell != 0) && BelongsToPlayer(cell, _playerNumber);
+
+        if (!_selectedR.HasValue)
         {
-            // analyzer: _selectedR/_selectedC are guaranteed non-null here; use null-forgiving operator
-            var fr = _selectedR!.Value;
-            var fc = _selectedC!.Value;
-            var (ok, msg) = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
-            if (!ok) _message = msg ?? "Invalid move";
-            else
+            if (cell == 0)
             {
-                _message = "";
+                _message = $"Empty square ({r},{c}). Select one of your pieces.";
+                await InvokeAsync(StateHasChanged);
+                return;
             }
-            _selectedR = null; _selectedC = null;
+
+            if (!belongs)
+            {
+                _message = $"That's not your piece (cell={cell}) — you are player {_playerNumber}.";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            _selectedR = r;
+            _selectedC = c;
+            _message = $"Selected {_selectedR},{_selectedC} (cell={cell}). Click destination.";
             await InvokeAsync(StateHasChanged);
+            return;
         }
+
+        var fr = _selectedR!.Value;
+        var fc = _selectedC!.Value;
+
+        if (fr == r && fc == c)
+        {
+            _selectedR = null; _selectedC = null;
+            _message = "Selection cleared.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var (ok, msg) = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
+        _message = ok ? "" : msg ?? "Invalid move";
+
+        _selectedR = null; _selectedC = null;
+        await InvokeAsync(StateHasChanged);
     }
 
     private static bool BelongsToPlayer(int piece, int player)

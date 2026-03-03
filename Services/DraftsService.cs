@@ -140,9 +140,9 @@ namespace Drafts.Services
 
         private static bool IsForwardMove(int piece, int dr)
         {
-            // Player1 (pieces 1/3) move down (dr > 0); Player2 (2/4) move up (dr < 0)
-            if (piece == 1) return dr > 0;
-            if (piece == 2) return dr < 0;
+            // Player1 (pieces 1/3) move up (dr < 0); Player2 (2/4) move down (dr > 0)
+            if (piece == 1) return dr < 0;
+            if (piece == 2) return dr > 0;
             // kings can move any direction
             return true;
         }
