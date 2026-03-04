@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
@@ -19,10 +19,13 @@ namespace Drafts.Services
             _logger = logger;
         }
 
-        public string CreateGame()
+        public string CreateGame(int userId)
         {
             var id = Guid.NewGuid().ToString("n").Substring(0, 8);
-            var game = new DraftsGame(id);
+            var game = new DraftsGame(id)
+            {
+                CreatedByUserId = userId
+            };
             _games[id] = game;
             _logger.LogInformation("CreateGame: {GameId}", id);
             OnGameUpdated(id);
@@ -37,7 +40,7 @@ namespace Drafts.Services
         }
 
         // Returns 1 or 2 for player number, 0 if cannot join
-        public int TryJoinGame(string id)
+        public int TryJoinGame(string id, int userId)
         {
             var game = GetGame(id);
             if (game == null)
@@ -48,6 +51,9 @@ namespace Drafts.Services
 
             lock (game)
             {
+                if (game.Player1UserId == userId) return 1;
+                if (game.Player2UserId == userId) return 2;
+
                 if (game.Player1Connected && game.Player2Connected)
                 {
                     _logger.LogWarning("TryJoinGame: {GameId} already full (p1={P1} p2={P2})", id, game.Player1Connected, game.Player2Connected);
@@ -56,6 +62,7 @@ namespace Drafts.Services
                 if (!game.Player1Connected)
                 {
                     game.Player1Connected = true;
+                    game.Player1UserId = userId;
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player1", id);
                     OnGameUpdated(id);
                     return 1;
@@ -63,6 +70,7 @@ namespace Drafts.Services
                 if (!game.Player2Connected)
                 {
                     game.Player2Connected = true;
+                    game.Player2UserId = userId;
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player2", id);
                     OnGameUpdated(id);
                     return 2;
@@ -70,6 +78,26 @@ namespace Drafts.Services
                 _logger.LogWarning("TryJoinGame: {GameId} unexpected state", id);
                 return 0;
             }
+        }
+
+        public int RemoveGamesForUser(int userId)
+        {
+            var removed = 0;
+            foreach (var kvp in _games)
+            {
+                var game = kvp.Value;
+                if (game.CreatedByUserId == userId || game.Player1UserId == userId || game.Player2UserId == userId)
+                {
+                    if (_games.TryRemove(kvp.Key, out _))
+                    {
+                        removed++;
+                        _logger.LogInformation("RemoveGamesForUser: removed game {GameId} for user {UserId}", kvp.Key, userId);
+                        OnGameUpdated(kvp.Key);
+                    }
+                }
+            }
+
+            return removed;
         }
 
         // Make a move. Returns (success, message).
@@ -117,7 +145,7 @@ namespace Drafts.Services
                     game.Board[fr, fc] = 0;
                     game.Board[midr, midc] = 0;
                     MaybePromote(game, tr, tc);
-                    // NOTE: Not implementing multiple-jump forcing � simple single capture.
+                    // NOTE: Not implementing multiple-jump forcing — simple single capture.
                     game.CurrentTurn = 3 - player;
                     OnGameUpdated(id);
                     _logger.LogInformation("MakeMove: {GameId} capture applied", id);
@@ -166,6 +194,7 @@ namespace Drafts.Services
     public class DraftsGame
     {
         public string Id { get; }
+
         // Board representation:
         // 0 empty
         // 1 player1 piece, 3 player1 king
@@ -173,6 +202,10 @@ namespace Drafts.Services
         public int[,] Board { get; } = new int[8,8];
 
         public int CurrentTurn { get; set; } = 1;
+
+        public int CreatedByUserId { get; set; }
+        public int? Player1UserId { get; set; }
+        public int? Player2UserId { get; set; }
 
         public bool Player1Connected { get; set; } = false;
         public bool Player2Connected { get; set; } = false;
@@ -210,6 +243,8 @@ namespace Drafts.Services
             CurrentTurn = 1;
             Player1Connected = false;
             Player2Connected = false;
+            Player1UserId = null;
+            Player2UserId = null;
         }
     }
 }

@@ -1,0 +1,32 @@
+@page "/login"
+@using Drafts.Services
+@inject NavigationManager Nav
+
+<PageTitle>Login</PageTitle>
+
+<h3>Login</h3>
+
+<form method="post" action="/auth/login" style="max-width:320px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+        <input name="name" value="@_name" placeholder="Name" />
+        <input name="pin" value="@_pin" placeholder="4-digit PIN" inputmode="numeric" maxlength="4" />
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+        <button type="submit">Login</button>
+        @if (_showError)
+        {
+            <div style="color:#b00020">Invalid name or PIN.</div>
+        }
+    </div>
+</form>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? Error { get; set; }
+
+    private bool _showError => string.Equals(Error, "1", StringComparison.Ordinal);
+    private string _name => "";
+    private string _pin => "";
+}

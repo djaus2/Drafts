@@ -1,9 +1,14 @@
 ﻿@page "/drafts"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
 @using Drafts.Services
 @inject DraftsService GameService
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject IHttpContextAccessor HttpContextAccessor
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthStateProvider
 
 <style>
   /* Pieces sized to 75% of a 48px cell => 36px diameter */
@@ -47,14 +52,14 @@ else if (!_connected)
 else
 {
     <div>
-        <p>Game: <b>@_gameId</b> — You are player <b>@_playerNumber</b>. Current turn: <b>@_game?.CurrentTurn</b></p>
+        <p>Game: <b>@_gameId</b> — You are player <b>@_playerNumber</b> (<b>@_currentUserName</b>). Current turn: <b>@_game?.CurrentTurn</b></p>
         <p>
             Share this link with the other player:
         </p>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-            <input style="width:260px" value="@JoinLink" readonly />
+            <input style="width:340px" value="@JoinLink" readonly />
             <button @onclick="CopyJoinLink">Copy</button>
-            <a class="btn" href="@JoinLink" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:6px 10px;border:1px solid #888;background:#f3f3f3;text-decoration:none;color:inherit;border-radius:4px;">Open in new window</a>
+            <!-- button @onclick="OpenJoinLinkNewWindow" style="display:inline-block;padding:6px 10px;border:1px solid #888;background:#f3f3f3;color:inherit;border-radius:4px;">Open in new window</!-- -->
             @if (_copied)
             {
                 <span style="color:green;margin-left:6px;">Copied!</span>
@@ -73,10 +78,13 @@ else
                         var isDark = ((rr + cc) % 2 != 0);
                         var bg = isDark ? "#7B5E3B" : "#EEE8D5";
                         var border = (_selectedR == rr && _selectedC == cc) ? "3px solid yellow" : "1px solid #444";
+                        var canDrag = _connected && _game is not null && cell != 0 && BelongsToPlayer(cell, _playerNumber);
 
                         <td data-r="@rr" data-c="@cc"
                             style="width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
-                            @onclick="() => OnCellClick(rr, cc)">
+                            @onclick="() => OnCellClick(rr, cc)"
+                            @onpointerenter="() => OnPointerEnterCell(rr, cc)"
+                            @onpointerup="() => OnPointerUpCell(rr, cc)">
                             <div class="piece-wrapper"
                                  @onclick="() => OnCellClick(rr, cc)"
                                  @onclick:stopPropagation="true">
@@ -85,12 +93,16 @@ else
                                     var isP1 = (cell == 1 || cell == 3);
                                     var pieceClass = isP1 ? "p1" : "p2";
                                     var isKing = (cell == 3 || cell == 4);
-                                    <div class="piece @pieceClass">
+                                    <div class="piece @pieceClass"
+                                         style="touch-action:none;"
+                                         @onpointerdown="(e => OnPointerDownPiece(e, rr, cc))"
+                                         @onpointerdown:stopPropagation="true">
                                         @if (isKing)
                                         {
                                             <span class="king-symbol">@((cell == 3) ? "♔" : "♚")</span>
                                         }
                                     </div>
+
                                 }
                             </div>
                         </td>
@@ -128,16 +140,53 @@ else
     private bool _connected = false;
     private int _playerNumber;
     private bool _joined = false;
+    private int _currentUserId;
+    private string _currentUserName = "";
     private int? _selectedR;
     private int? _selectedC;
+    private int? _dragFromR;
+    private int? _dragFromC;
+
+    private bool _isDragging;
+    private int? _dragHoverR;
+    private int? _dragHoverC;
+    private bool _suppressNextClick;
     private string _message = "";
     private string _status = "";
     private bool _copied = false;
 
     private string JoinLink => Nav.BaseUri.TrimEnd('/') + $"/drafts?gameId={_gameId ?? ""}";
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var ctxUser = HttpContextAccessor.HttpContext?.User;
+
+        if (user?.Identity?.IsAuthenticated != true && ctxUser?.Identity?.IsAuthenticated == true)
+        {
+            user = ctxUser;
+        }
+
+        if (user?.Identity?.IsAuthenticated != true)
+        {
+            var relative = Nav.ToBaseRelativePath(Nav.Uri);
+            var returnUrl = Uri.EscapeDataString("/" + relative);
+            Nav.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
+            return;
+        }
+
+        _currentUserName = user.FindFirst(ClaimTypes.Name)?.Value ?? "";
+
+        var rawUid = user.FindFirst("uid")?.Value;
+        if (!int.TryParse(rawUid, out _currentUserId) || _currentUserId <= 0)
+        {
+            var relative = Nav.ToBaseRelativePath(Nav.Uri);
+            var returnUrl = Uri.EscapeDataString("/" + relative);
+            Nav.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
+            return;
+        }
+
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("gameId", out var gid))
         {
@@ -147,14 +196,19 @@ else
         }
 
         // Auto-create and navigate; navigated instance will join.
-        _gameId = GameService.CreateGame();
+        _gameId = GameService.CreateGame(_currentUserId);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
     }
 
     private async void CreateGame()
     {
-        _gameId = GameService.CreateGame();
+        if (_currentUserId <= 0)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+        _gameId = GameService.CreateGame(_currentUserId);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
         await InvokeAsync(StateHasChanged);
@@ -165,14 +219,21 @@ else
         if (string.IsNullOrWhiteSpace(_joinId)) return;
         _gameId = _joinId.Trim();
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        BeginJoin(_gameId);
     }
 
     private void BeginJoin(string id)
     {
+        if (_currentUserId <= 0)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
         if (_joined && _connected && string.Equals(_gameId, id, StringComparison.Ordinal))
         {
             _game = GameService.GetGame(id);
             _status = "";
+
             GameService.GameUpdated -= OnGameUpdated;
             GameService.GameUpdated += OnGameUpdated;
             _message = "Connected.";
@@ -181,8 +242,7 @@ else
 
         _status = "Joining...";
         GameService.GameUpdated -= OnGameUpdated;
-        GameService.GameUpdated += OnGameUpdated;
-        var player = GameService.TryJoinGame(id);
+        var player = GameService.TryJoinGame(id, _currentUserId);
         if (player == 0)
         {
             _status = "Unable to join (game full or not found).";
@@ -223,8 +283,26 @@ else
         }
     }
 
+    private async Task OpenJoinLinkNewWindow()
+    {
+        if (string.IsNullOrEmpty(JoinLink)) return;
+
+        // Note: This opens a separate window, but will still share the same browser profile/cookies.
+        await JS.InvokeVoidAsync(
+            "open",
+            JoinLink,
+            "_blank",
+            "noopener,noreferrer,width=1100,height=900");
+    }
+
     private async Task OnCellClick(int r, int c)
     {
+        if (_isDragging || _suppressNextClick)
+        {
+            _suppressNextClick = false;
+            return;
+        }
+
         // Immediate debug feedback so you can see the click reached server.
         var cell = _game is not null ? _game.Board[r, c] : 0;
         _message = $"Click received: ({r},{c}) cell={cell} player={_playerNumber} connected={_connected}";
@@ -277,6 +355,109 @@ else
         _message = ok ? "" : msg ?? "Invalid move";
 
         _selectedR = null; _selectedC = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnPointerDownPiece(PointerEventArgs e, int r, int c)
+    {
+        if (_game == null) return;
+
+        var cell = _game.Board[r, c];
+        if (cell == 0 || !BelongsToPlayer(cell, _playerNumber)) return;
+
+        if (e.ShiftKey)
+        {
+            _isDragging = false;
+            _dragFromR = null;
+            _dragFromC = null;
+            _dragHoverR = null;
+            _dragHoverC = null;
+            _suppressNextClick = true;
+            _selectedR = r;
+            _selectedC = c;
+            _message = $"Selected {r},{c} (cell={cell}). Click destination.";
+            return;
+        }
+
+        if (string.Equals(e.PointerType, "touch", StringComparison.OrdinalIgnoreCase))
+        {
+            _isDragging = false;
+            _dragFromR = null;
+            _dragFromC = null;
+            _dragHoverR = null;
+            _dragHoverC = null;
+            _suppressNextClick = true;
+            _selectedR = r;
+            _selectedC = c;
+            _message = $"Selected {r},{c} (cell={cell}). Tap destination.";
+            return;
+        }
+
+        _isDragging = true;
+        _dragFromR = r;
+        _dragFromC = c;
+        _dragHoverR = r;
+        _dragHoverC = c;
+        _selectedR = r;
+        _selectedC = c;
+        _message = $"Dragging from ({r},{c}). Release on destination.";
+    }
+
+    private void OnPointerEnterCell(int r, int c)
+    {
+        if (!_isDragging) return;
+        _dragHoverR = r;
+        _dragHoverC = c;
+    }
+
+    private async Task OnPointerUpCell(int r, int c)
+    {
+        if (!_isDragging)
+        {
+            return;
+        }
+
+        if (_game == null || !_dragFromR.HasValue || !_dragFromC.HasValue)
+        {
+            _isDragging = false;
+            _dragFromR = null;
+            _dragFromC = null;
+            _selectedR = null;
+            _selectedC = null;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var fr = _dragFromR.Value;
+        var fc = _dragFromC.Value;
+
+        if (fr == r && fc == c)
+        {
+            _suppressNextClick = true;
+            _isDragging = false;
+            _dragFromR = null;
+            _dragFromC = null;
+            _dragHoverR = null;
+            _dragHoverC = null;
+            _selectedR = null;
+            _selectedC = null;
+            _message = "";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var (ok, msg) = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
+        _message = ok ? "" : msg ?? "Invalid move";
+
+        _suppressNextClick = true;
+        _isDragging = false;
+        _dragFromR = null;
+        _dragFromC = null;
+        _dragHoverR = null;
+        _dragHoverC = null;
+        _selectedR = null;
+        _selectedC = null;
+
         await InvokeAsync(StateHasChanged);
     }
 

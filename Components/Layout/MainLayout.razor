@@ -1,4 +1,13 @@
 ﻿@inherits LayoutComponentBase
+@inject IHttpContextAccessor HttpContextAccessor
+
+<div style="padding:12px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <h1 style="margin:0;">Checkers</h1>
+    @if (HttpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true)
+    {
+        <button onclick="location.href='/logout'">Logout</button>
+    }
+</div>
 
 @Body
 

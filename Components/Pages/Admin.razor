@@ -1,0 +1,16 @@
+@page "/admin"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Admin</PageTitle>
+
+<h3>Admin</h3>
+
+<p>You are logged in as <b>@(HttpContextAccessor.HttpContext?.User?.Identity?.Name)</b>.</p>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+    <a href="/admin/users">Manage players</a>
+    <a href="/drafts">Start a new game</a>
+    <a href="/player">Reset your password</a>
+    <a href="/logout">Logout</a>
+</div>

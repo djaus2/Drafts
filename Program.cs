@@ -1,5 +1,10 @@
 using Drafts.Components;
+using Drafts.Data;
 using Drafts.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Drafts
 {
@@ -13,10 +18,33 @@ namespace Drafts
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
 
+            builder.Services.AddHttpContextAccessor();
+
+            builder.Services.AddDbContext<AppDbContext>(options =>
+                options.UseSqlite(builder.Configuration.GetConnectionString("AuthDb")));
+
+            builder.Services.AddScoped<AuthService>();
+
+            builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+                .AddCookie(options =>
+                {
+                    options.LoginPath = "/login";
+                    options.LogoutPath = "/logout";
+                    options.AccessDeniedPath = "/login";
+                });
+
+            builder.Services.AddAuthorization();
+
             // Register the game service so multiple components can join the same game.
             builder.Services.AddSingleton<DraftsService>();
 
             var app = builder.Build();
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                DbSeeder.EnsureSeededAsync(db).GetAwaiter().GetResult();
+            }
 
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
@@ -31,9 +59,56 @@ namespace Drafts
 
             app.UseAntiforgery();
 
+            app.UseAuthentication();
+            app.UseAuthorization();
+
             app.MapStaticAssets();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
+
+            app.MapGet("/logout", async (HttpContext ctx, DraftsService drafts) =>
+            {
+                var raw = ctx.User?.FindFirst("uid")?.Value;
+                if (int.TryParse(raw, out var uid) && uid > 0)
+                {
+                    drafts.RemoveGamesForUser(uid);
+                }
+                await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return Results.Redirect("/login", permanent: false);
+            });
+
+            app.MapPost("/auth/login", async (
+                HttpContext ctx,
+                AuthService auth,
+                [FromForm] string name,
+                [FromForm] string pin,
+                [FromForm] string? returnUrl) =>
+            {
+                name = (name ?? string.Empty).Trim();
+                pin = (pin ?? string.Empty).Trim();
+
+                if (string.IsNullOrWhiteSpace(name) || pin.Length != 4 || !pin.All(char.IsDigit))
+                {
+                    return Results.Redirect("/login?error=1", permanent: false);
+                }
+
+                var user = await auth.ValidateLoginAsync(name, pin);
+                if (user is null)
+                {
+                    return Results.Redirect("/login?error=1", permanent: false);
+                }
+
+                await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, AuthService.BuildPrincipal(user));
+
+                if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+                {
+                    return Results.Redirect(returnUrl, permanent: false);
+                }
+
+                var roles = (user.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var isAdmin = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+                return Results.Redirect(isAdmin ? "/admin" : "/player", permanent: false);
+            }).DisableAntiforgery();
 
             app.Run();
         }

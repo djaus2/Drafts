@@ -1,0 +1,211 @@
+@page "/admin/users"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Drafts.Services
+@inject AuthService Auth
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Add Player</PageTitle>
+
+<h3>Add Player</h3>
+
+<div style="max-width:360px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+        <input @bind="_name" placeholder="Name" />
+        <input @bind="_pin" placeholder="4-digit PIN" inputmode="numeric" maxlength="4" />
+        <label><input type="checkbox" @bind="_isPlayer" /> Player</label>
+        <label><input type="checkbox" @bind="_isAdmin" /> Admin</label>
+        <button @onclick="OnAdd">Add player</button>
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div>@_message</div>
+        }
+        <a href="/admin">Back</a>
+    </div>
+</div>
+
+<hr />
+
+<PageTitle>Manage Players</PageTitle>
+
+@if (_users is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table style="border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Name</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Roles</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var u in _users)
+            {
+                if (!string.IsNullOrWhiteSpace(u.Roles) && u.Roles.Contains("Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                <tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@u.Name</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@u.Roles</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">
+                        <button @onclick="() => SelectReset(u.Id, u.Name)">Reset PIN to 9999</button>
+                        <button style="margin-left:6px" @onclick="() => SelectDelete(u.Id, u.Name)">Delete</button>
+                    </td>
+                </tr>
+            }
+            <a href="/admin">Back</a>
+        </tbody>
+    </table>
+
+    @if (!string.IsNullOrWhiteSpace(_actionTargetName))
+    {
+        <div style="margin-top:12px;padding:10px;border:1px solid #ccc;max-width:520px;">
+            <div style="font-weight:600">@_actionTitle</div>
+            <div style="margin-top:6px;">Target player: <b>@_actionTargetName</b></div>
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+                <input @bind="_adminPin" placeholder="Enter your admin PIN" inputmode="numeric" maxlength="4" />
+                <label>
+                    <input type="checkbox" @bind="_confirm" /> Confirm
+                </label>
+                <div style="display:flex;gap:8px;">
+                    <button @onclick="ExecuteAction">Execute</button>
+                    <button @onclick="CancelAction">Cancel</button>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_actionMessage))
+                {
+                    <div>@_actionMessage</div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string _name = "";
+    private string _pin = "9999";
+    private bool _isAdmin = false;
+    private bool _isPlayer = true;
+    private string _message = "";
+
+    private List<Drafts.Data.AppUser>? _users;
+    private int? _actionTargetId;
+    private string _actionTargetName = "";
+    private string _adminPin = "";
+    private bool _confirm = false;
+    private string _actionTitle = "";
+    private string _actionMessage = "";
+    private string _actionKind = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _users = await Auth.ListUsersAsync();
+    }
+
+    private async Task OnAdd()
+    {
+        _message = "";
+        var user = await Auth.CreateUserAsync((_name ?? "").Trim(), (_pin ?? "").Trim(), _isAdmin, _isPlayer);
+        if (user is null)
+        {
+            _message = "Unable to add player (check name uniqueness, PIN, roles).";
+            return;
+        }
+
+        _message = $"Player '{user.Name}' added.";
+        _name = "";
+        _pin = "9999";
+        _isAdmin = false;
+        _isPlayer = true;
+
+        _users = await Auth.ListUsersAsync();
+    }
+
+    private void SelectReset(int userId, string name)
+    {
+        _actionKind = "reset";
+        _actionTargetId = userId;
+        _actionTargetName = name;
+        _actionTitle = "Reset PIN to 9999";
+        _actionMessage = "";
+        _adminPin = "";
+        _confirm = false;
+    }
+
+    private void SelectDelete(int userId, string name)
+    {
+        _actionKind = "delete";
+        _actionTargetId = userId;
+        _actionTargetName = name;
+        _actionTitle = "Delete player";
+        _actionMessage = "";
+        _adminPin = "";
+        _confirm = false;
+    }
+
+    private void CancelAction()
+    {
+        _actionKind = "";
+        _actionTargetId = null;
+        _actionTargetName = "";
+        _actionTitle = "";
+        _actionMessage = "";
+        _adminPin = "";
+        _confirm = false;
+    }
+
+    private async Task ExecuteAction()
+    {
+        _actionMessage = "";
+
+        if (!_actionTargetId.HasValue)
+        {
+            _actionMessage = "No target selected.";
+            return;
+        }
+
+        if (!_confirm)
+        {
+            _actionMessage = "You must confirm.";
+            return;
+        }
+
+        var adminUserId = GetCurrentUserId();
+        if (!adminUserId.HasValue)
+        {
+            _actionMessage = "No admin player id.";
+            return;
+        }
+
+        var pin = (_adminPin ?? "").Trim();
+        var ok = false;
+
+        if (_actionKind == "reset")
+        {
+            ok = await Auth.ResetUserPinTo9999Async(_actionTargetId.Value, adminUserId.Value, pin);
+        }
+        else if (_actionKind == "delete")
+        {
+            ok = await Auth.DeleteUserAsync(_actionTargetId.Value, adminUserId.Value, pin);
+        }
+        else
+        {
+            _actionMessage = "Unknown action.";
+            return;
+        }
+
+        _actionMessage = ok ? "Done." : "Failed (check admin PIN, or target is protected).";
+        _users = await Auth.ListUsersAsync();
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var user = HttpContextAccessor.HttpContext?.User;
+        var raw = user?.FindFirst("uid")?.Value;
+        return int.TryParse(raw, out var id) ? id : null;
+    }
+}
