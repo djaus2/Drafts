@@ -4,6 +4,7 @@
 @using Drafts.Services
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
 
 <PageTitle>Admin</PageTitle>
 
@@ -17,7 +18,18 @@
 </div>
 
 <div style="max-width:360px;margin-top:12px;">
-    <button style="width:100%;padding:10px 12px;" onclick="location.href='/drafts'">Start a new game</button>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+        <div>Admin is</div>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="radio" name="adminColor" value="1" checked="@(_creatorPlayerNumber == 1)" @onchange="(() => _creatorPlayerNumber = 1)" />
+            Black
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="radio" name="adminColor" value="2" checked="@(_creatorPlayerNumber == 2)" @onchange="(() => _creatorPlayerNumber = 2)" />
+            White
+        </label>
+    </div>
+    <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
 </div>
 
 <h4 style="margin-top:18px;">Change PIN</h4>
@@ -35,9 +47,15 @@
 </div>
 
 @code {
+    private int _creatorPlayerNumber = 1;
     private string _currentPin = "";
     private string _newPin = "";
     private string _pinMessage = "";
+
+    private void StartNewGame()
+    {
+        Nav.NavigateTo($"/drafts?creator={_creatorPlayerNumber}");
+    }
 
     private async Task OnChangePin()
     {

@@ -47,13 +47,30 @@ namespace Drafts.Services
                 .ToList();
         }
 
-        public string CreateGame(int userId)
+        public string CreateGame(int userId, int creatorPlayerNumber = 1)
         {
             var id = Guid.NewGuid().ToString("n").Substring(0, 8);
             var game = new DraftsGame(id)
             {
                 CreatedByUserId = userId
             };
+
+            if (creatorPlayerNumber != 1 && creatorPlayerNumber != 2)
+            {
+                creatorPlayerNumber = 1;
+            }
+
+            if (creatorPlayerNumber == 1)
+            {
+                game.Player1Connected = true;
+                game.Player1UserId = userId;
+            }
+            else
+            {
+                game.Player2Connected = true;
+                game.Player2UserId = userId;
+            }
+
             _games[id] = game;
             _logger.LogInformation("CreateGame: {GameId}", id);
             OnGameUpdated(id);
@@ -91,6 +108,10 @@ namespace Drafts.Services
                 {
                     game.Player1Connected = true;
                     game.Player1UserId = userId;
+                    if (game.Player2Connected)
+                    {
+                        game.HadSecondPlayerConnected = true;
+                    }
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player1", id);
                     OnGameUpdated(id);
                     return 1;
@@ -99,7 +120,10 @@ namespace Drafts.Services
                 {
                     game.Player2Connected = true;
                     game.Player2UserId = userId;
-                    game.HadSecondPlayerConnected = true;
+                    if (game.Player1Connected)
+                    {
+                        game.HadSecondPlayerConnected = true;
+                    }
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player2", id);
                     OnGameUpdated(id);
                     return 2;
@@ -140,6 +164,26 @@ namespace Drafts.Services
             }
 
             return false;
+        }
+
+        public bool AddChatMessage(string gameId, int senderUserId, string senderName, string text)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return false;
+            if (senderUserId <= 0) return false;
+
+            text = (text ?? string.Empty).Replace("\r\n", "\n").Trim();
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            var game = GetGame(gameId);
+            if (game is null) return false;
+
+            lock (game)
+            {
+                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, senderUserId, senderName ?? string.Empty, text));
+            }
+
+            OnGameUpdated(gameId);
+            return true;
         }
 
         // Make a move. Returns (success, message).
@@ -256,6 +300,10 @@ namespace Drafts.Services
 
         public bool HadSecondPlayerConnected { get; set; } = false;
 
+        public sealed record ChatMessage(DateTime Utc, int SenderUserId, string SenderName, string Text);
+
+        public List<ChatMessage> ChatMessages { get; } = new();
+
         public DraftsGame(string id)
         {
             Id = id;
@@ -291,6 +339,8 @@ namespace Drafts.Services
             Player2Connected = false;
             Player1UserId = null;
             Player2UserId = null;
+
+            ChatMessages.Clear();
         }
     }
 }

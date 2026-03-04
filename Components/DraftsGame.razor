@@ -28,6 +28,31 @@
   .p1 { background:#111; color:#fff; border:2px solid rgba(0,0,0,0.6); }
   .p2 { background:#fff; color:#000; border:2px solid #222; }
   .king-symbol { font-size:16px; line-height:1; pointer-events:none; }
+
+  .funky-heading {
+    margin:0;
+    font-weight:800;
+    letter-spacing:0.5px;
+    font-size:18px;
+    line-height:1.1;
+    background:linear-gradient(90deg,
+      #ff3d00 0%,
+      #ffca28 25%,
+      #00c853 50%,
+      #2979ff 75%,
+      #d500f9 100%);
+    background-size:200% 100%;
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    text-shadow:0 1px 0 rgba(0,0,0,0.15);
+    animation: funkyGradient 2.8s linear infinite;
+  }
+
+  @@keyframes funkyGradient {
+    0% { background-position:0% 50%; }
+    100% { background-position:100% 50%; }
+  }
 </style>
 
 <h3>Drafts (Checkers)</h3>
@@ -115,26 +140,47 @@ else
             }
         </table>
 
+        <div style="margin-top:10px;width:384px;max-width:calc(100vw - 24px);display:flex;flex-direction:column;gap:8px;">
+            <div class="funky-heading">Chat</div>
+            <textarea @ref="_chatInRef" rows="4" style="width:100%;resize:none;" readonly>@_chatInText</textarea>
+            <div class="funky-heading">Send</div>
+            <textarea @ref="_chatOutRef" rows="4" style="width:100%;resize:none;" placeholder="Type message and press Enter"
+                      @bind-value="_chatOutText" @bind-value:event="oninput"
+                      @onkeyup="OnChatOutKeyUp"
+                      ></textarea>
+        </div>
+
         <p style="margin-top:8px;">@_message</p>
     </div>
 }
 
-<!-- Diagnostic client-side script: logs clicks on any square to browser console.
-     Remove after debugging. -->
 <script>
-  (function () {
-    document.addEventListener('click', function (ev) {
-      try {
-        var td = ev.target.closest && ev.target.closest('td[data-r]');
-        if (!td) return;
-        var r = td.getAttribute('data-r');
-        var c = td.getAttribute('data-c');
-        console.log('[Drafts] client click on cell', r, c, 'target=', ev.target.tagName);
-      } catch (e) {
-        console.error('[Drafts] click logging error', e);
-      }
-    }, true);
-  })();
+  window.draftsChat = window.draftsChat || {};
+  window.draftsChat.scrollToBottom = function (el) {
+    try {
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    } catch (e) {
+    }
+  };
+
+  window.draftsChat.wireEnterToSend = function (el, dotNetRef) {
+    try {
+      if (!el || !dotNetRef) return;
+      if (el.__draftsEnterWired) return;
+      el.__draftsEnterWired = true;
+      el.addEventListener('keydown', function (ev) {
+        try {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            dotNetRef.invokeMethodAsync('OnChatEnterFromJs');
+          }
+        } catch (e) {
+        }
+      });
+    } catch (e) {
+    }
+  };
 </script>
 
 @code {
@@ -160,6 +206,16 @@ else
     private bool _copied = false;
 
     private string JoinLink => Nav.BaseUri.TrimEnd('/') + $"/drafts?gameId={_gameId ?? ""}";
+
+    private ElementReference _chatInRef;
+    private ElementReference _chatOutRef;
+    private string _chatInText = "";
+    private string _chatOutText = "";
+    private int _lastChatCount;
+    private bool _chatScrollPending;
+
+    private DotNetObjectReference<DraftsGame>? _dotNetRef;
+    private bool _chatWired;
 
     protected override async Task OnInitializedAsync()
     {
@@ -200,7 +256,13 @@ else
         }
 
         // Auto-create and navigate; navigated instance will join.
-        _gameId = GameService.CreateGame(_currentUserId);
+        var creatorPlayerNumber = 1;
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("creator", out var creatorRaw))
+        {
+            if (int.TryParse(creatorRaw, out var parsed)) creatorPlayerNumber = parsed;
+        }
+
+        _gameId = GameService.CreateGame(_currentUserId, creatorPlayerNumber);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
     }
@@ -212,7 +274,7 @@ else
             Nav.NavigateTo("/login", forceLoad: true);
             return;
         }
-        _gameId = GameService.CreateGame(_currentUserId);
+        _gameId = GameService.CreateGame(_currentUserId, 1);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
         await InvokeAsync(StateHasChanged);
@@ -258,6 +320,11 @@ else
         _connected = true;
         _joined = true;
         _status = "";
+
+        _chatInText = FormatChat(_game);
+        _lastChatCount = _game?.ChatMessages?.Count ?? 0;
+        _chatScrollPending = true;
+
         GameService.GameUpdated += OnGameUpdated;
         _message = "Connected.";
     }
@@ -266,6 +333,14 @@ else
     {
         if (id != _gameId) return;
         _game = GameService.GetGame(id);
+
+        var chatCount = _game?.ChatMessages?.Count ?? 0;
+        if (chatCount != _lastChatCount)
+        {
+            _lastChatCount = chatCount;
+            _chatInText = FormatChat(_game);
+            _chatScrollPending = true;
+        }
 
         if (_connected && _game is null)
         {
@@ -280,6 +355,23 @@ else
         }
 
         InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_chatWired)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("draftsChat.wireEnterToSend", _chatOutRef, _dotNetRef);
+            _chatWired = true;
+        }
+
+        if (_chatScrollPending)
+        {
+            _chatScrollPending = false;
+            await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatInRef);
+            await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatOutRef);
+        }
     }
 
     private bool _gameClosedNotified;
@@ -314,6 +406,42 @@ else
         {
             await JS.InvokeVoidAsync("prompt", "Copy this link", JoinLink);
         }
+    }
+
+    [JSInvokable]
+    public async Task OnChatEnterFromJs()
+    {
+        await SendChat();
+    }
+
+    private async Task SendChat()
+    {
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+        if (_currentUserId <= 0) return;
+
+        var text = _chatOutText;
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        var ok = GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, text);
+        if (ok)
+        {
+            _chatOutText = "";
+            _chatScrollPending = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnChatOutKeyUp(KeyboardEventArgs _)
+    {
+        _chatScrollPending = true;
+    }
+
+    private static string FormatChat(Drafts.Services.DraftsGame? game)
+    {
+        if (game is null) return "";
+        if (game.ChatMessages.Count == 0) return "";
+
+        return string.Join("\n", game.ChatMessages.Select(m => $"{m.SenderName}: {m.Text}"));
     }
 
     private async Task OpenJoinLinkNewWindow()
@@ -503,5 +631,6 @@ else
     public void Dispose()
     {
         GameService.GameUpdated -= OnGameUpdated;
+        _dotNetRef?.Dispose();
     }
 }
