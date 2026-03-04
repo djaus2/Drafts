@@ -1,5 +1,8 @@
 @page "/admin"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using Drafts.Services
+@inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 
 <PageTitle>Admin</PageTitle>
@@ -10,7 +13,56 @@
 
 <div style="display:flex;flex-direction:column;gap:6px">
     <a href="/admin/users">Manage players</a>
-    <a href="/drafts">Start a new game</a>
     <a href="/player">Reset your password</a>
-    <a href="/logout">Logout</a>
 </div>
+
+<div style="max-width:360px;margin-top:12px;">
+    <button style="width:100%;padding:10px 12px;" onclick="location.href='/drafts'">Start a new game</button>
+</div>
+
+<h4 style="margin-top:18px;">Change PIN</h4>
+
+<div style="max-width:360px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+        <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="4" />
+        <input @bind="_newPin" placeholder="New PIN" inputmode="numeric" maxlength="4" />
+        <button @onclick="OnChangePin">Change PIN</button>
+        @if (!string.IsNullOrWhiteSpace(_pinMessage))
+        {
+            <div>@_pinMessage</div>
+        }
+    </div>
+</div>
+
+@code {
+    private string _currentPin = "";
+    private string _newPin = "";
+    private string _pinMessage = "";
+
+    private async Task OnChangePin()
+    {
+        _pinMessage = "";
+
+        var userId = GetCurrentUserId();
+        if (!userId.HasValue)
+        {
+            _pinMessage = "No player id.";
+            return;
+        }
+
+        var ok = await Auth.ChangePinAsync(userId.Value, (_currentPin ?? "").Trim(), (_newPin ?? "").Trim());
+        _pinMessage = ok ? "PIN changed." : "Failed (check current PIN and new PIN format).";
+        if (ok)
+        {
+            _currentPin = "";
+            _newPin = "";
+        }
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var user = HttpContextAccessor.HttpContext?.User;
+        var raw = user?.FindFirst("uid")?.Value;
+        return int.TryParse(raw, out var id) ? id : null;
+    }
+}

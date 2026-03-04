@@ -5,6 +5,7 @@
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
+@inject DraftsService GameService
 
 <PageTitle>Player</PageTitle>
 
@@ -12,26 +13,22 @@
 
 <p>You are logged in as <b>@(HttpContextAccessor.HttpContext?.User?.Identity?.Name)</b>.</p>
 
-<h4>Change PIN</h4>
-
-<div style="max-width:360px">
-    <div style="display:flex;flex-direction:column;gap:8px">
-        <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="4" />
-        <input @bind="_newPin" placeholder="New PIN" inputmode="numeric" maxlength="4" />
-        <button @onclick="OnChangePin">Change PIN</button>
-        @if (!string.IsNullOrWhiteSpace(_pinMessage))
-        {
-            <div>@_pinMessage</div>
-        }
-    </div>
+<div style="max-width:360px;margin-top:12px;">
+    <button style="width:100%;padding:10px 12px;" onclick="location.href='/drafts'">Start a new game</button>
 </div>
 
 <h4>Join Game</h4>
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        <input @bind="_joinGameId" placeholder="Game ID (8 chars)" maxlength="8" autocapitalize="none" />
-        <button @onclick="OnJoinGame">Join game</button>
+        <select @bind="_selectedGameId">
+            <option value="">Select a game…</option>
+            @foreach (var g in _joinableGames)
+            {
+                <option value="@g.Id">@FormatGameOption(g)</option>
+            }
+        </select>
+        <button @onclick="OnJoinGame" disabled="@string.IsNullOrWhiteSpace(_selectedGameId)">Join game</button>
         @if (!string.IsNullOrWhiteSpace(_joinMessage))
         {
             <div>@_joinMessage</div>
@@ -39,37 +36,21 @@
     </div>
 </div>
 
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-    <a href="/drafts">Start / Join game</a>
-    <a href="/logout">Logout</a>
-</div>
-
 @code {
-    private string _currentPin = "";
-    private string _newPin = "";
-    private string _pinMessage = "";
-
-    private string _joinGameId = "";
+    private string _selectedGameId = "";
     private string _joinMessage = "";
 
-    private async Task OnChangePin()
+    private List<DraftsService.GameListItem> _joinableGames = new();
+
+    protected override void OnInitialized()
     {
-        _pinMessage = "";
+        RefreshGames();
+        GameService.GameUpdated += OnGameUpdated;
+    }
 
-        var userId = GetCurrentUserId();
-        if (!userId.HasValue)
-        {
-            _pinMessage = "No player id.";
-            return;
-        }
-
-        var ok = await Auth.ChangePinAsync(userId.Value, (_currentPin ?? "").Trim(), (_newPin ?? "").Trim());
-        _pinMessage = ok ? "PIN changed." : "Failed (check current PIN and new PIN format).";
-        if (ok)
-        {
-            _currentPin = "";
-            _newPin = "";
-        }
+    public void Dispose()
+    {
+        GameService.GameUpdated -= OnGameUpdated;
     }
 
     private int? GetCurrentUserId()
@@ -83,22 +64,44 @@
     {
         _joinMessage = "";
 
-        var gameId = (_joinGameId ?? string.Empty).Trim();
-        if (!IsValidGameId(gameId))
+        var gameId = (_selectedGameId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(gameId))
         {
-            _joinMessage = "Game ID must be 8 hex characters (0-9, a-f).";
+            _joinMessage = "Select a game.";
             return;
         }
 
         Nav.NavigateTo($"/drafts?gameId={gameId}");
     }
 
-    private static bool IsValidGameId(string gameId)
+    private void OnGameUpdated(string _)
     {
-        if (gameId.Length != 8) return false;
-        return gameId.All(ch =>
-            (ch >= '0' && ch <= '9') ||
-            (ch >= 'a' && ch <= 'f') ||
-            (ch >= 'A' && ch <= 'F'));
+        RefreshGames();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshGames()
+    {
+        var uid = GetCurrentUserId();
+        var games = GameService.ListGames();
+
+        _joinableGames = games
+            .Where(g => !g.HadSecondPlayerConnected)
+            .Where(g => !(g.Player1Connected && g.Player2Connected))
+            .Where(g => !(uid.HasValue && (g.Player1UserId == uid.Value || g.Player2UserId == uid.Value)))
+            .OrderByDescending(g => g.CreatedUtc)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(_selectedGameId) && !_joinableGames.Any(x => x.Id == _selectedGameId))
+        {
+            _selectedGameId = "";
+        }
+    }
+
+    private static string FormatGameOption(DraftsService.GameListItem g)
+    {
+        var createdLocal = g.CreatedUtc.ToLocalTime();
+        var connectedText = g.HadSecondPlayerConnected ? "(connected)" : "(not connected)";
+        return $"{g.Id} — {createdLocal:yyyy-MM-dd HH:mm:ss} {connectedText}";
     }
 }

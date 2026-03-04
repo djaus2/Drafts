@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Extensions.Logging;
 
 namespace Drafts.Services
@@ -17,6 +19,32 @@ namespace Drafts.Services
         public DraftsService(ILogger<DraftsService> logger)
         {
             _logger = logger;
+        }
+
+        public sealed record GameListItem(
+            string Id,
+            DateTime CreatedUtc,
+            int CreatedByUserId,
+            int? Player1UserId,
+            int? Player2UserId,
+            bool Player1Connected,
+            bool Player2Connected,
+            bool HadSecondPlayerConnected);
+
+        public List<GameListItem> ListGames()
+        {
+            // Snapshot view for UI.
+            return _games.Values
+                .Select(g => new GameListItem(
+                    g.Id,
+                    g.CreatedUtc,
+                    g.CreatedByUserId,
+                    g.Player1UserId,
+                    g.Player2UserId,
+                    g.Player1Connected,
+                    g.Player2Connected,
+                    g.HadSecondPlayerConnected))
+                .ToList();
         }
 
         public string CreateGame(int userId)
@@ -71,6 +99,7 @@ namespace Drafts.Services
                 {
                     game.Player2Connected = true;
                     game.Player2UserId = userId;
+                    game.HadSecondPlayerConnected = true;
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player2", id);
                     OnGameUpdated(id);
                     return 2;
@@ -98,6 +127,19 @@ namespace Drafts.Services
             }
 
             return removed;
+        }
+
+        public bool RemoveGame(string gameId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return false;
+            if (_games.TryRemove(gameId, out _))
+            {
+                _logger.LogInformation("RemoveGame: removed game {GameId}", gameId);
+                OnGameUpdated(gameId);
+                return true;
+            }
+
+            return false;
         }
 
         // Make a move. Returns (success, message).
@@ -195,6 +237,8 @@ namespace Drafts.Services
     {
         public string Id { get; }
 
+        public DateTime CreatedUtc { get; } = DateTime.UtcNow;
+
         // Board representation:
         // 0 empty
         // 1 player1 piece, 3 player1 king
@@ -209,6 +253,8 @@ namespace Drafts.Services
 
         public bool Player1Connected { get; set; } = false;
         public bool Player2Connected { get; set; } = false;
+
+        public bool HadSecondPlayerConnected { get; set; } = false;
 
         public DraftsGame(string id)
         {

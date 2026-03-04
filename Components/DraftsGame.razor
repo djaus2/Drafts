@@ -64,6 +64,10 @@ else
             {
                 <span style="color:green;margin-left:6px;">Copied!</span>
             }
+            @if (_game is not null && _game.CreatedByUserId == _currentUserId)
+            {
+                <button @onclick="CancelGame" style="margin-left:auto;background:#b00020;color:#fff;border:1px solid #7a0016;border-radius:4px;padding:6px 10px;">Cancel game</button>
+            }
         </div>
         <table style="border-collapse:collapse;">
             @for (int r = 0; r < 8; r++)
@@ -262,7 +266,36 @@ else
     {
         if (id != _gameId) return;
         _game = GameService.GetGame(id);
+
+        if (_connected && _game is null)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                if (_gameClosedNotified) return;
+                _gameClosedNotified = true;
+                await JS.InvokeVoidAsync("alert", "Game was closed.");
+                Nav.NavigateTo("/player", forceLoad: true);
+            });
+            return;
+        }
+
         InvokeAsync(StateHasChanged);
+    }
+
+    private bool _gameClosedNotified;
+
+    private async Task CancelGame()
+    {
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+        if (_game is null) return;
+        if (_game.CreatedByUserId != _currentUserId) return;
+
+        GameService.RemoveGame(_gameId);
+
+        var user = HttpContextAccessor.HttpContext?.User;
+        var isAdmin = user?.IsInRole("Admin") == true;
+        Nav.NavigateTo(isAdmin ? "/admin" : "/player", forceLoad: true);
+        await Task.CompletedTask;
     }
 
     private async Task CopyJoinLink()

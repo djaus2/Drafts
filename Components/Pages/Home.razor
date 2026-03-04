@@ -1,8 +1,23 @@
 ﻿@page "/"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@* @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
+ *@
+@inject NavigationManager Nav
+<PageTitle>Checkers online</PageTitle>
 
-<PageTitle>Home</PageTitle>
+<br />
 
-<h1>Hello, world!</h1>
+<p>Play Drafts or Checkers with a friend online</p>
 
-Welcome to your new app.
+<button @onclick="Start">Start a Game</button>
+
+<br />
+
+<img src="Images/TheBoard.png" width="400"/>
+
+@code{
+    private void Start()
+    {
+        Nav.NavigateTo($"/login");
+    }
+}
