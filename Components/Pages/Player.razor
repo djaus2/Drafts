@@ -40,10 +40,18 @@
     private string _selectedGameId = "";
     private string _joinMessage = "";
 
+    private Dictionary<int, string> _userNames = new();
+
     private List<DraftsService.GameListItem> _joinableGames = new();
 
     protected override void OnInitialized()
     {
+        _ = InvokeAsync(async () =>
+        {
+            var users = await Auth.ListUsersAsync();
+            _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
+            await InvokeAsync(StateHasChanged);
+        });
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
     }
@@ -98,10 +106,12 @@
         }
     }
 
-    private static string FormatGameOption(DraftsService.GameListItem g)
+    private string FormatGameOption(DraftsService.GameListItem g)
     {
         var createdLocal = g.CreatedUtc.ToLocalTime();
         var connectedText = g.HadSecondPlayerConnected ? "(connected)" : "(not connected)";
-        return $"{g.Id} — {createdLocal:yyyy-MM-dd HH:mm:ss} {connectedText}";
+        _userNames.TryGetValue(g.CreatedByUserId, out var name);
+        name ??= "";
+        return $"{name}  {g.Id} — {createdLocal:yyyy-MM-dd HH:mm:ss} {connectedText}";
     }
 }

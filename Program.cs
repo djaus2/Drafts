@@ -38,12 +38,21 @@ namespace Drafts
             // Register the game service so multiple components can join the same game.
             builder.Services.AddSingleton<DraftsService>();
 
+            builder.Services.AddSingleton<SettingsService>();
+            builder.Services.AddHostedService<GameTimeoutReaper>();
+
             var app = builder.Build();
 
             using (var scope = app.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 DbSeeder.EnsureSeededAsync(db).GetAwaiter().GetResult();
+            }
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+                settings.LoadAsync().GetAwaiter().GetResult();
             }
 
             // Configure the HTTP request pipeline.

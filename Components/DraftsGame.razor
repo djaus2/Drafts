@@ -1,8 +1,10 @@
 ﻿@page "/drafts"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
+@implements IDisposable
 @using Drafts.Services
 @inject DraftsService GameService
+@inject SettingsService Settings
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IHttpContextAccessor HttpContextAccessor
@@ -78,14 +80,14 @@ else
 {
     <div>
         <p>Game: <b>@_gameId</b> — You are player <b>@_playerNumber</b> (<b>@_currentUserName</b>). Current turn: <b>@_game?.CurrentTurn</b></p>
-        <p>
+      @*  <p>
             Share this link with the other player:
-        </p>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-            <input style="width:340px" value="@JoinLink" readonly />
+        </p>  *@
+        <div hidden style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+@*             <input style="width:340px" value="@JoinLink" readonly />
             <button @onclick="CopyJoinLink">Copy</button>
             <!-- button @onclick="OpenJoinLinkNewWindow" style="display:inline-block;padding:6px 10px;border:1px solid #888;background:#f3f3f3;color:inherit;border-radius:4px;">Open in new window</!-- -->
-            @if (_copied)
+ *@            @if (_copied)
             {
                 <span style="color:green;margin-left:6px;">Copied!</span>
             }
@@ -94,6 +96,12 @@ else
                 <button @onclick="CancelGame" style="margin-left:auto;background:#b00020;color:#fff;border:1px solid #7a0016;border-radius:4px;padding:6px 10px;">Cancel game</button>
             }
         </div>
+        @if (_game is not null && _game.HadSecondPlayerConnected)
+        {
+            <div style="margin:6px 0 10px 0;">
+                Idle timeout in: <b>@IdleTimeoutRemainingText</b>
+            </div>
+        }
         <table style="border-collapse:collapse;">
             @for (int r = 0; r < 8; r++)
             {
@@ -217,6 +225,9 @@ else
     private DotNetObjectReference<DraftsGame>? _dotNetRef;
     private bool _chatWired;
 
+    private int _maxTimeoutMins = 30;
+    private System.Threading.Timer? _uiTimer;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -247,6 +258,8 @@ else
             return;
         }
 
+        _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
+
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("gameId", out var gid))
         {
@@ -265,6 +278,44 @@ else
         _gameId = GameService.CreateGame(_currentUserId, creatorPlayerNumber);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
+    }
+
+    private void EnsureUiTimer()
+    {
+        if (_uiTimer is not null) return;
+
+        _uiTimer = new System.Threading.Timer(_ =>
+        {
+            if (!_connected) return;
+            _ = InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private string IdleTimeoutRemainingText
+    {
+        get
+        {
+            if (_game is null) return "";
+
+            var now = DateTime.UtcNow;
+            TimeSpan remaining;
+
+            if (_game.KillAfterUtc.HasValue)
+            {
+                remaining = _game.KillAfterUtc.Value - now;
+            }
+            else
+            {
+                var max = TimeSpan.FromMinutes(Math.Max(1, _maxTimeoutMins));
+                var idle = now - _game.LastTimeUtc;
+                remaining = max - idle;
+            }
+
+            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+
+            var mins = (int)remaining.TotalMinutes;
+            return $"{mins}:{remaining.Seconds:00}";
+        }
     }
 
     private async void CreateGame()
@@ -309,6 +360,23 @@ else
         _status = "Joining...";
         GameService.GameUpdated -= OnGameUpdated;
         var player = GameService.TryJoinGame(id, _currentUserId);
+        if (player == -1)
+        {
+            var existing = GameService.GetActiveGameIdForUser(_currentUserId);
+            if (!string.IsNullOrWhiteSpace(existing))
+            {
+                _status = "You are already in another game. Redirecting...";
+                _connected = false;
+                _joined = false;
+                _ = InvokeAsync(StateHasChanged);
+                Nav.NavigateTo($"/drafts?gameId={existing}", forceLoad: false);
+                return;
+            }
+
+            _status = "You are already in another game.";
+            _connected = false;
+            return;
+        }
         if (player == 0)
         {
             _status = "Unable to join (game full or not found).";
@@ -317,9 +385,12 @@ else
         }
         _playerNumber = player;
         _game = GameService.GetGame(id);
+
         _connected = true;
         _joined = true;
         _status = "";
+
+        EnsureUiTimer();
 
         _chatInText = FormatChat(_game);
         _lastChatCount = _game?.ChatMessages?.Count ?? 0;
@@ -342,12 +413,18 @@ else
             _chatScrollPending = true;
         }
 
-        if (_connected && _game is null)
+        if (_game is null)
         {
             _ = InvokeAsync(async () =>
             {
                 if (_gameClosedNotified) return;
                 _gameClosedNotified = true;
+
+                GameService.GameUpdated -= OnGameUpdated;
+                _connected = false;
+                _joined = false;
+                _gameId = null;
+
                 await JS.InvokeVoidAsync("alert", "Game was closed.");
                 Nav.NavigateTo("/player", forceLoad: true);
             });
@@ -631,6 +708,13 @@ else
     public void Dispose()
     {
         GameService.GameUpdated -= OnGameUpdated;
+        try
+        {
+            _uiTimer?.Dispose();
+        }
+        catch
+        {
+        }
         _dotNetRef?.Dispose();
     }
 }

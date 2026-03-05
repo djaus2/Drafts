@@ -1,10 +1,13 @@
 @page "/admin"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@implements IDisposable
 @using Drafts.Services
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
+@inject DraftsService GameService
+@inject SettingsService Settings
 
 <PageTitle>Admin</PageTitle>
 
@@ -32,6 +35,65 @@
     <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
 </div>
 
+<h4 style="margin-top:18px;">Settings</h4>
+
+<div style="max-width:360px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;flex-direction:column;gap:4px">
+            Max timeout (mins)
+            <input @bind="_maxTimeoutMins" inputmode="numeric" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px">
+            Reaper period (seconds)
+            <input @bind="_reaperPeriodSeconds" inputmode="numeric" />
+        </label>
+        <button @onclick="SaveSettings">Save</button>
+        @if (!string.IsNullOrWhiteSpace(_settingsMessage))
+        {
+            <div>@_settingsMessage</div>
+        }
+    </div>
+</div>
+
+<h4 style="margin-top:18px;">Games</h4>
+
+@if (_games is null)
+{
+    <p>Loading…</p>
+}
+else if (_games.Count == 0)
+{
+    <p>No active games.</p>
+}
+else
+{
+    <table style="border-collapse:collapse;max-width:900px;">
+        <thead>
+            <tr>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Id</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Started</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Runtime</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Idle</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">P1</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">P2</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var g in _games.OrderByDescending(x => x.StartTimeUtc))
+            {
+                <tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@GetUserName(g.CreatedByUserId)  @g.Id</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@g.StartTimeUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@FormatAge(DateTime.UtcNow - g.StartTimeUtc)</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@FormatAge(DateTime.UtcNow - g.LastTimeUtc)</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@FormatPlayer(g.Player1UserId, g.Player1Connected)</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;">@FormatPlayer(g.Player2UserId, g.Player2Connected)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
 <h4 style="margin-top:18px;">Change PIN</h4>
 
 <div style="max-width:360px">
@@ -51,6 +113,71 @@
     private string _currentPin = "";
     private string _newPin = "";
     private string _pinMessage = "";
+
+    private Dictionary<int, string> _userNames = new();
+
+    private int _maxTimeoutMins = 30;
+    private int _reaperPeriodSeconds = 30;
+    private string _settingsMessage = "";
+
+    private List<DraftsService.GameListItem>? _games;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var users = await Auth.ListUsersAsync();
+        _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
+        _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
+        _reaperPeriodSeconds = await Settings.GetReaperPeriodSecondsAsync();
+        RefreshGames();
+        GameService.GameUpdated += OnGameUpdated;
+    }
+
+    private string GetUserName(int userId)
+    {
+        if (userId <= 0) return "";
+        return _userNames.TryGetValue(userId, out var name) ? name : "";
+    }
+
+    public void Dispose()
+    {
+        GameService.GameUpdated -= OnGameUpdated;
+    }
+
+    private void OnGameUpdated(string _)
+    {
+        RefreshGames();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshGames()
+    {
+        _games = GameService.ListGames();
+    }
+
+    private async Task SaveSettings()
+    {
+        _settingsMessage = "";
+        var ok1 = await Settings.UpdateMaxTimeoutMinsAsync(_maxTimeoutMins);
+        var ok2 = await Settings.UpdateReaperPeriodSecondsAsync(_reaperPeriodSeconds);
+        _settingsMessage = (ok1 && ok2) ? "Saved." : "Invalid value.";
+    }
+
+    private static string FormatAge(TimeSpan ts)
+    {
+        if (ts < TimeSpan.Zero) ts = TimeSpan.Zero;
+
+        if (ts.TotalHours >= 1)
+        {
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        }
+        return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+
+    private static string FormatPlayer(int? userId, bool connected)
+    {
+        if (!connected) return "(open)";
+        return userId.HasValue ? $"{userId.Value}" : "(connected)";
+    }
 
     private void StartNewGame()
     {

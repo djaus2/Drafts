@@ -9,6 +9,7 @@ public sealed class AppDbContext : DbContext
     }
 
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<AppSettings> Settings => Set<AppSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

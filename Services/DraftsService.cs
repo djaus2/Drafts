@@ -16,6 +16,27 @@ namespace Drafts.Services
 
         private readonly ConcurrentDictionary<string, DraftsGame> _games = new();
 
+        private string? FindActiveGameIdForUser(int userId)
+        {
+            if (userId <= 0) return null;
+
+            foreach (var kvp in _games)
+            {
+                var game = kvp.Value;
+                if (game.CreatedByUserId == userId || game.Player1UserId == userId || game.Player2UserId == userId)
+                {
+                    return kvp.Key;
+                }
+            }
+
+            return null;
+        }
+
+        public string? GetActiveGameIdForUser(int userId)
+        {
+            return FindActiveGameIdForUser(userId);
+        }
+
         public DraftsService(ILogger<DraftsService> logger)
         {
             _logger = logger;
@@ -24,6 +45,8 @@ namespace Drafts.Services
         public sealed record GameListItem(
             string Id,
             DateTime CreatedUtc,
+            DateTime StartTimeUtc,
+            DateTime LastTimeUtc,
             int CreatedByUserId,
             int? Player1UserId,
             int? Player2UserId,
@@ -38,6 +61,8 @@ namespace Drafts.Services
                 .Select(g => new GameListItem(
                     g.Id,
                     g.CreatedUtc,
+                    g.StartTimeUtc,
+                    g.LastTimeUtc,
                     g.CreatedByUserId,
                     g.Player1UserId,
                     g.Player2UserId,
@@ -49,6 +74,13 @@ namespace Drafts.Services
 
         public string CreateGame(int userId, int creatorPlayerNumber = 1)
         {
+            var existing = FindActiveGameIdForUser(userId);
+            if (!string.IsNullOrWhiteSpace(existing))
+            {
+                _logger.LogInformation("CreateGame: user {UserId} already has active game {GameId}; returning existing", userId, existing);
+                return existing;
+            }
+
             var id = Guid.NewGuid().ToString("n").Substring(0, 8);
             var game = new DraftsGame(id)
             {
@@ -71,6 +103,8 @@ namespace Drafts.Services
                 game.Player2UserId = userId;
             }
 
+            game.Touch();
+
             _games[id] = game;
             _logger.LogInformation("CreateGame: {GameId}", id);
             OnGameUpdated(id);
@@ -87,6 +121,13 @@ namespace Drafts.Services
         // Returns 1 or 2 for player number, 0 if cannot join
         public int TryJoinGame(string id, int userId)
         {
+            var existing = FindActiveGameIdForUser(userId);
+            if (!string.IsNullOrWhiteSpace(existing) && !string.Equals(existing, id, StringComparison.Ordinal))
+            {
+                _logger.LogWarning("TryJoinGame: user {UserId} already in game {ExistingGameId}; rejecting join to {GameId}", userId, existing, id);
+                return -1;
+            }
+
             var game = GetGame(id);
             if (game == null)
             {
@@ -112,6 +153,7 @@ namespace Drafts.Services
                     {
                         game.HadSecondPlayerConnected = true;
                     }
+                    game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player1", id);
                     OnGameUpdated(id);
                     return 1;
@@ -124,6 +166,7 @@ namespace Drafts.Services
                     {
                         game.HadSecondPlayerConnected = true;
                     }
+                    game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player2", id);
                     OnGameUpdated(id);
                     return 2;
@@ -169,7 +212,7 @@ namespace Drafts.Services
         public bool AddChatMessage(string gameId, int senderUserId, string senderName, string text)
         {
             if (string.IsNullOrWhiteSpace(gameId)) return false;
-            if (senderUserId <= 0) return false;
+            if (senderUserId < 0) return false;
 
             text = (text ?? string.Empty).Replace("\r\n", "\n").Trim();
             if (string.IsNullOrWhiteSpace(text)) return false;
@@ -180,6 +223,7 @@ namespace Drafts.Services
             lock (game)
             {
                 game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, senderUserId, senderName ?? string.Empty, text));
+                game.Touch();
             }
 
             OnGameUpdated(gameId);
@@ -194,10 +238,12 @@ namespace Drafts.Services
             if (game == null) return (false, "Game not found");
             lock (game)
             {
+                game.Touch();
                 if (game.CurrentTurn != player) return (false, "Not your turn");
                 if (!IsInside(fr, fc) || !IsInside(tr, tc)) return (false, "Out of bounds");
                 var piece = game.Board[fr, fc];
                 if (piece == 0) return (false, "No piece at source");
+
                 if (!BelongsToPlayer(piece, player)) return (false, "Not your piece");
                 if (game.Board[tr, tc] != 0) return (false, "Target not empty");
 
@@ -213,6 +259,7 @@ namespace Drafts.Services
                     game.Board[fr, fc] = 0;
                     MaybePromote(game, tr, tc);
                     game.CurrentTurn = 3 - player;
+                    game.Touch();
                     OnGameUpdated(id);
                     _logger.LogInformation("MakeMove: {GameId} move applied", id);
                     return (true, null);
@@ -233,6 +280,7 @@ namespace Drafts.Services
                     MaybePromote(game, tr, tc);
                     // NOTE: Not implementing multiple-jump forcing — simple single capture.
                     game.CurrentTurn = 3 - player;
+                    game.Touch();
                     OnGameUpdated(id);
                     _logger.LogInformation("MakeMove: {GameId} capture applied", id);
                     return (true, null);
@@ -275,6 +323,128 @@ namespace Drafts.Services
         {
             GameUpdated?.Invoke(gameId);
         }
+
+        public int RemoveGamesExceedingRuntime(TimeSpan maxRuntime)
+        {
+            if (maxRuntime <= TimeSpan.Zero) return 0;
+
+            var now = DateTime.UtcNow;
+            var removed = 0;
+
+            foreach (var kvp in _games)
+            {
+                var game = kvp.Value;
+                var runtime = now - game.StartTimeUtc;
+                if (runtime > maxRuntime)
+                {
+                    if (_games.TryRemove(kvp.Key, out _))
+                    {
+                        removed++;
+                        _logger.LogInformation("RemoveGamesExceedingRuntime: removed {GameId} runtime={Runtime}", kvp.Key, runtime);
+                        OnGameUpdated(kvp.Key);
+                    }
+                }
+            }
+
+            return removed;
+        }
+
+        public (int removed, int warningsSent) ProcessIdleTimeouts(TimeSpan maxIdle, TimeSpan killGrace, double warningFraction = 0.8)
+        {
+            if (maxIdle <= TimeSpan.Zero) return (0, 0);
+            if (warningFraction <= 0) warningFraction = 0.8;
+            if (warningFraction >= 1) warningFraction = 0.8;
+
+            var now = DateTime.UtcNow;
+            var warnAt = TimeSpan.FromTicks((long)(maxIdle.Ticks * warningFraction));
+            if (killGrace <= TimeSpan.Zero) killGrace = TimeSpan.FromSeconds(1);
+
+            var removed = 0;
+            var warningsSent = 0;
+
+            foreach (var kvp in _games)
+            {
+                var gameId = kvp.Key;
+                var game = kvp.Value;
+
+                var remove = false;
+                var warn = false;
+                var killMsg = false;
+                var skipMonitoring = false;
+
+                lock (game)
+                {
+                    if (game.KillAfterUtc.HasValue && now >= game.KillAfterUtc.Value)
+                    {
+                        remove = true;
+                    }
+
+                    if (!remove && !game.HadSecondPlayerConnected)
+                    {
+                        skipMonitoring = true;
+                    }
+
+                    if (skipMonitoring)
+                    {
+                        // Game hasn't actually started yet (no second player has connected),
+                        // so don't warn/kill it for inactivity.
+                        // We still allow removal if KillAfterUtc has already elapsed.
+                        continue;
+                    }
+
+                    var idle = now - game.LastTimeUtc;
+                    if (!remove && idle >= maxIdle)
+                    {
+                        if (!game.IdleKillMessageSent)
+                        {
+                            killMsg = true;
+                            game.IdleKillMessageSent = true;
+                            game.KillAfterUtc = now + killGrace;
+                            game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                                now,
+                                0,
+                                "System",
+                                "Game timed out due to inactivity and will soon close."));
+                        }
+                    }
+                    else if (idle >= warnAt && !game.IdleWarningSent)
+                    {
+                        warn = true;
+                        game.IdleWarningSent = true;
+
+                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                            now,
+                            0,
+                            "System",
+                            $"Warning: this game will time out after {Math.Max(1, (int)maxIdle.TotalMinutes)} minutes of inactivity."));
+                    }
+                }
+
+                if (warn)
+                {
+                    warningsSent++;
+                    OnGameUpdated(gameId);
+                }
+
+                if (killMsg)
+                {
+                    _logger.LogInformation("ProcessIdleTimeouts: final timeout message injected for {GameId}; will remove after {GraceSeconds}s", gameId, killGrace.TotalSeconds);
+                    OnGameUpdated(gameId);
+                }
+
+                if (remove)
+                {
+                    if (_games.TryRemove(gameId, out _))
+                    {
+                        removed++;
+                        _logger.LogInformation("ProcessIdleTimeouts: removed {GameId} idle>={MaxIdle}", gameId, maxIdle);
+                        OnGameUpdated(gameId);
+                    }
+                }
+            }
+
+            return (removed, warningsSent);
+        }
     }
 
     public class DraftsGame
@@ -283,11 +453,21 @@ namespace Drafts.Services
 
         public DateTime CreatedUtc { get; } = DateTime.UtcNow;
 
+        public DateTime StartTimeUtc { get; private set; } = DateTime.UtcNow;
+
+        public DateTime LastTimeUtc { get; private set; } = DateTime.UtcNow;
+
+        public bool IdleWarningSent { get; set; }
+
+        public bool IdleKillMessageSent { get; set; }
+
+        public DateTime? KillAfterUtc { get; set; }
+
         // Board representation:
         // 0 empty
         // 1 player1 piece, 3 player1 king
         // 2 player2 piece, 4 player2 king
-        public int[,] Board { get; } = new int[8,8];
+        public int[,] Board { get; } = new int[8, 8];
 
         public int CurrentTurn { get; set; } = 1;
 
@@ -308,6 +488,16 @@ namespace Drafts.Services
         {
             Id = id;
             InitializeBoard();
+            StartTimeUtc = DateTime.UtcNow;
+            LastTimeUtc = StartTimeUtc;
+        }
+
+        public void Touch()
+        {
+            LastTimeUtc = DateTime.UtcNow;
+            IdleWarningSent = false;
+            IdleKillMessageSent = false;
+            KillAfterUtc = null;
         }
 
         private void InitializeBoard()
