@@ -170,11 +170,14 @@ else
             {
                 <span style="color:green;margin-left:6px;">Copied!</span>
             }
-            @if (_game is not null && _game.CreatedByUserId == _currentUserId)
-            {
-                <button @onclick="CancelOrExitGame" style="margin-left:auto;background:#b00020;color:#fff;border:1px solid #7a0016;border-radius:4px;padding:6px 10px;">@CancelOrExitButtonText</button>
-            }
         </div>
+
+        @if (_game is not null && _game.CreatedByUserId == _currentUserId)
+        {
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                <button @onclick="CancelOrExitGame" style="margin-left:auto;background:#b00020;color:#fff;border:1px solid #7a0016;border-radius:4px;padding:6px 10px;">@CancelOrExitButtonText</button>
+            </div>
+        }
         @if (_game is not null && _game.HadSecondPlayerConnected)
         {
             <div style="margin:6px 0 10px 0;">
@@ -674,9 +677,11 @@ else
 
         if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned)
         {
-            var user = HttpContextAccessor.HttpContext?.User;
-            var isAdmin = user?.IsInRole("Admin") == true;
-            Nav.NavigateTo(isAdmin ? "/admin" : "/player", forceLoad: true);
+            if (!string.IsNullOrWhiteSpace(_gameId))
+            {
+                GameService.RemoveGame(_gameId);
+            }
+            Nav.NavigateTo(_isAdmin ? "/admin" : "/player", forceLoad: true);
             await Task.CompletedTask;
             return;
         }
