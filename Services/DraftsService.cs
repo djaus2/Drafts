@@ -42,6 +42,15 @@ namespace Drafts.Services
             _logger = logger;
         }
 
+        public enum GameState
+        {
+            New,
+            Connected,
+            Playing,
+            Finished,
+            Abandoned
+        }
+
         public sealed record GameListItem(
             string Id,
             DateTime CreatedUtc,
@@ -52,7 +61,11 @@ namespace Drafts.Services
             int? Player2UserId,
             bool Player1Connected,
             bool Player2Connected,
-            bool HadSecondPlayerConnected);
+            bool HadSecondPlayerConnected,
+            bool AdminMode,
+            GameState State,
+            int Player1PieceCount,
+            int Player2PieceCount);
 
         public List<GameListItem> ListGames()
         {
@@ -68,11 +81,15 @@ namespace Drafts.Services
                     g.Player2UserId,
                     g.Player1Connected,
                     g.Player2Connected,
-                    g.HadSecondPlayerConnected))
+                    g.HadSecondPlayerConnected,
+                    g.AdminMode,
+                    g.State,
+                    g.Player1PieceCount,
+                    g.Player2PieceCount))
                 .ToList();
         }
 
-        public string CreateGame(int userId, int creatorPlayerNumber = 1)
+        public string CreateGame(int userId, int creatorPlayerNumber = 1, bool adminMode = false)
         {
             var existing = FindActiveGameIdForUser(userId);
             if (!string.IsNullOrWhiteSpace(existing))
@@ -86,6 +103,8 @@ namespace Drafts.Services
             {
                 CreatedByUserId = userId
             };
+
+            game.AdminMode = adminMode;
 
             if (creatorPlayerNumber != 1 && creatorPlayerNumber != 2)
             {
@@ -152,6 +171,10 @@ namespace Drafts.Services
                     if (game.Player2Connected)
                     {
                         game.HadSecondPlayerConnected = true;
+                        if (game.State == GameState.New)
+                        {
+                            game.State = GameState.Connected;
+                        }
                     }
                     game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player1", id);
@@ -165,6 +188,10 @@ namespace Drafts.Services
                     if (game.Player1Connected)
                     {
                         game.HadSecondPlayerConnected = true;
+                        if (game.State == GameState.New)
+                        {
+                            game.State = GameState.Connected;
+                        }
                     }
                     game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player2", id);
@@ -238,6 +265,16 @@ namespace Drafts.Services
             if (game == null) return (false, "Game not found");
             lock (game)
             {
+                if (game.State == GameState.Finished || game.State == GameState.Abandoned)
+                {
+                    return (false, $"Game is {game.State}");
+                }
+
+                if (game.State == GameState.New)
+                {
+                    return (false, "Waiting for second player");
+                }
+
                 game.Touch();
                 if (game.CurrentTurn != player) return (false, "Not your turn");
                 if (!IsInside(fr, fc) || !IsInside(tr, tc)) return (false, "Out of bounds");
@@ -259,6 +296,18 @@ namespace Drafts.Services
                     game.Board[fr, fc] = 0;
                     MaybePromote(game, tr, tc);
                     game.CurrentTurn = 3 - player;
+
+                    if (game.State == GameState.Connected)
+                    {
+                        game.State = GameState.Playing;
+                    }
+
+                    game.RecountPieces();
+                    if (game.Player1PieceCount == 0 || game.Player2PieceCount == 0)
+                    {
+                        MarkFinished(game);
+                    }
+
                     game.Touch();
                     OnGameUpdated(id);
                     _logger.LogInformation("MakeMove: {GameId} move applied", id);
@@ -272,6 +321,7 @@ namespace Drafts.Services
                     var midc = fc + dc / 2;
                     var mid = game.Board[midr, midc];
                     if (mid == 0 || BelongsToPlayer(mid, player)) return (false, "No opponent to capture");
+
                     if (!IsForwardMove(piece, dr) && !IsKing(piece)) return (false, "Invalid direction");
                     // perform capture
                     game.Board[tr, tc] = piece;
@@ -280,6 +330,18 @@ namespace Drafts.Services
                     MaybePromote(game, tr, tc);
                     // NOTE: Not implementing multiple-jump forcing — simple single capture.
                     game.CurrentTurn = 3 - player;
+
+                    if (game.State == GameState.Connected)
+                    {
+                        game.State = GameState.Playing;
+                    }
+
+                    game.RecountPieces();
+                    if (game.Player1PieceCount == 0 || game.Player2PieceCount == 0)
+                    {
+                        MarkFinished(game);
+                    }
+
                     game.Touch();
                     OnGameUpdated(id);
                     _logger.LogInformation("MakeMove: {GameId} capture applied", id);
@@ -287,6 +349,92 @@ namespace Drafts.Services
                 }
 
                 return (false, "Illegal move");
+            }
+        }
+
+        // Admin mode move. Moves for the side whose turn it is.
+        public (bool success, string? message) MakeMoveAsAdmin(string id, int fr, int fc, int tr, int tc)
+        {
+            var game = GetGame(id);
+            if (game == null) return (false, "Game not found");
+
+            int actingPlayer;
+            lock (game)
+            {
+                if (!game.AdminMode) return (false, "Not an admin-mode game");
+                if (game.State == GameState.Finished || game.State == GameState.Abandoned)
+                {
+                    return (false, $"Game is {game.State}");
+                }
+
+                // Allow admin to start making moves immediately for testing.
+                // (Normal games block moves in the New state until a second player joins.)
+                if (game.State == GameState.New)
+                {
+                    game.State = GameState.Connected;
+                }
+
+                // Act as whoever's turn it is.
+                actingPlayer = game.CurrentTurn;
+            }
+
+            // Call MakeMove outside the lock to avoid deadlocking on the same game lock.
+            return MakeMove(id, actingPlayer, fr, fc, tr, tc);
+        }
+
+        // Admin mode delete (right-click). Deletes any piece at a cell.
+        public (bool success, string? message) DeletePieceAsAdmin(string id, int r, int c)
+        {
+            var game = GetGame(id);
+            if (game == null) return (false, "Game not found");
+
+            lock (game)
+            {
+                if (!game.AdminMode) return (false, "Not an admin-mode game");
+                if (game.State == GameState.Finished || game.State == GameState.Abandoned)
+                {
+                    return (false, $"Game is {game.State}");
+                }
+
+                if (!IsInside(r, c)) return (false, "Out of bounds");
+                if (game.Board[r, c] == 0) return (false, "No piece");
+
+                game.Board[r, c] = 0;
+                game.RecountPieces();
+                if (game.Player1PieceCount == 0 || game.Player2PieceCount == 0)
+                {
+                    MarkFinished(game);
+                }
+
+                game.Touch();
+                OnGameUpdated(id);
+                return (true, null);
+            }
+        }
+
+        private static void MarkFinished(DraftsGame game)
+        {
+            if (game.State == GameState.Finished)
+            {
+                return;
+            }
+
+            game.State = GameState.Finished;
+
+            var winner = 0;
+            if (game.Player1PieceCount > 0 && game.Player2PieceCount == 0) winner = 1;
+            else if (game.Player2PieceCount > 0 && game.Player1PieceCount == 0) winner = 2;
+
+            if (winner != 0)
+            {
+                game.WinnerPlayer = winner;
+            }
+
+            if (!game.GameOverMessageSent)
+            {
+                game.GameOverMessageSent = true;
+                var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
+                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
             }
         }
 
@@ -463,6 +611,18 @@ namespace Drafts.Services
 
         public DateTime? KillAfterUtc { get; set; }
 
+        public DraftsService.GameState State { get; set; } = DraftsService.GameState.New;
+
+        public bool AdminMode { get; set; } = false;
+
+        public int? WinnerPlayer { get; set; }
+
+        public bool GameOverMessageSent { get; set; }
+
+        public int Player1PieceCount { get; private set; }
+
+        public int Player2PieceCount { get; private set; }
+
         // Board representation:
         // 0 empty
         // 1 player1 piece, 3 player1 king
@@ -530,7 +690,34 @@ namespace Drafts.Services
             Player1UserId = null;
             Player2UserId = null;
 
+            State = DraftsService.GameState.New;
+            AdminMode = false;
+
+            WinnerPlayer = null;
+            GameOverMessageSent = false;
+
             ChatMessages.Clear();
+
+            RecountPieces();
+        }
+
+        public void RecountPieces()
+        {
+            var p1 = 0;
+            var p2 = 0;
+
+            for (var r = 0; r < 8; r++)
+            {
+                for (var c = 0; c < 8; c++)
+                {
+                    var cell = Board[r, c];
+                    if (cell == 1 || cell == 3) p1++;
+                    else if (cell == 2 || cell == 4) p2++;
+                }
+            }
+
+            Player1PieceCount = p1;
+            Player2PieceCount = p2;
         }
     }
 }

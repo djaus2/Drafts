@@ -29,7 +29,7 @@
   }
   .p1 { background:#111; color:#fff; border:2px solid rgba(0,0,0,0.6); }
   .p2 { background:#fff; color:#000; border:2px solid #222; }
-  .king-symbol { font-size:16px; line-height:1; pointer-events:none; }
+  .king-symbol { font-size:24px; line-height:1; pointer-events:none; }
 
   .funky-heading {
     margin:0;
@@ -54,6 +54,81 @@
   @@keyframes funkyGradient {
     0% { background-position:0% 50%; }
     100% { background-position:100% 50%; }
+  }
+
+  .gameover-overlay {
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;
+  }
+
+  .gameover-card {
+    width:min(560px, calc(100vw - 32px));
+    padding:22px 20px;
+    border-radius:14px;
+    border:1px solid rgba(255,255,255,0.18);
+    color:#fff;
+    text-align:center;
+    box-shadow: 0 16px 50px rgba(0,0,0,0.55);
+    backdrop-filter: blur(8px);
+  }
+
+  .gameover-winner {
+    background: radial-gradient(circle at 30% 20%, rgba(255,202,40,0.95), rgba(213,0,249,0.6) 45%, rgba(41,121,255,0.35) 70%, rgba(0,0,0,0.65) 100%);
+    animation: winnerPop 900ms cubic-bezier(.2,1.2,.2,1) both;
+  }
+
+  .gameover-loser {
+    background: radial-gradient(circle at 30% 20%, rgba(120,120,120,0.95), rgba(40,40,40,0.75) 55%, rgba(0,0,0,0.8) 100%);
+    animation: loserShake 850ms ease-in-out both;
+  }
+
+  .gameover-title {
+    font-size:34px;
+    font-weight:900;
+    letter-spacing:0.8px;
+    margin:0 0 6px 0;
+    text-transform:uppercase;
+  }
+
+  .gameover-sub {
+    font-size:16px;
+    margin:0 0 14px 0;
+    opacity:0.95;
+  }
+
+  .gameover-actions {
+    display:flex;
+    gap:10px;
+    justify-content:center;
+    margin-top:14px;
+  }
+
+  .gameover-actions button {
+    border-radius:10px;
+    padding:10px 14px;
+    border:1px solid rgba(255,255,255,0.25);
+    background:rgba(0,0,0,0.28);
+    color:#fff;
+    cursor:pointer;
+  }
+
+  @@keyframes winnerPop {
+    0% { transform: scale(0.6) rotate(-3deg); opacity:0; }
+    60% { transform: scale(1.06) rotate(2deg); opacity:1; }
+    100% { transform: scale(1) rotate(0deg); opacity:1; }
+  }
+
+  @@keyframes loserShake {
+    0% { transform: translateX(0); opacity:0; }
+    25% { transform: translateX(-10px); opacity:1; }
+    50% { transform: translateX(10px); }
+    75% { transform: translateX(-6px); }
+    100% { transform: translateX(0); }
   }
 </style>
 
@@ -80,6 +155,10 @@ else
 {
     <div>
         <p>Game: <b>@_gameId</b> — You are player <b>@_playerNumber</b> (<b>@_currentUserName</b>). Current turn: <b>@_game?.CurrentTurn</b></p>
+      @if (!string.IsNullOrWhiteSpace(GameResultText))
+      {
+          <p><b>@GameResultText</b></p>
+      }
       @*  <p>
             Share this link with the other player:
         </p>  *@
@@ -93,7 +172,7 @@ else
             }
             @if (_game is not null && _game.CreatedByUserId == _currentUserId)
             {
-                <button @onclick="CancelGame" style="margin-left:auto;background:#b00020;color:#fff;border:1px solid #7a0016;border-radius:4px;padding:6px 10px;">Cancel game</button>
+                <button @onclick="CancelOrExitGame" style="margin-left:auto;background:#b00020;color:#fff;border:1px solid #7a0016;border-radius:4px;padding:6px 10px;">@CancelOrExitButtonText</button>
             }
         </div>
         @if (_game is not null && _game.HadSecondPlayerConnected)
@@ -120,6 +199,8 @@ else
                         <td data-r="@rr" data-c="@cc"
                             style="width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
                             @onclick="() => OnCellClick(rr, cc)"
+                            @oncontextmenu="(e => OnCellRightClick(e, rr, cc))"
+                            @oncontextmenu:preventDefault="true"
                             @onpointerenter="() => OnPointerEnterCell(rr, cc)"
                             @onpointerup="() => OnPointerUpCell(rr, cc)">
                             <div class="piece-wrapper"
@@ -162,6 +243,19 @@ else
     </div>
 }
 
+@if (_showGameOverOverlay)
+{
+    <div class="gameover-overlay" @onclick="DismissGameOverOverlay">
+        <div class="gameover-card @GameOverCardClass" @onclick:stopPropagation="true">
+            <div class="gameover-title">@GameOverTitle</div>
+            <div class="gameover-sub">@GameOverSubtitle</div>
+            <div class="gameover-actions">
+                <button @onclick="DismissGameOverOverlay">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
 <script>
   window.draftsChat = window.draftsChat || {};
   window.draftsChat.scrollToBottom = function (el) {
@@ -200,6 +294,8 @@ else
     private bool _joined = false;
     private int _currentUserId;
     private string _currentUserName = "";
+    private bool _isAdmin;
+
     private int? _selectedR;
     private int? _selectedC;
     private int? _dragFromR;
@@ -213,6 +309,8 @@ else
     private string _status = "";
     private bool _copied = false;
 
+    private bool _showGameOverOverlay;
+
     private string JoinLink => Nav.BaseUri.TrimEnd('/') + $"/drafts?gameId={_gameId ?? ""}";
 
     private ElementReference _chatInRef;
@@ -224,6 +322,55 @@ else
 
     private DotNetObjectReference<DraftsGame>? _dotNetRef;
     private bool _chatWired;
+
+    private bool _gameClosedNotified;
+
+    private DraftsService.GameState? _lastGameState;
+    private int? _lastWinnerPlayer;
+
+    private string GameResultText
+    {
+        get
+        {
+            if (_game is null) return "";
+            if (_game.State != DraftsService.GameState.Finished) return "";
+            if (!_game.WinnerPlayer.HasValue) return "Game over.";
+            if (_game.WinnerPlayer.Value == _playerNumber) return "You WON!";
+            return "You LOST!";
+        }
+    }
+
+    private string GameOverTitle
+    {
+        get
+        {
+            if (_game is null || _game.State != DraftsService.GameState.Finished) return "Game over";
+            if (!_game.WinnerPlayer.HasValue) return "Game over";
+            return _game.WinnerPlayer.Value == _playerNumber ? "Winner!" : "Defeat";
+        }
+    }
+
+    private string GameOverSubtitle
+    {
+        get
+        {
+            if (_game is null || _game.State != DraftsService.GameState.Finished) return "";
+            if (!_game.WinnerPlayer.HasValue) return "";
+            return _game.WinnerPlayer.Value == _playerNumber
+                ? "You WON!"
+                : "You LOST!";
+        }
+    }
+
+    private string GameOverCardClass
+    {
+        get
+        {
+            if (_game is null || _game.State != DraftsService.GameState.Finished) return "";
+            if (!_game.WinnerPlayer.HasValue) return "gameover-loser";
+            return _game.WinnerPlayer.Value == _playerNumber ? "gameover-winner" : "gameover-loser";
+        }
+    }
 
     private int _maxTimeoutMins = 30;
     private System.Threading.Timer? _uiTimer;
@@ -246,6 +393,8 @@ else
             Nav.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
             return;
         }
+
+        _isAdmin = user.IsInRole("Admin");
 
         _currentUserName = user.FindFirst(ClaimTypes.Name)?.Value ?? "";
 
@@ -275,7 +424,19 @@ else
             if (int.TryParse(creatorRaw, out var parsed)) creatorPlayerNumber = parsed;
         }
 
-        _gameId = GameService.CreateGame(_currentUserId, creatorPlayerNumber);
+        var adminMode = false;
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("admin", out var adminRaw))
+        {
+            adminMode = string.Equals(adminRaw.ToString(), "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(adminRaw.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (adminMode && !_isAdmin)
+        {
+            adminMode = false;
+        }
+
+        _gameId = GameService.CreateGame(_currentUserId, creatorPlayerNumber, adminMode);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
     }
@@ -395,15 +556,30 @@ else
         _chatInText = FormatChat(_game);
         _lastChatCount = _game?.ChatMessages?.Count ?? 0;
         _chatScrollPending = true;
-
         GameService.GameUpdated += OnGameUpdated;
         _message = "Connected.";
+        return;
     }
 
     private void OnGameUpdated(string id)
     {
         if (id != _gameId) return;
         _game = GameService.GetGame(id);
+
+        if (_game is not null)
+        {
+            if (_lastGameState != _game.State || _lastWinnerPlayer != _game.WinnerPlayer)
+            {
+                if (_game.State == DraftsService.GameState.Finished && _lastGameState != DraftsService.GameState.Finished)
+                {
+                    _showGameOverOverlay = true;
+                    _message = GameResultText;
+                }
+
+                _lastGameState = _game.State;
+                _lastWinnerPlayer = _game.WinnerPlayer;
+            }
+        }
 
         var chatCount = _game?.ChatMessages?.Count ?? 0;
         if (chatCount != _lastChatCount)
@@ -425,8 +601,27 @@ else
                 _joined = false;
                 _gameId = null;
 
-                await JS.InvokeVoidAsync("alert", "Game was closed.");
-                Nav.NavigateTo("/player", forceLoad: true);
+                try
+                {
+                    await JS.InvokeVoidAsync("alert", "Game was closed.");
+                }
+                catch (TaskCanceledException)
+                {
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (Microsoft.JSInterop.JSDisconnectedException)
+                {
+                }
+
+                try
+                {
+                    Nav.NavigateTo("/player", forceLoad: true);
+                }
+                catch
+                {
+                }
             });
             return;
         }
@@ -451,22 +646,6 @@ else
         }
     }
 
-    private bool _gameClosedNotified;
-
-    private async Task CancelGame()
-    {
-        if (string.IsNullOrWhiteSpace(_gameId)) return;
-        if (_game is null) return;
-        if (_game.CreatedByUserId != _currentUserId) return;
-
-        GameService.RemoveGame(_gameId);
-
-        var user = HttpContextAccessor.HttpContext?.User;
-        var isAdmin = user?.IsInRole("Admin") == true;
-        Nav.NavigateTo(isAdmin ? "/admin" : "/player", forceLoad: true);
-        await Task.CompletedTask;
-    }
-
     private async Task CopyJoinLink()
     {
         if (string.IsNullOrEmpty(JoinLink)) return;
@@ -483,6 +662,53 @@ else
         {
             await JS.InvokeVoidAsync("prompt", "Copy this link", JoinLink);
         }
+    }
+
+    private async Task CancelOrExitGame()
+    {
+        if (_game is null)
+        {
+            await Task.CompletedTask;
+            return;
+        }
+
+        if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned)
+        {
+            var user = HttpContextAccessor.HttpContext?.User;
+            var isAdmin = user?.IsInRole("Admin") == true;
+            Nav.NavigateTo(isAdmin ? "/admin" : "/player", forceLoad: true);
+            await Task.CompletedTask;
+            return;
+        }
+
+        await CancelGame();
+    }
+
+    private string CancelOrExitButtonText
+    {
+        get
+        {
+            if (_game is null) return "Cancel game";
+            if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned)
+            {
+                return "Exit game";
+            }
+            return "Cancel game";
+        }
+    }
+
+    private async Task CancelGame()
+    {
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+        if (_game is null) return;
+        if (_game.CreatedByUserId != _currentUserId) return;
+
+        GameService.RemoveGame(_gameId);
+
+        var user = HttpContextAccessor.HttpContext?.User;
+        var isAdmin = user?.IsInRole("Admin") == true;
+        Nav.NavigateTo(isAdmin ? "/admin" : "/player", forceLoad: true);
+        await Task.CompletedTask;
     }
 
     [JSInvokable]
@@ -535,16 +761,25 @@ else
 
     private async Task OnCellClick(int r, int c)
     {
+        if (!CanInteractWithBoard())
+        {
+            if (_game is not null && _game.State == DraftsService.GameState.Finished)
+            {
+                _message = GameResultText;
+            }
+            else if (_game is not null && _game.State == DraftsService.GameState.Abandoned)
+            {
+                _message = "Game was abandoned.";
+            }
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         if (_isDragging || _suppressNextClick)
         {
             _suppressNextClick = false;
             return;
         }
-
-        // Immediate debug feedback so you can see the click reached server.
-        var cell = _game is not null ? _game.Board[r, c] : 0;
-        _message = $"Click received: ({r},{c}) cell={cell} player={_playerNumber} connected={_connected}";
-        await InvokeAsync(StateHasChanged);
 
         if (_game == null)
         {
@@ -553,7 +788,9 @@ else
             return;
         }
 
-        var belongs = (cell != 0) && BelongsToPlayer(cell, _playerNumber);
+        var cell = _game.Board[r, c];
+
+        var belongs = (cell != 0) && CanInteractWithPiece(cell);
 
         if (!_selectedR.HasValue)
         {
@@ -589,7 +826,16 @@ else
             return;
         }
 
-        var (ok, msg) = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
+        (bool ok, string? msg) result;
+        if (IsAdminControllingGame())
+        {
+            result = GameService.MakeMoveAsAdmin(_gameId!, fr, fc, r, c);
+        }
+        else
+        {
+            result = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
+        }
+        var (ok, msg) = result;
         _message = ok ? "" : msg ?? "Invalid move";
 
         _selectedR = null; _selectedC = null;
@@ -600,8 +846,22 @@ else
     {
         if (_game == null) return;
 
+        if (!CanInteractWithBoard())
+        {
+            if (_game is not null && _game.State == DraftsService.GameState.Finished)
+            {
+                _message = GameResultText;
+            }
+            else if (_game is not null && _game.State == DraftsService.GameState.Abandoned)
+            {
+                _message = "Game was abandoned.";
+            }
+            _ = InvokeAsync(StateHasChanged);
+            return;
+        }
+
         var cell = _game.Board[r, c];
-        if (cell == 0 || !BelongsToPlayer(cell, _playerNumber)) return;
+        if (cell == 0 || !CanInteractWithPiece(cell)) return;
 
         if (e.ShiftKey)
         {
@@ -655,6 +915,42 @@ else
             return;
         }
 
+        if (!CanInteractWithBoard())
+        {
+            if (_game is not null && _game.State == DraftsService.GameState.Finished)
+            {
+                _message = GameResultText;
+            }
+            else if (_game is not null && _game.State == DraftsService.GameState.Abandoned)
+            {
+                _message = "Game was abandoned.";
+            }
+            _isDragging = false;
+            _dragFromR = null;
+            _dragFromC = null;
+            _dragHoverR = null;
+            _dragHoverC = null;
+            _selectedR = null;
+            _selectedC = null;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (_game is not null && _game.State == DraftsService.GameState.Finished)
+        {
+            _message = GameResultText;
+            _suppressNextClick = true;
+            _isDragging = false;
+            _dragFromR = null;
+            _dragFromC = null;
+            _dragHoverR = null;
+            _dragHoverC = null;
+            _selectedR = null;
+            _selectedC = null;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         if (_game == null || !_dragFromR.HasValue || !_dragFromC.HasValue)
         {
             _isDragging = false;
@@ -684,7 +980,16 @@ else
             return;
         }
 
-        var (ok, msg) = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
+        (bool ok, string? msg) result;
+        if (IsAdminControllingGame())
+        {
+            result = GameService.MakeMoveAsAdmin(_gameId!, fr, fc, r, c);
+        }
+        else
+        {
+            result = GameService.MakeMove(_gameId!, _playerNumber, fr, fc, r, c);
+        }
+        var (ok, msg) = result;
         _message = ok ? "" : msg ?? "Invalid move";
 
         _suppressNextClick = true;
@@ -703,6 +1008,42 @@ else
     {
         if (player == 1) return piece == 1 || piece == 3;
         return piece == 2 || piece == 4;
+    }
+
+    private bool IsAdminControllingGame()
+    {
+        return _isAdmin && _game is not null && _game.AdminMode;
+    }
+
+    private bool CanInteractWithBoard()
+    {
+        if (!_connected) return false;
+        if (_game is null) return false;
+        if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned) return false;
+        if (_game.AdminMode && !_isAdmin) return false;
+        return true;
+    }
+
+    private bool CanInteractWithPiece(int piece)
+    {
+        if (!CanInteractWithBoard()) return false;
+        if (IsAdminControllingGame()) return true;
+        return BelongsToPlayer(piece, _playerNumber);
+    }
+
+    private void DismissGameOverOverlay()
+    {
+        _showGameOverOverlay = false;
+    }
+
+    private void OnCellRightClick(MouseEventArgs e, int r, int c)
+    {
+        if (!IsAdminControllingGame()) return;
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+
+        var (ok, msg) = GameService.DeletePieceAsAdmin(_gameId!, r, c);
+        _message = ok ? "" : msg ?? "Delete failed";
+        _ = InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()

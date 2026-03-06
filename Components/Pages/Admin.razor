@@ -181,7 +181,7 @@ else
 
     private void StartNewGame()
     {
-        Nav.NavigateTo($"/drafts?creator={_creatorPlayerNumber}");
+        Nav.NavigateTo($"/drafts?creator={_creatorPlayerNumber}&admin=1");
     }
 
     private async Task OnChangePin()
