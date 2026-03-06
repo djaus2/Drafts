@@ -9,6 +9,7 @@ public sealed class SettingsService
     private readonly object _lock = new();
     private int _maxTimeoutMins = 30;
     private int _reaperPeriodSeconds = 30;
+    private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _loaded;
 
     public SettingsService(IServiceScopeFactory scopeFactory)
@@ -38,6 +39,17 @@ public sealed class SettingsService
         }
     }
 
+    public string LastMoveHighlightColor
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _lastMoveHighlightColor;
+            }
+        }
+    }
+
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -50,6 +62,9 @@ public sealed class SettingsService
             {
                 _maxTimeoutMins = s.MaxTimeoutMins;
                 _reaperPeriodSeconds = s.ReaperPeriodSeconds;
+                _lastMoveHighlightColor = string.IsNullOrWhiteSpace(s.LastMoveHighlightColor)
+                    ? "rgba(255,0,0,0.85)"
+                    : s.LastMoveHighlightColor;
                 _loaded = true;
             }
         }
@@ -59,6 +74,7 @@ public sealed class SettingsService
             {
                 _maxTimeoutMins = 30;
                 _reaperPeriodSeconds = 30;
+                _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
                 _loaded = true;
             }
         }
@@ -99,6 +115,25 @@ public sealed class SettingsService
         lock (_lock)
         {
             return _reaperPeriodSeconds;
+        }
+    }
+
+    public async Task<string> GetLastMoveHighlightColorAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _lastMoveHighlightColor;
         }
     }
 
@@ -156,6 +191,43 @@ public sealed class SettingsService
         lock (_lock)
         {
             _reaperPeriodSeconds = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateLastMoveHighlightColorAsync(string? newValue, CancellationToken cancellationToken = default)
+    {
+        newValue = (newValue ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(newValue)) return false;
+        if (newValue.Length > 64) return false;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings
+            {
+                Id = 1,
+                MaxTimeoutMins = 30,
+                ReaperPeriodSeconds = 30,
+                LastMoveHighlightColor = newValue
+            };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.LastMoveHighlightColor = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _lastMoveHighlightColor = newValue;
             _loaded = true;
         }
 

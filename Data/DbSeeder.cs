@@ -10,12 +10,21 @@ public static class DbSeeder
         await db.Database.EnsureCreatedAsync();
 
         await db.Database.ExecuteSqlRawAsync(
-            "CREATE TABLE IF NOT EXISTS \"Settings\" (\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_Settings\" PRIMARY KEY, \"MaxTimeoutMins\" INTEGER NOT NULL, \"ReaperPeriodSeconds\" INTEGER NOT NULL);");
+            "CREATE TABLE IF NOT EXISTS \"Settings\" (\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_Settings\" PRIMARY KEY, \"MaxTimeoutMins\" INTEGER NOT NULL, \"ReaperPeriodSeconds\" INTEGER NOT NULL, \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)');");
 
         try
         {
             await db.Database.ExecuteSqlRawAsync(
                 "ALTER TABLE \"Settings\" ADD COLUMN \"ReaperPeriodSeconds\" INTEGER NOT NULL DEFAULT 30;");
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE \"Settings\" ADD COLUMN \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)';");
         }
         catch
         {
@@ -28,7 +37,8 @@ public static class DbSeeder
             {
                 Id = 1,
                 MaxTimeoutMins = 30,
-                ReaperPeriodSeconds = 30
+                ReaperPeriodSeconds = 30,
+                LastMoveHighlightColor = "rgba(255,0,0,0.85)"
             });
         }
 

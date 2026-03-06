@@ -47,6 +47,15 @@
             Reaper period (seconds)
             <input @bind="_reaperPeriodSeconds" inputmode="numeric" />
         </label>
+        <label style="display:flex;flex-direction:column;gap:4px">
+            Last move highlight color
+            <select @bind="_lastMoveHighlightColor">
+                @foreach (var item in HighlightColorOptions)
+                {
+                    <option value="@item.Value">@item.Label</option>
+                }
+            </select>
+        </label>
         <button @onclick="SaveSettings">Save</button>
         @if (!string.IsNullOrWhiteSpace(_settingsMessage))
         {
@@ -118,7 +127,36 @@ else
 
     private int _maxTimeoutMins = 30;
     private int _reaperPeriodSeconds = 30;
+    private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private string _settingsMessage = "";
+
+    private sealed record ColorOption(string Label, string Value);
+
+    private IReadOnlyList<ColorOption> HighlightColorOptions
+    {
+        get
+        {
+            var list = new List<ColorOption>
+            {
+                new("Red (default)", "rgba(255,0,0,0.85)"),
+                new("Orange", "rgba(255,140,0,0.85)"),
+                new("Yellow", "rgba(255,215,0,0.85)"),
+                new("Green", "rgba(0,200,83,0.85)"),
+                new("Cyan", "rgba(0,188,212,0.85)"),
+                new("Blue", "rgba(41,121,255,0.85)"),
+                new("Purple", "rgba(213,0,249,0.85)"),
+                new("Pink", "rgba(255,64,129,0.85)"),
+                new("White", "rgba(255,255,255,0.85)"),
+            };
+
+            if (!list.Any(x => string.Equals(x.Value, _lastMoveHighlightColor, StringComparison.OrdinalIgnoreCase)))
+            {
+                list.Insert(0, new ColorOption($"Custom ({_lastMoveHighlightColor})", _lastMoveHighlightColor));
+            }
+
+            return list;
+        }
+    }
 
     private List<DraftsService.GameListItem>? _games;
 
@@ -128,6 +166,7 @@ else
         _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
         _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
         _reaperPeriodSeconds = await Settings.GetReaperPeriodSecondsAsync();
+        _lastMoveHighlightColor = await Settings.GetLastMoveHighlightColorAsync();
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
     }
@@ -159,7 +198,8 @@ else
         _settingsMessage = "";
         var ok1 = await Settings.UpdateMaxTimeoutMinsAsync(_maxTimeoutMins);
         var ok2 = await Settings.UpdateReaperPeriodSecondsAsync(_reaperPeriodSeconds);
-        _settingsMessage = (ok1 && ok2) ? "Saved." : "Invalid value.";
+        var ok3 = await Settings.UpdateLastMoveHighlightColorAsync(_lastMoveHighlightColor);
+        _settingsMessage = (ok1 && ok2 && ok3) ? "Saved." : "Invalid value.";
     }
 
     private static string FormatAge(TimeSpan ts)

@@ -11,4 +11,7 @@ public sealed class AppSettings
 
     [Required]
     public int ReaperPeriodSeconds { get; set; } = 30;
+
+    [Required]
+    public string LastMoveHighlightColor { get; set; } = "rgba(255,0,0,0.85)";
 }

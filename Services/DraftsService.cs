@@ -294,6 +294,13 @@ namespace Drafts.Services
                 {
                     game.Board[tr, tc] = piece;
                     game.Board[fr, fc] = 0;
+
+                    game.LastMoveFromR = fr;
+                    game.LastMoveFromC = fc;
+                    game.LastMoveToR = tr;
+                    game.LastMoveToC = tc;
+                    game.LastMoveCapturedSquares.Clear();
+
                     MaybePromote(game, tr, tc);
                     game.CurrentTurn = 3 - player;
 
@@ -327,6 +334,14 @@ namespace Drafts.Services
                     game.Board[tr, tc] = piece;
                     game.Board[fr, fc] = 0;
                     game.Board[midr, midc] = 0;
+
+                    game.LastMoveFromR = fr;
+                    game.LastMoveFromC = fc;
+                    game.LastMoveToR = tr;
+                    game.LastMoveToC = tc;
+                    game.LastMoveCapturedSquares.Clear();
+                    game.LastMoveCapturedSquares.Add(new DraftsGame.BoardPos(midr, midc));
+
                     MaybePromote(game, tr, tc);
                     // NOTE: Not implementing multiple-jump forcing — simple single capture.
                     game.CurrentTurn = 3 - player;
@@ -410,6 +425,24 @@ namespace Drafts.Services
                 OnGameUpdated(id);
                 return (true, null);
             }
+        }
+
+        public void ClearLastMoveHighlight(string id)
+        {
+            var game = GetGame(id);
+            if (game == null) return;
+
+            lock (game)
+            {
+                game.LastMoveFromR = null;
+                game.LastMoveFromC = null;
+                game.LastMoveToR = null;
+                game.LastMoveToC = null;
+                game.LastMoveCapturedSquares.Clear();
+                game.Touch();
+            }
+
+            OnGameUpdated(id);
         }
 
         private static void MarkFinished(DraftsGame game)
@@ -644,6 +677,18 @@ namespace Drafts.Services
 
         public List<ChatMessage> ChatMessages { get; } = new();
 
+        public sealed record BoardPos(int R, int C);
+
+        public int? LastMoveFromR { get; set; }
+
+        public int? LastMoveFromC { get; set; }
+
+        public int? LastMoveToR { get; set; }
+
+        public int? LastMoveToC { get; set; }
+
+        public List<BoardPos> LastMoveCapturedSquares { get; } = new();
+
         public DraftsGame(string id)
         {
             Id = id;
@@ -695,6 +740,12 @@ namespace Drafts.Services
 
             WinnerPlayer = null;
             GameOverMessageSent = false;
+
+            LastMoveFromR = null;
+            LastMoveFromC = null;
+            LastMoveToR = null;
+            LastMoveToC = null;
+            LastMoveCapturedSquares.Clear();
 
             ChatMessages.Clear();
 

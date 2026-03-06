@@ -130,6 +130,24 @@
     75% { transform: translateX(-6px); }
     100% { transform: translateX(0); }
   }
+
+  .lastmove-to {
+    box-shadow: inset 0 0 0 3px var(--lastmove-color, rgba(255,0,0,0.85));
+    background-image: linear-gradient(color-mix(in srgb, var(--lastmove-color, rgba(255,0,0,0.85)) 22%, transparent), color-mix(in srgb, var(--lastmove-color, rgba(255,0,0,0.85)) 22%, transparent));
+  }
+
+  .captured-x {
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:28px;
+    font-weight:900;
+    color:var(--lastmove-color, rgba(255,0,0,0.85));
+    pointer-events:none;
+    text-shadow:0 1px 3px rgba(0,0,0,0.6);
+  }
 </style>
 
 <h3>Drafts (Checkers)</h3>
@@ -153,7 +171,7 @@ else if (!_connected)
 }
 else
 {
-    <div>
+    <div style="--lastmove-color:@LastMoveHighlightColor;">
         <p>Game: <b>@_gameId</b> — You are player <b>@_playerNumber</b> (<b>@_currentUserName</b>). Current turn: <b>@_game?.CurrentTurn</b></p>
       @if (!string.IsNullOrWhiteSpace(GameResultText))
       {
@@ -199,13 +217,20 @@ else
                         var border = (_selectedR == rr && _selectedC == cc) ? "3px solid yellow" : "1px solid #444";
                         var canDrag = _connected && _game is not null && cell != 0 && BelongsToPlayer(cell, _playerNumber);
 
+                        var lastMoveToClass = IsLastMoveTo(rr, cc) ? " lastmove-to" : "";
+
                         <td data-r="@rr" data-c="@cc"
-                            style="width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
+                            style="position:relative;width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
+                            class="@lastMoveToClass"
                             @onclick="() => OnCellClick(rr, cc)"
                             @oncontextmenu="(e => OnCellRightClick(e, rr, cc))"
                             @oncontextmenu:preventDefault="true"
                             @onpointerenter="() => OnPointerEnterCell(rr, cc)"
                             @onpointerup="() => OnPointerUpCell(rr, cc)">
+                            @if (IsLastMoveCaptured(rr, cc))
+                            {
+                                <div class="captured-x">X</div>
+                            }
                             <div class="piece-wrapper"
                                  @onclick="() => OnCellClick(rr, cc)"
                                  @onclick:stopPropagation="true">
@@ -377,6 +402,16 @@ else
 
     private int _maxTimeoutMins = 30;
     private System.Threading.Timer? _uiTimer;
+
+    private string LastMoveHighlightColor
+    {
+        get
+        {
+            var c = Settings.LastMoveHighlightColor;
+            if (string.IsNullOrWhiteSpace(c)) return "rgba(255,0,0,0.85)";
+            return c;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -813,6 +848,8 @@ else
                 return;
             }
 
+            ClearLastMoveHighlightIfNextPlayerSelecting();
+
             _selectedR = r;
             _selectedC = c;
             _message = $"Selected {_selectedR},{_selectedC} (cell={cell}). Click destination.";
@@ -867,6 +904,8 @@ else
 
         var cell = _game.Board[r, c];
         if (cell == 0 || !CanInteractWithPiece(cell)) return;
+
+        ClearLastMoveHighlightIfNextPlayerSelecting();
 
         if (e.ShiftKey)
         {
@@ -1034,6 +1073,33 @@ else
         if (!CanInteractWithBoard()) return false;
         if (IsAdminControllingGame()) return true;
         return BelongsToPlayer(piece, _playerNumber);
+    }
+
+    private bool IsLastMoveTo(int r, int c)
+    {
+        if (_game is null) return false;
+        if (!_game.LastMoveToR.HasValue || !_game.LastMoveToC.HasValue) return false;
+        return _game.LastMoveToR.Value == r && _game.LastMoveToC.Value == c;
+    }
+
+    private bool IsLastMoveCaptured(int r, int c)
+    {
+        if (_game is null) return false;
+        if (_game.LastMoveCapturedSquares.Count == 0) return false;
+        return _game.LastMoveCapturedSquares.Any(p => p.R == r && p.C == c);
+    }
+
+    private void ClearLastMoveHighlightIfNextPlayerSelecting()
+    {
+        if (_game is null) return;
+        if (!_game.LastMoveToR.HasValue || !_game.LastMoveToC.HasValue) return;
+
+        // After a move, CurrentTurn flips. Only clear when the next player starts selecting a piece.
+        // For admin-mode games, allow admin to clear as well.
+        if (!IsAdminControllingGame() && _game.CurrentTurn != _playerNumber) return;
+
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+        GameService.ClearLastMoveHighlight(_gameId);
     }
 
     private void DismissGameOverOverlay()
