@@ -38,6 +38,8 @@ namespace Drafts
             // Register the game service so multiple components can join the same game.
             builder.Services.AddSingleton<DraftsService>();
 
+            builder.Services.AddSingleton<LobbyChatService>();
+
             builder.Services.AddSingleton<SettingsService>();
             builder.Services.AddHostedService<GameTimeoutReaper>();
 

@@ -1,0 +1,163 @@
+@implements IDisposable
+@using Drafts.Services
+@using System.Linq
+@using Microsoft.AspNetCore.Components.Web
+@inject LobbyChatService LobbyChatSvc
+@inject IHttpContextAccessor HttpContextAccessor
+@inject Microsoft.JSInterop.IJSRuntime JS
+
+<div style="margin-top:18px;max-width:520px;">
+    <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
+        <span>Lobby Chat</span>
+        <button type="button" @onclick="ClearChat">Clear</button>
+    </div>
+    <textarea @ref="_chatInRef" rows="6" style="width:100%;resize:none;" readonly>@_chatInText</textarea>
+    <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;">Send</div>
+    <textarea @ref="_chatOutRef" rows="3" style="width:100%;resize:none;" placeholder="Type message and press Enter"
+              @bind-value="_chatOutText" @bind-value:event="oninput"
+              ></textarea>
+</div>
+
+<script>
+  window.lobbyChat = window.lobbyChat || {};
+  window.lobbyChat.scrollToBottom = function (el) {
+    try {
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    } catch (e) {
+    }
+  };
+
+  window.lobbyChat.wireEnterToSend = function (el, dotNetRef) {
+    try {
+      if (!el || !dotNetRef) return;
+      if (el.__lobbyEnterWired) return;
+      el.__lobbyEnterWired = true;
+      el.addEventListener('keydown', function (ev) {
+        try {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            dotNetRef.invokeMethodAsync('OnChatEnterFromJs');
+          }
+        } catch (e) {
+        }
+      });
+    } catch (e) {
+    }
+  };
+</script>
+
+@code {
+    private ElementReference _chatInRef;
+    private ElementReference _chatOutRef;
+
+    private string _chatInText = "";
+    private string _chatOutText = "";
+    private int _lastChatCount;
+    private bool _scrollPending;
+    private DotNetObjectReference<LobbyChat>? _dotNetRef;
+
+    protected override void OnInitialized()
+    {
+        RefreshChat();
+        LobbyChatSvc.ChatUpdated += OnChatUpdated;
+    }
+
+    public void Dispose()
+    {
+        LobbyChatSvc.ChatUpdated -= OnChatUpdated;
+        _dotNetRef?.Dispose();
+    }
+
+    private void OnChatUpdated()
+    {
+        RefreshChat();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshChat()
+    {
+        var msgs = LobbyChatSvc.GetMessages();
+        var count = msgs.Count;
+        if (count != _lastChatCount)
+        {
+            _lastChatCount = count;
+            _chatInText = string.Join("\n", msgs.Select(m => $"{m.SenderName}: {m.Text}"));
+            _scrollPending = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _dotNetRef ??= DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("lobbyChat.wireEnterToSend", _chatOutRef, _dotNetRef);
+            }
+            catch
+            {
+            }
+        }
+
+        if (_scrollPending)
+        {
+            _scrollPending = false;
+            try
+            {
+                await JS.InvokeVoidAsync("lobbyChat.scrollToBottom", _chatInRef);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private async Task SendChat()
+    {
+        var text = _chatOutText;
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        var user = HttpContextAccessor.HttpContext?.User;
+        var rawUid = user?.FindFirst("uid")?.Value;
+        var senderName = user?.Identity?.Name ?? "";
+
+        var senderId = 0;
+        if (!int.TryParse(rawUid, out senderId)) senderId = 0;
+
+        var ok = LobbyChatSvc.AddMessage(senderId, senderName, text);
+        if (ok)
+        {
+            _chatOutText = "";
+            _scrollPending = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ClearChat()
+    {
+        try
+        {
+            var ok = await JS.InvokeAsync<bool>("confirm", "This clears for everyone. Continue?");
+            if (!ok) return;
+        }
+        catch
+        {
+            // If confirm fails for any reason, don't clear.
+            return;
+        }
+
+        LobbyChatSvc.Clear();
+        _lastChatCount = 0;
+        _chatInText = "";
+        _scrollPending = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnChatEnterFromJs()
+    {
+        await SendChat();
+    }
+}

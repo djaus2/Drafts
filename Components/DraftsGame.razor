@@ -474,7 +474,7 @@ else
             adminMode = false;
         }
 
-        _gameId = GameService.CreateGame(_currentUserId, creatorPlayerNumber, adminMode);
+        _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
     }
@@ -524,7 +524,7 @@ else
             Nav.NavigateTo("/login", forceLoad: true);
             return;
         }
-        _gameId = GameService.CreateGame(_currentUserId, 1);
+        _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
         await InvokeAsync(StateHasChanged);

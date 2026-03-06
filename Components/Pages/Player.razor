@@ -1,6 +1,7 @@
 @page "/player"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
+@implements IDisposable
 @using Drafts.Services
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
@@ -35,6 +36,8 @@
         }
     </div>
 </div>
+
+<LobbyChat />
 
 @code {
     private string _selectedGameId = "";

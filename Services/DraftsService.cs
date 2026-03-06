@@ -10,6 +10,7 @@ namespace Drafts.Services
     public class DraftsService
     {
         private readonly ILogger<DraftsService> _logger;
+        private readonly LobbyChatService _lobbyChat;
 
         // Event raised when a game changes. Subscribers can call StateHasChanged.
         public event Action<string>? GameUpdated;
@@ -37,9 +38,10 @@ namespace Drafts.Services
             return FindActiveGameIdForUser(userId);
         }
 
-        public DraftsService(ILogger<DraftsService> logger)
+        public DraftsService(ILogger<DraftsService> logger, LobbyChatService lobbyChat)
         {
             _logger = logger;
+            _lobbyChat = lobbyChat;
         }
 
         public enum GameState
@@ -91,6 +93,11 @@ namespace Drafts.Services
 
         public string CreateGame(int userId, int creatorPlayerNumber = 1, bool adminMode = false)
         {
+            return CreateGame(userId, "", creatorPlayerNumber, adminMode);
+        }
+
+        public string CreateGame(int userId, string creatorName, int creatorPlayerNumber = 1, bool adminMode = false)
+        {
             var existing = FindActiveGameIdForUser(userId);
             if (!string.IsNullOrWhiteSpace(existing))
             {
@@ -126,6 +133,10 @@ namespace Drafts.Services
 
             _games[id] = game;
             _logger.LogInformation("CreateGame: {GameId}", id);
+
+            var displayName = string.IsNullOrWhiteSpace(creatorName) ? $"User {userId}" : creatorName;
+            _lobbyChat.AddSystemMessage($"New game started by {displayName}: {id}");
+
             OnGameUpdated(id);
             return id;
         }
