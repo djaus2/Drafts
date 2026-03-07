@@ -52,6 +52,10 @@
             Entrapment mode
         </label>
         <label style="display:flex;flex-direction:column;gap:4px">
+            Multi-jump grace (seconds)
+            <input @bind="_multiJumpGraceSeconds" inputmode="numeric" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
             <select @bind="_lastMoveHighlightColor">
                 @foreach (var item in HighlightColorOptions)
@@ -135,6 +139,7 @@ else
     private int _reaperPeriodSeconds = 30;
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
+    private int _multiJumpGraceSeconds = 2;
     private string _settingsMessage = "";
 
     private sealed record ColorOption(string Label, string Value);
@@ -175,6 +180,7 @@ else
         _reaperPeriodSeconds = await Settings.GetReaperPeriodSecondsAsync();
         _lastMoveHighlightColor = await Settings.GetLastMoveHighlightColorAsync();
         _entrapmentMode = await Settings.GetEntrapmentModeAsync();
+        _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
     }
@@ -208,7 +214,8 @@ else
         var ok2 = await Settings.UpdateReaperPeriodSecondsAsync(_reaperPeriodSeconds);
         var ok3 = await Settings.UpdateLastMoveHighlightColorAsync(_lastMoveHighlightColor);
         var ok4 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
-        _settingsMessage = (ok1 && ok2 && ok3 && ok4) ? "Saved." : "Invalid value.";
+        var ok5 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5) ? "Saved." : "Invalid value.";
     }
 
     private static string FormatAge(TimeSpan ts)

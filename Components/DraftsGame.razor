@@ -133,7 +133,6 @@
 
   .lastmove-to {
     box-shadow: inset 0 0 0 3px var(--lastmove-color, rgba(255,0,0,0.85));
-    background-image: linear-gradient(color-mix(in srgb, var(--lastmove-color, rgba(255,0,0,0.85)) 22%, transparent), color-mix(in srgb, var(--lastmove-color, rgba(255,0,0,0.85)) 22%, transparent));
   }
 
   .captured-x {
@@ -214,10 +213,12 @@ else
                         var cell = _game is not null ? _game.Board[rr, cc] : 0;
                         var isDark = ((rr + cc) % 2 != 0);
                         var bg = isDark ? "#7B5E3B" : "#EEE8D5";
-                        var border = (_selectedR == rr && _selectedC == cc) ? "3px solid yellow" : "1px solid #444";
+                        var isSelected = (_selectedR == rr && _selectedC == cc);
+                        var isLastMoveTo = IsLastMoveTo(rr, cc);
+                        var border = ((isSelected && !isLastMoveTo) ? "3px solid #00bcd4" : "1px solid #444");
                         var canDrag = _connected && _game is not null && cell != 0 && BelongsToPlayer(cell, _playerNumber);
 
-                        var lastMoveToClass = IsLastMoveTo(rr, cc) ? " lastmove-to" : "";
+                        var lastMoveToClass = isLastMoveTo ? " lastmove-to" : "";
 
                         <td data-r="@rr" data-c="@cc"
                             style="position:relative;width:48px;height:48px;text-align:center;vertical-align:middle;background:@bg;border:@border;cursor:pointer;"
@@ -604,6 +605,16 @@ else
         if (id != _gameId) return;
         _game = GameService.GetGame(id);
 
+        if (_game is not null
+            && _game.ForcedJumpFromR.HasValue
+            && _game.ForcedJumpFromC.HasValue
+            && (IsAdminControllingGame() || _game.CurrentTurn == _playerNumber))
+        {
+            _selectedR = _game.ForcedJumpFromR.Value;
+            _selectedC = _game.ForcedJumpFromC.Value;
+            _message = $"Must continue jumping with {_selectedR},{_selectedC}.";
+        }
+
         if (_game is not null)
         {
             if (_lastGameState != _game.State || _lastWinnerPlayer != _game.WinnerPlayer)
@@ -830,6 +841,18 @@ else
 
         var cell = _game.Board[r, c];
 
+        if (_game.ForcedJumpFromR.HasValue && _game.ForcedJumpFromC.HasValue && _game.CurrentTurn == _playerNumber)
+        {
+            var mustR = _game.ForcedJumpFromR.Value;
+            var mustC = _game.ForcedJumpFromC.Value;
+            if (cell != 0 && CanInteractWithPiece(cell) && (r != mustR || c != mustC))
+            {
+                _message = $"Must continue jumping with {mustR},{mustC}.";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
+
         var belongs = (cell != 0) && CanInteractWithPiece(cell);
 
         if (!_selectedR.HasValue)
@@ -880,7 +903,25 @@ else
         var (ok, msg) = result;
         _message = ok ? "" : msg ?? "Invalid move";
 
-        _selectedR = null; _selectedC = null;
+        if (ok && !string.IsNullOrWhiteSpace(_gameId))
+        {
+            _game = GameService.GetGame(_gameId);
+        }
+
+        if (ok
+            && _game is not null
+            && _game.ForcedJumpFromR.HasValue
+            && _game.ForcedJumpFromC.HasValue
+            && (IsAdminControllingGame() || _game.CurrentTurn == _playerNumber))
+        {
+            _selectedR = _game.ForcedJumpFromR.Value;
+            _selectedC = _game.ForcedJumpFromC.Value;
+            _message = $"Must continue jumping with {_selectedR},{_selectedC}.";
+        }
+        else
+        {
+            _selectedR = null; _selectedC = null;
+        }
         await InvokeAsync(StateHasChanged);
     }
 
@@ -904,6 +945,18 @@ else
 
         var cell = _game.Board[r, c];
         if (cell == 0 || !CanInteractWithPiece(cell)) return;
+
+        if (_game.ForcedJumpFromR.HasValue && _game.ForcedJumpFromC.HasValue && _game.CurrentTurn == _playerNumber)
+        {
+            var mustR = _game.ForcedJumpFromR.Value;
+            var mustC = _game.ForcedJumpFromC.Value;
+            if (r != mustR || c != mustC)
+            {
+                _message = $"Must continue jumping with {mustR},{mustC}.";
+                _ = InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
 
         ClearLastMoveHighlightIfNextPlayerSelecting();
 
@@ -1036,14 +1089,33 @@ else
         var (ok, msg) = result;
         _message = ok ? "" : msg ?? "Invalid move";
 
+        if (ok && !string.IsNullOrWhiteSpace(_gameId))
+        {
+            _game = GameService.GetGame(_gameId);
+        }
+
+        if (ok
+            && _game is not null
+            && _game.ForcedJumpFromR.HasValue
+            && _game.ForcedJumpFromC.HasValue
+            && (IsAdminControllingGame() || _game.CurrentTurn == _playerNumber))
+        {
+            _selectedR = _game.ForcedJumpFromR.Value;
+            _selectedC = _game.ForcedJumpFromC.Value;
+            _message = $"Must continue jumping with {_selectedR},{_selectedC}.";
+        }
+        else
+        {
+            _selectedR = null;
+            _selectedC = null;
+        }
+
         _suppressNextClick = true;
         _isDragging = false;
         _dragFromR = null;
         _dragFromC = null;
         _dragHoverR = null;
         _dragHoverC = null;
-        _selectedR = null;
-        _selectedC = null;
 
         await InvokeAsync(StateHasChanged);
     }

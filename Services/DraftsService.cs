@@ -301,10 +301,45 @@ namespace Drafts.Services
                 }
 
                 game.Touch();
+
+                if (game.ForcedJumpFromR.HasValue && game.ForcedJumpFromC.HasValue && game.CurrentTurn != player)
+                {
+                    // Opponent may be allowed to claim the turn after a grace period, which cancels multi-jump mode.
+                    var opponent = 3 - game.CurrentTurn;
+                    if (player == opponent)
+                    {
+                        if (game.ForcedJumpOpponentCanClaimAfterUtc.HasValue
+                            && DateTime.UtcNow < game.ForcedJumpOpponentCanClaimAfterUtc.Value)
+                        {
+                            var remaining = game.ForcedJumpOpponentCanClaimAfterUtc.Value - DateTime.UtcNow;
+                            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+                            return (false, $"Wait {(int)Math.Ceiling(remaining.TotalSeconds)}s — opponent may still continue jumping.");
+                        }
+
+                        game.ForcedJumpFromR = null;
+                        game.ForcedJumpFromC = null;
+                        game.ForcedJumpOpponentCanClaimAfterUtc = null;
+                        game.LastMoveFromR = null;
+                        game.LastMoveFromC = null;
+                        game.LastMoveToR = null;
+                        game.LastMoveToC = null;
+                        game.LastMoveCapturedSquares.Clear();
+                        game.CurrentTurn = player;
+                    }
+                }
+
                 if (game.CurrentTurn != player) return (false, "Not your turn");
                 if (!IsInside(fr, fc) || !IsInside(tr, tc)) return (false, "Out of bounds");
                 var piece = game.Board[fr, fc];
                 if (piece == 0) return (false, "No piece at source");
+
+                if (game.ForcedJumpFromR.HasValue && game.ForcedJumpFromC.HasValue)
+                {
+                    if (game.ForcedJumpFromR.Value != fr || game.ForcedJumpFromC.Value != fc)
+                    {
+                        return (false, $"Must continue jumping with {game.ForcedJumpFromR},{game.ForcedJumpFromC}.");
+                    }
+                }
 
                 if (!BelongsToPlayer(piece, player)) return (false, "Not your piece");
                 if (game.Board[tr, tc] != 0) return (false, "Target not empty");
@@ -317,6 +352,11 @@ namespace Drafts.Services
                 // Normal move: diagonal by 1
                 if (absdr == 1 && absdc == 1 && IsForwardMove(piece, dr))
                 {
+                    if (game.ForcedJumpFromR.HasValue && game.ForcedJumpFromC.HasValue)
+                    {
+                        return (false, $"Must continue jumping with {game.ForcedJumpFromR},{game.ForcedJumpFromC}.");
+                    }
+
                     game.Board[tr, tc] = piece;
                     game.Board[fr, fc] = 0;
 
@@ -356,6 +396,8 @@ namespace Drafts.Services
                 {
                     var midr = fr + dr / 2;
                     var midc = fc + dc / 2;
+                    if (!IsInside(midr, midc)) return (false, "Out of bounds");
+
                     var mid = game.Board[midr, midc];
                     if (mid == 0 || BelongsToPlayer(mid, player)) return (false, "No opponent to capture");
 
@@ -373,8 +415,22 @@ namespace Drafts.Services
                     game.LastMoveCapturedSquares.Add(new DraftsGame.BoardPos(midr, midc));
 
                     MaybePromote(game, tr, tc);
-                    // NOTE: Not implementing multiple-jump forcing — simple single capture.
-                    game.CurrentTurn = 3 - player;
+
+                    var followUp = GetCaptureMovesForPiece(game, player, tr, tc).Count;
+                    if (followUp > 0)
+                    {
+                        game.CurrentTurn = player;
+                        game.ForcedJumpFromR = tr;
+                        game.ForcedJumpFromC = tc;
+                        game.ForcedJumpOpponentCanClaimAfterUtc = DateTime.UtcNow.AddSeconds(Math.Max(0, _settings.MultiJumpGraceSeconds));
+                    }
+                    else
+                    {
+                        game.ForcedJumpFromR = null;
+                        game.ForcedJumpFromC = null;
+                        game.ForcedJumpOpponentCanClaimAfterUtc = null;
+                        game.CurrentTurn = 3 - player;
+                    }
 
                     if (game.State == GameState.Connected)
                     {
@@ -399,6 +455,77 @@ namespace Drafts.Services
                 }
 
                 return (false, "Illegal move");
+            }
+        }
+
+        private sealed record CaptureMove(int CaptureR, int CaptureC, int ToR, int ToC);
+
+        private static IReadOnlyList<CaptureMove> GetCaptureMovesForPiece(DraftsGame game, int player, int fr, int fc)
+        {
+            if (!IsInside(fr, fc)) return Array.Empty<CaptureMove>();
+
+            var piece = game.Board[fr, fc];
+            if (piece == 0) return Array.Empty<CaptureMove>();
+            if (!BelongsToPlayer(piece, player)) return Array.Empty<CaptureMove>();
+
+            var forwardDr = player == 1 ? -1 : 1;
+            var drs = IsKing(piece) ? new[] { -1, 1 } : new[] { forwardDr };
+            var list = new List<CaptureMove>();
+
+            foreach (var dr in drs)
+            {
+                foreach (var dc in new[] { -1, 1 })
+                {
+                    var midr = fr + dr;
+                    var midc = fc + dc;
+                    var tr = fr + 2 * dr;
+                    var tc = fc + 2 * dc;
+
+                    if (!IsInside(tr, tc) || game.Board[tr, tc] != 0) continue;
+                    if (!IsInside(midr, midc)) continue;
+
+                    var mid = game.Board[midr, midc];
+                    if (mid == 0) continue;
+                    if (BelongsToPlayer(mid, player)) continue;
+
+                    list.Add(new CaptureMove(midr, midc, tr, tc));
+                }
+            }
+
+            return list;
+        }
+
+        public sealed record JumpOption(int FromR, int FromC, int CaptureR, int CaptureC, int ToR, int ToC);
+
+        public IReadOnlyList<JumpOption> ListJumpOptions(string gameId, int player)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return Array.Empty<JumpOption>();
+            if (player != 1 && player != 2) return Array.Empty<JumpOption>();
+
+            var game = GetGame(gameId);
+            if (game is null) return Array.Empty<JumpOption>();
+
+            lock (game)
+            {
+                if (game.State == GameState.Finished || game.State == GameState.Abandoned) return Array.Empty<JumpOption>();
+
+                var list = new List<JumpOption>();
+                for (var r = 0; r < 8; r++)
+                {
+                    for (var c = 0; c < 8; c++)
+                    {
+                        var cell = game.Board[r, c];
+                        if (cell == 0) continue;
+                        if (!BelongsToPlayer(cell, player)) continue;
+
+                        foreach (var m in GetCaptureMovesForPiece(game, player, r, c))
+                        {
+                            list.Add(new JumpOption(r, c, m.CaptureR, m.CaptureC, m.ToR, m.ToC));
+                        }
+                    }
+                }
+
+                return list;
             }
         }
 
@@ -448,6 +575,10 @@ namespace Drafts.Services
 
                 if (!IsInside(r, c)) return (false, "Out of bounds");
                 if (game.Board[r, c] == 0) return (false, "No piece");
+
+                game.ForcedJumpFromR = null;
+                game.ForcedJumpFromC = null;
+                game.ForcedJumpOpponentCanClaimAfterUtc = null;
 
                 game.Board[r, c] = 0;
                 game.RecountPieces();
@@ -791,6 +922,10 @@ namespace Drafts.Services
 
         public int CurrentTurn { get; set; } = 1;
 
+        public int? ForcedJumpFromR { get; set; }
+        public int? ForcedJumpFromC { get; set; }
+        public DateTime? ForcedJumpOpponentCanClaimAfterUtc { get; set; }
+
         public int CreatedByUserId { get; set; }
         public int? Player1UserId { get; set; }
         public int? Player2UserId { get; set; }
@@ -857,6 +992,9 @@ namespace Drafts.Services
             }
 
             CurrentTurn = 1;
+            ForcedJumpFromR = null;
+            ForcedJumpFromC = null;
+            ForcedJumpOpponentCanClaimAfterUtc = null;
             Player1Connected = false;
             Player2Connected = false;
             Player1UserId = null;

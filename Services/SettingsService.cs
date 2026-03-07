@@ -11,6 +11,7 @@ public sealed class SettingsService
     private int _reaperPeriodSeconds = 30;
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
+    private int _multiJumpGraceSeconds = 2;
     private bool _loaded;
 
     public SettingsService(IServiceScopeFactory scopeFactory)
@@ -62,6 +63,17 @@ public sealed class SettingsService
         }
     }
 
+    public int MultiJumpGraceSeconds
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _multiJumpGraceSeconds;
+            }
+        }
+    }
+
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -78,6 +90,7 @@ public sealed class SettingsService
                     ? "rgba(255,0,0,0.85)"
                     : s.LastMoveHighlightColor;
                 _entrapmentMode = s.EntrapmentMode;
+                _multiJumpGraceSeconds = s.MultiJumpGraceSeconds;
                 _loaded = true;
             }
         }
@@ -89,6 +102,7 @@ public sealed class SettingsService
                 _reaperPeriodSeconds = 30;
                 _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
                 _entrapmentMode = true;
+                _multiJumpGraceSeconds = 2;
                 _loaded = true;
             }
         }
@@ -167,6 +181,25 @@ public sealed class SettingsService
         lock (_lock)
         {
             return _entrapmentMode;
+        }
+    }
+
+    public async Task<int> GetMultiJumpGraceSecondsAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _multiJumpGraceSeconds;
         }
     }
 
@@ -295,6 +328,44 @@ public sealed class SettingsService
         lock (_lock)
         {
             _entrapmentMode = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateMultiJumpGraceSecondsAsync(int newValue, CancellationToken cancellationToken = default)
+    {
+        if (newValue < 0) return false;
+        if (newValue > 60) return false;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings
+            {
+                Id = 1,
+                MaxTimeoutMins = 30,
+                ReaperPeriodSeconds = 30,
+                LastMoveHighlightColor = "rgba(255,0,0,0.85)",
+                EntrapmentMode = true,
+                MultiJumpGraceSeconds = newValue
+            };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.MultiJumpGraceSeconds = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _multiJumpGraceSeconds = newValue;
             _loaded = true;
         }
 
