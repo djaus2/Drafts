@@ -47,6 +47,10 @@
             Reaper period (seconds)
             <input @bind="_reaperPeriodSeconds" inputmode="numeric" />
         </label>
+        <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" @bind="_entrapmentMode" />
+            Entrapment mode
+        </label>
         <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
             <select @bind="_lastMoveHighlightColor">
@@ -130,6 +134,7 @@ else
     private int _maxTimeoutMins = 30;
     private int _reaperPeriodSeconds = 30;
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
+    private bool _entrapmentMode = true;
     private string _settingsMessage = "";
 
     private sealed record ColorOption(string Label, string Value);
@@ -169,6 +174,7 @@ else
         _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
         _reaperPeriodSeconds = await Settings.GetReaperPeriodSecondsAsync();
         _lastMoveHighlightColor = await Settings.GetLastMoveHighlightColorAsync();
+        _entrapmentMode = await Settings.GetEntrapmentModeAsync();
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
     }
@@ -201,7 +207,8 @@ else
         var ok1 = await Settings.UpdateMaxTimeoutMinsAsync(_maxTimeoutMins);
         var ok2 = await Settings.UpdateReaperPeriodSecondsAsync(_reaperPeriodSeconds);
         var ok3 = await Settings.UpdateLastMoveHighlightColorAsync(_lastMoveHighlightColor);
-        _settingsMessage = (ok1 && ok2 && ok3) ? "Saved." : "Invalid value.";
+        var ok4 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4) ? "Saved." : "Invalid value.";
     }
 
     private static string FormatAge(TimeSpan ts)

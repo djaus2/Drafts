@@ -11,6 +11,7 @@ namespace Drafts.Services
     {
         private readonly ILogger<DraftsService> _logger;
         private readonly LobbyChatService _lobbyChat;
+        private readonly SettingsService _settings;
 
         // Event raised when a game changes. Subscribers can call StateHasChanged.
         public event Action<string>? GameUpdated;
@@ -38,10 +39,11 @@ namespace Drafts.Services
             return FindActiveGameIdForUser(userId);
         }
 
-        public DraftsService(ILogger<DraftsService> logger, LobbyChatService lobbyChat)
+        public DraftsService(ILogger<DraftsService> logger, LobbyChatService lobbyChat, SettingsService settings)
         {
             _logger = logger;
             _lobbyChat = lobbyChat;
+            _settings = settings;
         }
 
         public enum GameState
@@ -187,6 +189,12 @@ namespace Drafts.Services
                             game.State = GameState.Connected;
                         }
                     }
+
+                    if (game.State != GameState.Finished && _settings.EntrapmentMode && game.Player1Connected && game.Player2Connected)
+                    {
+                        TryFinishByEntrapment(game);
+                    }
+
                     game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player1", id);
                     OnGameUpdated(id);
@@ -204,6 +212,12 @@ namespace Drafts.Services
                             game.State = GameState.Connected;
                         }
                     }
+
+                    if (game.State != GameState.Finished && _settings.EntrapmentMode && game.Player1Connected && game.Player2Connected)
+                    {
+                        TryFinishByEntrapment(game);
+                    }
+
                     game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player2", id);
                     OnGameUpdated(id);
@@ -326,6 +340,11 @@ namespace Drafts.Services
                         MarkFinished(game);
                     }
 
+                    if (game.State != GameState.Finished && _settings.EntrapmentMode)
+                    {
+                        TryFinishByEntrapment(game);
+                    }
+
                     game.Touch();
                     OnGameUpdated(id);
                     _logger.LogInformation("MakeMove: {GameId} move applied", id);
@@ -366,6 +385,11 @@ namespace Drafts.Services
                     if (game.Player1PieceCount == 0 || game.Player2PieceCount == 0)
                     {
                         MarkFinished(game);
+                    }
+
+                    if (game.State != GameState.Finished && _settings.EntrapmentMode)
+                    {
+                        TryFinishByEntrapment(game);
                     }
 
                     game.Touch();
@@ -432,6 +456,11 @@ namespace Drafts.Services
                     MarkFinished(game);
                 }
 
+                if (game.State != GameState.Finished && _settings.EntrapmentMode)
+                {
+                    TryFinishByEntrapment(game);
+                }
+
                 game.Touch();
                 OnGameUpdated(id);
                 return (true, null);
@@ -480,6 +509,93 @@ namespace Drafts.Services
                 var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
                 game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
             }
+        }
+
+        private static void MarkFinishedWithWinner(DraftsGame game, int winner)
+        {
+            if (game.State == GameState.Finished)
+            {
+                return;
+            }
+
+            game.State = GameState.Finished;
+            if (winner == 1 || winner == 2)
+            {
+                game.WinnerPlayer = winner;
+            }
+
+            if (!game.GameOverMessageSent)
+            {
+                game.GameOverMessageSent = true;
+                var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
+                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
+            }
+        }
+
+        private static bool HasAnyLegalMove(DraftsGame game, int player)
+        {
+            for (var r = 0; r < 8; r++)
+            {
+                for (var c = 0; c < 8; c++)
+                {
+                    var piece = game.Board[r, c];
+                    if (piece == 0) continue;
+                    if (!BelongsToPlayer(piece, player)) continue;
+
+                    var forwardDr = player == 1 ? -1 : 1;
+                    var drs = IsKing(piece) ? new[] { -1, 1 } : new[] { forwardDr };
+
+                    foreach (var dr in drs)
+                    {
+                        foreach (var dc in new[] { -1, 1 })
+                        {
+                            var tr = r + dr;
+                            var tc = c + dc;
+                            if (IsInside(tr, tc) && game.Board[tr, tc] == 0)
+                            {
+                                return true;
+                            }
+
+                            var cr = r + 2 * dr;
+                            var cc = c + 2 * dc;
+                            var midr = r + dr;
+                            var midc = c + dc;
+                            if (IsInside(cr, cc) && game.Board[cr, cc] == 0 && IsInside(midr, midc))
+                            {
+                                var mid = game.Board[midr, midc];
+                                if (mid != 0 && !BelongsToPlayer(mid, player))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static void TryFinishByEntrapment(DraftsGame game)
+        {
+            if (game.State == GameState.Finished || game.State == GameState.Abandoned)
+            {
+                return;
+            }
+
+            var current = game.CurrentTurn;
+            if (current != 1 && current != 2)
+            {
+                return;
+            }
+
+            if (HasAnyLegalMove(game, current))
+            {
+                return;
+            }
+
+            var winner = 3 - current;
+            MarkFinishedWithWinner(game, winner);
         }
 
         private static bool IsInside(int r, int c) => r >= 0 && r < 8 && c >= 0 && c < 8;

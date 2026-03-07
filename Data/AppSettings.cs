@@ -14,4 +14,7 @@ public sealed class AppSettings
 
     [Required]
     public string LastMoveHighlightColor { get; set; } = "rgba(255,0,0,0.85)";
+
+    [Required]
+    public bool EntrapmentMode { get; set; } = true;
 }

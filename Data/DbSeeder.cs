@@ -10,7 +10,7 @@ public static class DbSeeder
         await db.Database.EnsureCreatedAsync();
 
         await db.Database.ExecuteSqlRawAsync(
-            "CREATE TABLE IF NOT EXISTS \"Settings\" (\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_Settings\" PRIMARY KEY, \"MaxTimeoutMins\" INTEGER NOT NULL, \"ReaperPeriodSeconds\" INTEGER NOT NULL, \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)');");
+            "CREATE TABLE IF NOT EXISTS \"Settings\" (\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_Settings\" PRIMARY KEY, \"MaxTimeoutMins\" INTEGER NOT NULL, \"ReaperPeriodSeconds\" INTEGER NOT NULL, \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)', \"EntrapmentMode\" INTEGER NOT NULL DEFAULT 1);");
 
         try
         {
@@ -30,6 +30,15 @@ public static class DbSeeder
         {
         }
 
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE \"Settings\" ADD COLUMN \"EntrapmentMode\" INTEGER NOT NULL DEFAULT 1;");
+        }
+        catch
+        {
+        }
+
         var settings = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1);
         if (settings is null)
         {
@@ -38,7 +47,8 @@ public static class DbSeeder
                 Id = 1,
                 MaxTimeoutMins = 30,
                 ReaperPeriodSeconds = 30,
-                LastMoveHighlightColor = "rgba(255,0,0,0.85)"
+                LastMoveHighlightColor = "rgba(255,0,0,0.85)",
+                EntrapmentMode = true
             });
         }
 

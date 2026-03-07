@@ -10,6 +10,7 @@ public sealed class SettingsService
     private int _maxTimeoutMins = 30;
     private int _reaperPeriodSeconds = 30;
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
+    private bool _entrapmentMode = true;
     private bool _loaded;
 
     public SettingsService(IServiceScopeFactory scopeFactory)
@@ -50,6 +51,17 @@ public sealed class SettingsService
         }
     }
 
+    public bool EntrapmentMode
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _entrapmentMode;
+            }
+        }
+    }
+
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -65,6 +77,7 @@ public sealed class SettingsService
                 _lastMoveHighlightColor = string.IsNullOrWhiteSpace(s.LastMoveHighlightColor)
                     ? "rgba(255,0,0,0.85)"
                     : s.LastMoveHighlightColor;
+                _entrapmentMode = s.EntrapmentMode;
                 _loaded = true;
             }
         }
@@ -75,6 +88,7 @@ public sealed class SettingsService
                 _maxTimeoutMins = 30;
                 _reaperPeriodSeconds = 30;
                 _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
+                _entrapmentMode = true;
                 _loaded = true;
             }
         }
@@ -134,6 +148,25 @@ public sealed class SettingsService
         lock (_lock)
         {
             return _lastMoveHighlightColor;
+        }
+    }
+
+    public async Task<bool> GetEntrapmentModeAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _entrapmentMode;
         }
     }
 
@@ -228,6 +261,40 @@ public sealed class SettingsService
         lock (_lock)
         {
             _lastMoveHighlightColor = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateEntrapmentModeAsync(bool newValue, CancellationToken cancellationToken = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings
+            {
+                Id = 1,
+                MaxTimeoutMins = 30,
+                ReaperPeriodSeconds = 30,
+                LastMoveHighlightColor = "rgba(255,0,0,0.85)",
+                EntrapmentMode = newValue
+            };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.EntrapmentMode = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _entrapmentMode = newValue;
             _loaded = true;
         }
 
