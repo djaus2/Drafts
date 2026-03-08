@@ -3,11 +3,13 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
 @implements IDisposable
 @using Drafts.Services
+@using Drafts.Components
 @inject DraftsService GameService
 @inject SettingsService Settings
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IHttpContextAccessor HttpContextAccessor
+
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
 @inject AuthenticationStateProvider AuthStateProvider
@@ -48,7 +50,6 @@
     background-clip:text;
     color:transparent;
     text-shadow:0 1px 0 rgba(0,0,0,0.15);
-    animation: funkyGradient 2.8s linear infinite;
   }
 
   @@keyframes funkyGradient {
@@ -149,7 +150,7 @@
   }
 </style>
 
-<h3>Drafts (Checkers)</h3>
+<PageTitleHeading Title="Game" HeadingLevel="2" />
 
 @if (string.IsNullOrEmpty(_gameId))
 {

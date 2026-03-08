@@ -5,9 +5,9 @@
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 
-<PageTitle>Add Player</PageTitle>
+<PageTitleHeading Title="Manage Players" HeadingLevel="2" />
 
-<h3>Add Player</h3>
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Add Player</h4>
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
@@ -26,7 +26,7 @@
 
 <hr />
 
-<PageTitle>Manage Players</PageTitle>
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Players</h4>
 
 @if (_users is null)
 {

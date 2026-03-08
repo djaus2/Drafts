@@ -3,17 +3,18 @@
 @* @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
  *@
 @inject NavigationManager Nav
-<PageTitle>Checkers online</PageTitle>
+
+<PageTitleHeading Title="Checkers online" HeadingLevel="2" />
 
 <br />
 
 <p>Play Drafts or Checkers with a friend online</p>
 
-<button @onclick="Start">Start a Game</button>
+<button @onclick="Start">Login to Start or Join a Game</button>
 
 <br />
 
-<img src="Images/TheBoard.png" width="400"/>
+<img src="Images/TheBoard.png" width="250"/>
 
 @code{
     private void Start()

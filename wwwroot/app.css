@@ -36,3 +36,107 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+.rainbow-heading {
+    margin: 0;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+    background: linear-gradient(90deg,
+      #ff3d00 0%,
+      #ffca28 25%,
+      #00c853 50%,
+      #2979ff 75%,
+      #d500f9 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.15);
+}
+
+.rainbow-heading--sm {
+    font-size: 16px;
+}
+
+@keyframes rainbowHeadingGradient {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+}
+
+button {
+    position: relative;
+    overflow: hidden;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    background: transparent;
+    color: var(--btn-color, #4a148c);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    transition: transform 110ms ease, box-shadow 110ms ease, filter 110ms ease;
+}
+
+button::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--btn-bg, linear-gradient(90deg,
+      #ffffff 0%,
+      #EEE8D5 20%,
+      #B4A388 30%,
+      #7B5E3B 50%,
+      #B4A388 70%,
+      #EEE8D5 80%,
+      #ffffff 100%));
+    opacity: var(--btn-bg-opacity, 0.5);
+    z-index: 0;
+    pointer-events: none;
+}
+
+button {
+    z-index: 0;
+}
+
+button > * {
+    position: relative;
+    z-index: 1;
+}
+
+button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+    filter: none;
+}
+
+button:hover:not(:disabled)::before {
+    filter: brightness(1.03);
+}
+
+button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    filter: none;
+}
+
+button:active:not(:disabled)::before {
+    filter: brightness(0.98);
+}
+
+button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(0.1);
+}
+
+button:disabled::before {
+    opacity: calc(var(--btn-bg-opacity, 0.5) * 0.8);
+}
+
+@keyframes rainbowButtonGradient {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+}

@@ -9,9 +9,7 @@
 @inject DraftsService GameService
 @inject SettingsService Settings
 
-<PageTitle>Admin</PageTitle>
-
-<h3>Admin</h3>
+<PageTitleHeading Title="Admin" HeadingLevel="2" />
 
 <p>You are logged in as <b>@(HttpContextAccessor.HttpContext?.User?.Identity?.Name)</b>.</p>
 
@@ -35,7 +33,7 @@
     <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
 </div>
 
-<h4 style="margin-top:18px;">Settings</h4>
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Settings</h4>
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
@@ -74,7 +72,7 @@
     </div>
 </div>
 
-<h4 style="margin-top:18px;">Games</h4>
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Games</h4>
 
 @if (_games is null)
 {
@@ -113,7 +111,7 @@ else
     </table>
 }
 
-<h4 style="margin-top:18px;">Change PIN</h4>
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Change PIN</h4>
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
