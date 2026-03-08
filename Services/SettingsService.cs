@@ -11,7 +11,7 @@ public sealed class SettingsService
     private int _reaperPeriodSeconds = 30;
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
-    private int _multiJumpGraceSeconds = 2;
+    private double _multiJumpGraceSeconds = 1.5;
     private bool _loaded;
 
     public SettingsService(IServiceScopeFactory scopeFactory)
@@ -63,7 +63,7 @@ public sealed class SettingsService
         }
     }
 
-    public int MultiJumpGraceSeconds
+    public double MultiJumpGraceSeconds
     {
         get
         {
@@ -102,7 +102,7 @@ public sealed class SettingsService
                 _reaperPeriodSeconds = 30;
                 _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
                 _entrapmentMode = true;
-                _multiJumpGraceSeconds = 2;
+                _multiJumpGraceSeconds = 1.5;
                 _loaded = true;
             }
         }
@@ -184,7 +184,7 @@ public sealed class SettingsService
         }
     }
 
-    public async Task<int> GetMultiJumpGraceSecondsAsync(CancellationToken cancellationToken = default)
+    public async Task<double> GetMultiJumpGraceSecondsAsync(CancellationToken cancellationToken = default)
     {
         var needLoad = false;
         lock (_lock)
@@ -334,10 +334,14 @@ public sealed class SettingsService
         return true;
     }
 
-    public async Task<bool> UpdateMultiJumpGraceSecondsAsync(int newValue, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateMultiJumpGraceSecondsAsync(double newValue, CancellationToken cancellationToken = default)
     {
         if (newValue < 0) return false;
         if (newValue > 60) return false;
+
+        // Must be a multiple of 0.5 seconds.
+        var halfSteps = newValue * 2.0;
+        if (Math.Abs(halfSteps - Math.Round(halfSteps)) > 0.0000001) return false;
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

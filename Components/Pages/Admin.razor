@@ -50,10 +50,12 @@
         <label style="display:flex;align-items:center;gap:8px">
             <input type="checkbox" @bind="_entrapmentMode" />
             Entrapment mode
+            <br />
         </label>
         <label style="display:flex;flex-direction:column;gap:4px">
-            Multi-jump grace (seconds)
-            <input @bind="_multiJumpGraceSeconds" inputmode="numeric" />
+            Multi-jump grace period (seconds)
+            <input type="number" min="0" step="0.5" @bind="_multiJumpGraceSeconds" inputmode="decimal" />
+            <i><b>Nb:</b> 0.5s steps; rules default is 1.5s</i><br />
         </label>
         <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
@@ -139,7 +141,7 @@ else
     private int _reaperPeriodSeconds = 30;
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
-    private int _multiJumpGraceSeconds = 2;
+    private double _multiJumpGraceSeconds = 1.5;
     private string _settingsMessage = "";
 
     private sealed record ColorOption(string Label, string Value);

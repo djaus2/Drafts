@@ -871,6 +871,21 @@ else
                 return;
             }
 
+            if (!IsAdminControllingGame()
+                && _game.ForcedJumpFromR.HasValue
+                && _game.ForcedJumpFromC.HasValue
+                && _game.CurrentTurn != _playerNumber)
+            {
+                if (string.IsNullOrWhiteSpace(_gameId)) return;
+                var (okClaim, msgClaim) = GameService.ClaimTurn(_gameId!, _playerNumber);
+                _message = okClaim ? "" : (msgClaim ?? "Cannot claim turn");
+                _game = GameService.GetGame(_gameId!);
+                _selectedR = null;
+                _selectedC = null;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
             ClearLastMoveHighlightIfNextPlayerSelecting();
 
             _selectedR = r;
@@ -945,6 +960,27 @@ else
 
         var cell = _game.Board[r, c];
         if (cell == 0 || !CanInteractWithPiece(cell)) return;
+
+        if (!IsAdminControllingGame()
+            && _game.ForcedJumpFromR.HasValue
+            && _game.ForcedJumpFromC.HasValue
+            && _game.CurrentTurn != _playerNumber)
+        {
+            if (string.IsNullOrWhiteSpace(_gameId)) return;
+            var (okClaim, msgClaim) = GameService.ClaimTurn(_gameId!, _playerNumber);
+            _message = okClaim ? "" : (msgClaim ?? "Cannot claim turn");
+            _game = GameService.GetGame(_gameId!);
+            _isDragging = false;
+            _dragFromR = null;
+            _dragFromC = null;
+            _dragHoverR = null;
+            _dragHoverC = null;
+            _suppressNextClick = true;
+            _selectedR = null;
+            _selectedC = null;
+            _ = InvokeAsync(StateHasChanged);
+            return;
+        }
 
         if (_game.ForcedJumpFromR.HasValue && _game.ForcedJumpFromC.HasValue && _game.CurrentTurn == _playerNumber)
         {

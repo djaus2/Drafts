@@ -19,5 +19,5 @@ public sealed class AppSettings
     public bool EntrapmentMode { get; set; } = true;
 
     [Required]
-    public int MultiJumpGraceSeconds { get; set; } = 2;
+    public double MultiJumpGraceSeconds { get; set; } = 1.5;
 }

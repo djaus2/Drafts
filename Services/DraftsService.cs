@@ -282,6 +282,61 @@ namespace Drafts.Services
             return true;
         }
 
+        // Opponent can claim the turn after the multi-jump grace period without making a move.
+        // Returns (success, message).
+        public (bool success, string? message) ClaimTurn(string id, int player)
+        {
+            var game = GetGame(id);
+            if (game == null) return (false, "Game not found");
+
+            lock (game)
+            {
+                if (game.State == GameState.Finished || game.State == GameState.Abandoned)
+                {
+                    return (false, $"Game is {game.State}");
+                }
+
+                if (!game.ForcedJumpFromR.HasValue || !game.ForcedJumpFromC.HasValue)
+                {
+                    return (false, "Nothing to claim");
+                }
+
+                if (game.CurrentTurn == player)
+                {
+                    return (true, null);
+                }
+
+                var opponent = 3 - game.CurrentTurn;
+                if (player != opponent)
+                {
+                    return (false, "Not your turn");
+                }
+
+                if (game.ForcedJumpOpponentCanClaimAfterUtc.HasValue
+                    && DateTime.UtcNow < game.ForcedJumpOpponentCanClaimAfterUtc.Value)
+                {
+                    var remaining = game.ForcedJumpOpponentCanClaimAfterUtc.Value - DateTime.UtcNow;
+                    if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+                    return (false, $"Wait {(int)Math.Ceiling(remaining.TotalSeconds)}s — opponent may still continue jumping.");
+                }
+
+                game.ForcedJumpFromR = null;
+                game.ForcedJumpFromC = null;
+                game.ForcedJumpOpponentCanClaimAfterUtc = null;
+
+                game.LastMoveFromR = null;
+                game.LastMoveFromC = null;
+                game.LastMoveToR = null;
+                game.LastMoveToC = null;
+
+                game.CurrentTurn = player;
+                game.Touch();
+            }
+
+            OnGameUpdated(id);
+            return (true, null);
+        }
+
         // Make a move. Returns (success, message).
         public (bool success, string? message) MakeMove(string id, int player, int fr, int fc, int tr, int tc)
         {
@@ -323,7 +378,6 @@ namespace Drafts.Services
                         game.LastMoveFromC = null;
                         game.LastMoveToR = null;
                         game.LastMoveToC = null;
-                        game.LastMoveCapturedSquares.Clear();
                         game.CurrentTurn = player;
                     }
                 }
@@ -407,11 +461,21 @@ namespace Drafts.Services
                     game.Board[fr, fc] = 0;
                     game.Board[midr, midc] = 0;
 
+                    // If we're continuing a forced multi-jump, keep prior capture markers.
+                    // Otherwise, start a fresh set for this move.
+                    var isContinuingMultiJump = game.ForcedJumpFromR.HasValue
+                        && game.ForcedJumpFromC.HasValue
+                        && game.ForcedJumpFromR.Value == fr
+                        && game.ForcedJumpFromC.Value == fc;
+                    if (!isContinuingMultiJump)
+                    {
+                        game.LastMoveCapturedSquares.Clear();
+                    }
+
                     game.LastMoveFromR = fr;
                     game.LastMoveFromC = fc;
                     game.LastMoveToR = tr;
                     game.LastMoveToC = tc;
-                    game.LastMoveCapturedSquares.Clear();
                     game.LastMoveCapturedSquares.Add(new DraftsGame.BoardPos(midr, midc));
 
                     MaybePromote(game, tr, tc);
@@ -422,7 +486,7 @@ namespace Drafts.Services
                         game.CurrentTurn = player;
                         game.ForcedJumpFromR = tr;
                         game.ForcedJumpFromC = tc;
-                        game.ForcedJumpOpponentCanClaimAfterUtc = DateTime.UtcNow.AddSeconds(Math.Max(0, _settings.MultiJumpGraceSeconds));
+                        game.ForcedJumpOpponentCanClaimAfterUtc = DateTime.UtcNow.AddSeconds(Math.Max(0.0, _settings.MultiJumpGraceSeconds));
                     }
                     else
                     {
@@ -609,7 +673,6 @@ namespace Drafts.Services
                 game.LastMoveFromC = null;
                 game.LastMoveToR = null;
                 game.LastMoveToC = null;
-                game.LastMoveCapturedSquares.Clear();
                 game.Touch();
             }
 

@@ -10,7 +10,7 @@ public static class DbSeeder
         await db.Database.EnsureCreatedAsync();
 
         await db.Database.ExecuteSqlRawAsync(
-            "CREATE TABLE IF NOT EXISTS \"Settings\" (\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_Settings\" PRIMARY KEY, \"MaxTimeoutMins\" INTEGER NOT NULL, \"ReaperPeriodSeconds\" INTEGER NOT NULL, \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)', \"EntrapmentMode\" INTEGER NOT NULL DEFAULT 1, \"MultiJumpGraceSeconds\" INTEGER NOT NULL DEFAULT 2);");
+            "CREATE TABLE IF NOT EXISTS \"Settings\" (\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_Settings\" PRIMARY KEY, \"MaxTimeoutMins\" INTEGER NOT NULL, \"ReaperPeriodSeconds\" INTEGER NOT NULL, \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)', \"EntrapmentMode\" INTEGER NOT NULL DEFAULT 1, \"MultiJumpGraceSeconds\" REAL NOT NULL DEFAULT 1.5);");
 
         try
         {
@@ -42,7 +42,7 @@ public static class DbSeeder
         try
         {
             await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE \"Settings\" ADD COLUMN \"MultiJumpGraceSeconds\" INTEGER NOT NULL DEFAULT 2;");
+                "ALTER TABLE \"Settings\" ADD COLUMN \"MultiJumpGraceSeconds\" REAL NOT NULL DEFAULT 1.5;");
         }
         catch
         {
@@ -58,7 +58,7 @@ public static class DbSeeder
                 ReaperPeriodSeconds = 30,
                 LastMoveHighlightColor = "rgba(255,0,0,0.85)",
                 EntrapmentMode = true,
-                MultiJumpGraceSeconds = 2
+                MultiJumpGraceSeconds = 1.5
             });
         }
 
