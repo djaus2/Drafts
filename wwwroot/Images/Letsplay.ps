@@ -1,0 +1,39 @@
+Add-Type -AssemblyName System.Drawing
+
+$path = "c:\Users\david\source\repos\Drafts\wwwroot\Images\TheBoard.png"
+
+# Load without locking the original file
+$img = [System.Drawing.Image]::FromFile($path)
+$bmp = New-Object System.Drawing.Bitmap $img
+$img.Dispose()
+
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+$font = New-Object System.Drawing.Font("Arial Black", 128, [System.Drawing.FontStyle]::Bold)
+$text = "Lets play!"   # or: "Let''s play!"
+$size = $g.MeasureString($text, $font)
+
+$cx = $bmp.Width / 2
+$cy = $bmp.Height / 2
+
+$g.TranslateTransform($cx, $cy)
+$g.RotateTransform(-30)
+
+$x = -$size.Width / 2
+$y = -$size.Height / 2
+
+$shadow = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(140, 0, 0, 0))
+$red    = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(230, 220, 0, 0))
+
+$g.DrawString($text, $font, $shadow, $x + 3, $y + 3)
+$g.DrawString($text, $font, $red,    $x,     $y)
+
+$g.ResetTransform()
+$g.Dispose()
+
+$tmp = "$path.tmp.png"
+$bmp.Save($tmp, [System.Drawing.Imaging.ImageFormat]::Png)
+$bmp.Dispose()
+
+Move-Item -Force $tmp $path
