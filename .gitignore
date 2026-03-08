@@ -187,6 +187,9 @@ publish/
 *.pubxml
 *.publishproj
 
+!Properties/PublishProfiles/*.pubxml
+Properties/PublishProfiles/*.pubxml.user
+
 # Microsoft Azure Web App publish settings. Comment the next line if you want to
 # checkin your Azure Web App publish settings, but sensitive information contained
 # in these scripts will be unencrypted
@@ -364,3 +367,6 @@ FodyWeavers.xsd
 /auth.db
 /auth.db-shm
 /auth.db-wal
+/Properties/PublishProfiles/DjsCheckersAppSvc - Zip Deploy.pubxml
+/Properties/PublishProfiles/DjsCheckersAppSvc - FTP.pubxml
+/Properties/PublishProfiles/DjsCheckersAppSvc - Web Deploy1.pubxml
