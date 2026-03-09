@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using System.IO;
 
 namespace Drafts
 {
@@ -21,7 +22,27 @@ namespace Drafts
             builder.Services.AddHttpContextAccessor();
 
             builder.Services.AddDbContext<AppDbContext>(options =>
-                options.UseSqlite(builder.Configuration.GetConnectionString("AuthDb")));
+            {
+                var cs = builder.Configuration.GetConnectionString("AuthDb") ?? "Data Source=auth.db";
+
+                // SQLite relative paths are relative to the *process working directory*, which can vary
+                // depending on how the app is launched. Resolve to the content root for stability.
+                const string dataSourcePrefix = "Data Source=";
+                if (cs.StartsWith(dataSourcePrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    var src = cs.Substring(dataSourcePrefix.Length).Trim().Trim('"');
+                    if (!string.IsNullOrWhiteSpace(src)
+                        && !Path.IsPathRooted(src)
+                        && !src.Contains(";")
+                        && !src.Contains("://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var abs = Path.Combine(builder.Environment.ContentRootPath, src);
+                        cs = dataSourcePrefix + abs;
+                    }
+                }
+
+                options.UseSqlite(cs);
+            });
 
             builder.Services.AddScoped<AuthService>();
 

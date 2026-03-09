@@ -1,5 +1,6 @@
 using Drafts.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace Drafts.Data;
 
@@ -12,10 +13,57 @@ public static class DbSeeder
         await db.Database.ExecuteSqlRawAsync(
             "CREATE TABLE IF NOT EXISTS \"Settings\" (\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_Settings\" PRIMARY KEY, \"MaxTimeoutMins\" INTEGER NOT NULL, \"ReaperPeriodSeconds\" INTEGER NOT NULL, \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)', \"EntrapmentMode\" INTEGER NOT NULL DEFAULT 1, \"MultiJumpGraceSeconds\" REAL NOT NULL DEFAULT 1.5);");
 
+        static async Task<bool> HasColumnAsync(AppDbContext db, string tableName, string columnName)
+        {
+            try
+            {
+                var conn = db.Database.GetDbConnection();
+                var wasClosed = conn.State == ConnectionState.Closed;
+                if (wasClosed)
+                {
+                    await conn.OpenAsync();
+                }
+
+                try
+                {
+                    await using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"PRAGMA table_info(\"{tableName}\");";
+                    await using var reader = await cmd.ExecuteReaderAsync();
+
+                    while (await reader.ReadAsync())
+                    {
+                        // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+                        var nameObj = reader["name"];
+                        var name = nameObj?.ToString() ?? string.Empty;
+                        if (string.Equals(name, columnName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+                finally
+                {
+                    if (wasClosed)
+                    {
+                        await conn.CloseAsync();
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         try
         {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE \"Settings\" ADD COLUMN \"ReaperPeriodSeconds\" INTEGER NOT NULL DEFAULT 30;");
+            if (!await HasColumnAsync(db, "Settings", "ReaperPeriodSeconds"))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE \"Settings\" ADD COLUMN \"ReaperPeriodSeconds\" INTEGER NOT NULL DEFAULT 30;");
+            }
         }
         catch
         {
@@ -23,8 +71,11 @@ public static class DbSeeder
 
         try
         {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE \"Settings\" ADD COLUMN \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)';");
+            if (!await HasColumnAsync(db, "Settings", "LastMoveHighlightColor"))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE \"Settings\" ADD COLUMN \"LastMoveHighlightColor\" TEXT NOT NULL DEFAULT 'rgba(255,0,0,0.85)';");
+            }
         }
         catch
         {
@@ -32,8 +83,11 @@ public static class DbSeeder
 
         try
         {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE \"Settings\" ADD COLUMN \"EntrapmentMode\" INTEGER NOT NULL DEFAULT 1;");
+            if (!await HasColumnAsync(db, "Settings", "EntrapmentMode"))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE \"Settings\" ADD COLUMN \"EntrapmentMode\" INTEGER NOT NULL DEFAULT 1;");
+            }
         }
         catch
         {
@@ -41,8 +95,11 @@ public static class DbSeeder
 
         try
         {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE \"Settings\" ADD COLUMN \"MultiJumpGraceSeconds\" REAL NOT NULL DEFAULT 1.5;");
+            if (!await HasColumnAsync(db, "Settings", "MultiJumpGraceSeconds"))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE \"Settings\" ADD COLUMN \"MultiJumpGraceSeconds\" REAL NOT NULL DEFAULT 1.5;");
+            }
         }
         catch
         {

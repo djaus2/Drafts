@@ -265,8 +265,28 @@ else
             <div class="funky-heading">Send</div>
             <textarea @ref="_chatOutRef" rows="4" style="width:100%;resize:none;" placeholder="Type message and press Enter"
                       @bind-value="_chatOutText" @bind-value:event="oninput"
+                      @onkeydown="OnChatOutKeyDown"
                       @onkeyup="OnChatOutKeyUp"
                       ></textarea>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button @onclick="SendChat">Send</button>
+                    <button @onclick="ClearChatReceive">Clear</button>
+                </div>
+
+                <button disabled="@(!CanPressToTalk)"
+                        @onpointerdown="OnTalkPointerDown"
+                        @onpointerup="OnTalkPointerUp"
+                        @onpointercancel="OnTalkPointerCancel"
+                        @onpointerleave="OnTalkPointerLeave"
+                        @onpointerdown:preventDefault="true"
+                        @onpointerup:preventDefault="true">
+                    @TalkButtonText
+                </button>
+            </div>
+
+            <div style="text-align:right;opacity:0.85;font-size:12px;">@_voiceStatus</div>
         </div>
 
         <p style="margin-top:8px;">@_message</p>
@@ -313,11 +333,432 @@ else
     } catch (e) {
     }
   };
+
+  window.draftsVoice = window.draftsVoice || {};
+
+  window.draftsVoice.isSupported = function () {
+    try {
+      var hasSR = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      var hasTTS = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+      return hasSR || hasTTS;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice.installTtsUnlocker = function () {
+    try {
+      if (window.draftsVoice.__ttsUnlockerInstalled) return true;
+      window.draftsVoice.__ttsUnlockerInstalled = true;
+
+      var handler = function () {
+        try {
+          window.draftsVoice.unlockTts();
+        } catch (e0) {
+        }
+        try {
+          document.removeEventListener('pointerdown', handler, true);
+          document.removeEventListener('keydown', handler, true);
+        } catch (e1) {
+        }
+      };
+
+      // Capture phase to run as early as possible in a user gesture.
+      document.addEventListener('pointerdown', handler, true);
+      document.addEventListener('keydown', handler, true);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice._rec = null;
+  window.draftsVoice._dotNetRef = null;
+  window.draftsVoice._listening = false;
+  window.draftsVoice._shouldListen = false;
+  window.draftsVoice._bufferText = '';
+  window.draftsVoice._latestInterim = '';
+  window.draftsVoice._flushTimer = null;
+  window.draftsVoice._stopFlushTimer = null;
+  window.draftsVoice._sessionId = 0;
+  window.draftsVoice._lastSentText = '';
+  window.draftsVoice._lastSentAtMs = 0;
+
+  window.draftsVoice._flush = function (forceInterim) {
+    try {
+      if (!window.draftsVoice._dotNetRef) return false;
+
+      var text = (window.draftsVoice._bufferText || '').trim();
+      if (!text && forceInterim) {
+        text = (window.draftsVoice._latestInterim || '').trim();
+      }
+
+      if (!text) return false;
+
+      // Dedupe.
+      if (text === window.draftsVoice._lastSentText) {
+        window.draftsVoice._bufferText = '';
+        window.draftsVoice._latestInterim = '';
+        return false;
+      }
+
+      window.draftsVoice._lastSentText = text;
+      window.draftsVoice._lastSentAtMs = Date.now();
+      window.draftsVoice._bufferText = '';
+      window.draftsVoice._latestInterim = '';
+
+      window.draftsVoice._dotNetRef.invokeMethodAsync('OnVoiceTranscript', text);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice._scheduleFlush = function () {
+    try {
+      if (window.draftsVoice._flushTimer) {
+        clearTimeout(window.draftsVoice._flushTimer);
+        window.draftsVoice._flushTimer = null;
+      }
+
+      // Intentionally no-op: we only transmit when push-to-talk is released.
+    } catch (e) {
+    }
+  };
+
+  window.draftsVoice.start = function (dotNetRef) {
+    try {
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return false;
+
+      // New push-to-talk session: invalidate any pending delayed stop-flush.
+      window.draftsVoice._sessionId = (window.draftsVoice._sessionId || 0) + 1;
+      try {
+        if (window.draftsVoice._stopFlushTimer) {
+          clearTimeout(window.draftsVoice._stopFlushTimer);
+          window.draftsVoice._stopFlushTimer = null;
+        }
+      } catch (eStopTimer0) {
+      }
+
+      // Clear any prior buffered text so it cannot leak into the next transmission.
+      window.draftsVoice._bufferText = '';
+      window.draftsVoice._latestInterim = '';
+
+      window.draftsVoice._dotNetRef = dotNetRef;
+      window.draftsVoice._shouldListen = true;
+      var rec = window.draftsVoice._rec;
+      if (!rec) {
+        rec = new SR();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = 'en-AU';
+
+        rec.onresult = function (ev) {
+          try {
+            if (!window.draftsVoice._dotNetRef) return;
+            var finalText = '';
+            var latest = '';
+
+            for (var i = ev.resultIndex; i < ev.results.length; i++) {
+              var r = ev.results[i];
+              if (!r || !r[0]) continue;
+              var t = (r[0].transcript || '').trim();
+              if (!t) continue;
+              latest = t;
+              if (r.isFinal) {
+                if (!finalText || t.length > finalText.length) {
+                  finalText = t;
+                }
+              }
+            }
+
+            // Treat final as a progressive transcript (Android often re-sends the whole phrase as final).
+            if (finalText) {
+              var cur = (window.draftsVoice._bufferText || '').trim();
+              var cand = finalText.trim();
+              if (!cur) {
+                window.draftsVoice._bufferText = cand;
+              } else if (cand === cur) {
+                // no-op
+              } else if (cand.startsWith(cur)) {
+                window.draftsVoice._bufferText = cand;
+              } else if (cur.startsWith(cand)) {
+                // keep cur
+              } else {
+                // Fallback: append if it's not a simple extension.
+                window.draftsVoice._bufferText = (cur + ' ' + cand).trim();
+              }
+              return;
+            }
+
+            // Track interim but do not send immediately (prevents repeats/truncation).
+            if (latest && latest.length >= 2) {
+              window.draftsVoice._latestInterim = latest;
+            }
+          } catch (e) {
+          }
+        };
+
+        rec.onerror = function (ev) {
+          try {
+            if (window.draftsVoice._dotNetRef) {
+              var msg = (ev && ev.error) ? ('' + ev.error) : 'error';
+              window.draftsVoice._dotNetRef.invokeMethodAsync('OnVoiceError', msg);
+            }
+          } catch (e) {
+          }
+        };
+
+        rec.onend = function () {
+          try {
+            window.draftsVoice._listening = false;
+
+            // Mobile browsers (esp Android) may end recognition frequently. Auto-restart
+            // if Talk is still enabled (i.e., we didn't explicitly call stop()).
+            if (window.draftsVoice._shouldListen) {
+              try {
+                setTimeout(function () {
+                  try {
+                    if (!window.draftsVoice._shouldListen) return;
+                    if (window.draftsVoice._rec && !window.draftsVoice._listening) {
+                      window.draftsVoice._rec.start();
+                      window.draftsVoice._listening = true;
+                    }
+                  } catch (e2) {
+                  }
+                }, 250);
+              } catch (e1) {
+              }
+              return;
+            }
+
+            if (window.draftsVoice._dotNetRef) {
+              window.draftsVoice._dotNetRef.invokeMethodAsync('OnVoiceEnded');
+            }
+          } catch (e) {
+          }
+        };
+
+        window.draftsVoice._rec = rec;
+      }
+
+      if (!window.draftsVoice._listening) {
+        rec.start();
+        window.draftsVoice._listening = true;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice.stop = function () {
+    try {
+      var rec = window.draftsVoice._rec;
+      window.draftsVoice._shouldListen = false;
+
+      var stopSession = window.draftsVoice._sessionId || 0;
+
+      try {
+        if (window.draftsVoice._flushTimer) {
+          clearTimeout(window.draftsVoice._flushTimer);
+          window.draftsVoice._flushTimer = null;
+        }
+      } catch (e1) {
+      }
+
+      try {
+        if (window.draftsVoice._stopFlushTimer) {
+          clearTimeout(window.draftsVoice._stopFlushTimer);
+          window.draftsVoice._stopFlushTimer = null;
+        }
+      } catch (eStopTimer1) {
+      }
+
+      // Stop first; engines often deliver the last final words right after stop().
+      if (rec && window.draftsVoice._listening) {
+        try {
+          rec.stop();
+        } catch (eStop) {
+        }
+      }
+      window.draftsVoice._listening = false;
+
+      // Flush once after a short delay.
+      try {
+        window.draftsVoice._stopFlushTimer = setTimeout(function () {
+          try {
+            // If a new push-to-talk session started, do not flush stale text.
+            if ((window.draftsVoice._sessionId || 0) !== stopSession) return;
+            window.draftsVoice._flush(true);
+          } catch (e0) {
+          }
+        }, 600);
+      } catch (e2) {
+      }
+
+      return true;
+    } catch (e) {
+      window.draftsVoice._shouldListen = false;
+      try {
+        if (window.draftsVoice._flushTimer) {
+          clearTimeout(window.draftsVoice._flushTimer);
+          window.draftsVoice._flushTimer = null;
+        }
+      } catch (e2) {
+      }
+      window.draftsVoice._listening = false;
+      return false;
+    }
+  };
+
+  window.draftsVoice.getTalkEnabled = function () {
+    try {
+      if (!window.localStorage) return false;
+      return window.localStorage.getItem('draftsTalkEnabled') === '1';
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice.setTalkEnabled = function (enabled) {
+    try {
+      if (!window.localStorage) return false;
+      window.localStorage.setItem('draftsTalkEnabled', enabled ? '1' : '0');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice.unlockTts = function () {
+    try {
+      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+
+      // If we already unlocked TTS once, do not poke/cancel again.
+      if (window.draftsVoice.__ttsUnlocked) {
+        try {
+          window.speechSynthesis.resume();
+        } catch (eResume2) {
+        }
+        return true;
+      }
+
+      try {
+        window.speechSynthesis.resume();
+      } catch (e0) {
+      }
+
+      // Clear any stuck queue first (do not cancel after, or we might cancel the real utterance).
+      try {
+        window.speechSynthesis.cancel();
+      } catch (eCancel) {
+      }
+
+      try {
+        var u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        u.rate = 1;
+        u.pitch = 1;
+        window.speechSynthesis.speak(u);
+      } catch (e2) {
+      }
+
+      window.draftsVoice.__ttsUnlocked = true;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice.speak = function (text) {
+    try {
+      if (!text) return false;
+      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+      window.draftsVoice.unlockTts();
+
+      // Ensure the engine is resumed and not stuck in a "speaking" state.
+      try {
+        window.speechSynthesis.resume();
+      } catch (eResume0) {
+      }
+
+      try {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+          window.speechSynthesis.cancel();
+        }
+      } catch (eCancel0) {
+      }
+
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 1;
+      u.pitch = 1;
+      u.volume = 1;
+
+      window.speechSynthesis.speak(u);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.draftsVoice.getTtsState = function () {
+    try {
+      var has = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+      var paused = false;
+      var speaking = false;
+      var pending = false;
+      var voicesCount = 0;
+
+      if (has) {
+        try { paused = !!window.speechSynthesis.paused; } catch (e0) { }
+        try { speaking = !!window.speechSynthesis.speaking; } catch (e1) { }
+        try { pending = !!window.speechSynthesis.pending; } catch (e2) { }
+        try {
+          var v = window.speechSynthesis.getVoices();
+          voicesCount = v ? v.length : 0;
+        } catch (e3) { }
+      }
+
+      return {
+        has: has,
+        paused: paused,
+        speaking: speaking,
+        pending: pending,
+        voicesCount: voicesCount,
+        nowMs: Date.now()
+      };
+    } catch (e) {
+      return { has: false, paused: false, speaking: false, pending: false, voicesCount: 0, nowMs: Date.now() };
+    }
+  };
+
+  window.draftsVoice.cancel = function () {
+    try {
+      if (!window.speechSynthesis) return false;
+      window.speechSynthesis.cancel();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
 </script>
 
 @code {
     private string? _gameId;
     private string _joinId = "";
+
+    private const string VoicePrefix = "[VOICE] ";
+    private bool _talkEnabled;
+    private bool _sttActive;
+    private bool _pttHeld;
+    private bool _voiceSupported;
+    private string _voiceStatus = "";
+    private DotNetObjectReference<DraftsGame>? _voiceDotNetRef;
+    private System.Threading.Timer? _voiceHoldRenewTimer;
+
     private Drafts.Services.DraftsGame? _game;
     private bool _connected = false;
     private int _playerNumber;
@@ -348,6 +789,8 @@ else
     private string _chatInText = "";
     private string _chatOutText = "";
     private int _lastChatCount;
+    private int _chatDisplayStartIndex;
+    private int _lastVoiceSpokenChatIndex;
     private bool _chatScrollPending;
 
     private DotNetObjectReference<DraftsGame>? _dotNetRef;
@@ -413,6 +856,189 @@ else
             if (string.IsNullOrWhiteSpace(c)) return "rgba(255,0,0,0.85)";
             return c;
         }
+    }
+
+    private bool IsVoiceFloorHeldByOther
+    {
+        get
+        {
+            if (_game is null) return false;
+            if (!_game.VoiceFloorUserId.HasValue) return false;
+            if (_game.VoiceFloorUserId.Value == _currentUserId) return false;
+            if (!_game.VoiceFloorUntilUtc.HasValue) return false;
+            return _game.VoiceFloorUntilUtc.Value > DateTime.UtcNow;
+        }
+    }
+
+    private bool IsVoiceFloorHeldByMe
+    {
+        get
+        {
+            if (_game is null) return false;
+            if (!_game.VoiceFloorUserId.HasValue) return false;
+            if (_game.VoiceFloorUserId.Value != _currentUserId) return false;
+            if (!_game.VoiceFloorUntilUtc.HasValue) return false;
+            return _game.VoiceFloorUntilUtc.Value > DateTime.UtcNow;
+        }
+    }
+
+    private bool CanPressToTalk => _voiceSupported && _talkEnabled && !_pttHeld && !IsVoiceFloorHeldByOther;
+
+    private string TalkButtonText
+    {
+        get
+        {
+            if (!_voiceSupported) return "Talk";
+            if (!_talkEnabled) return "Talk";
+            if (_pttHeld) return "Talking…";
+            if (IsVoiceFloorHeldByOther) return "Other talking…";
+            return "Hold to talk";
+        }
+    }
+
+    private void UpdateVoiceStatusFromGame()
+    {
+        if (!_voiceSupported)
+        {
+            _voiceStatus = "Talk not supported";
+            return;
+        }
+
+        if (!_talkEnabled)
+        {
+            _voiceStatus = "Talk is off";
+            return;
+        }
+
+        if (_pttHeld)
+        {
+            _voiceStatus = "Talking…";
+            return;
+        }
+
+        if (IsVoiceFloorHeldByOther)
+        {
+            var name = _game?.VoiceFloorUserName;
+            _voiceStatus = string.IsNullOrWhiteSpace(name) ? "Other talking…" : $"{name} talking…";
+            return;
+        }
+
+        _voiceStatus = "Hold to talk";
+    }
+
+    private async Task OnTalkPointerDown(PointerEventArgs _)
+    {
+        if (!CanPressToTalk) return;
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+        if (_currentUserId <= 0) return;
+
+        if (!GameService.TryAcquireVoiceFloor(_gameId, _currentUserId, _currentUserName, holdSeconds: 15))
+        {
+            UpdateVoiceStatusFromGame();
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _pttHeld = true;
+        _voiceStatus = "Listening…";
+
+        _voiceHoldRenewTimer?.Dispose();
+        _voiceHoldRenewTimer = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                if (!_pttHeld) return;
+                if (string.IsNullOrWhiteSpace(_gameId)) return;
+                if (_currentUserId <= 0) return;
+                GameService.TryAcquireVoiceFloor(_gameId, _currentUserId, _currentUserName, holdSeconds: 15);
+            }
+            catch
+            {
+            }
+        }, null, dueTime: 5000, period: 5000);
+
+        try
+        {
+            _voiceDotNetRef?.Dispose();
+            _voiceDotNetRef = DotNetObjectReference.Create(this);
+
+            var ok = await JS.InvokeAsync<bool>("draftsVoice.start", _voiceDotNetRef);
+            _sttActive = ok;
+            if (!ok)
+            {
+                _voiceStatus = "Mic unavailable";
+            }
+        }
+        catch
+        {
+            _sttActive = false;
+            _voiceStatus = "Mic unavailable";
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnTalkPointerUp(PointerEventArgs _)
+    {
+        return EndPushToTalkAsync();
+    }
+
+    private Task OnTalkPointerCancel(PointerEventArgs _)
+    {
+        return EndPushToTalkAsync();
+    }
+
+    private Task OnTalkPointerLeave(PointerEventArgs _)
+    {
+        return EndPushToTalkAsync();
+    }
+
+    private async Task EndPushToTalkAsync()
+    {
+        if (!_pttHeld) return;
+
+        // IMPORTANT: keep _pttHeld=true while stopping recognition.
+        // draftsVoice.stop() flushes buffered text and invokes OnVoiceTranscript;
+        // OnVoiceTranscript is gated by _pttHeld.
+        _voiceHoldRenewTimer?.Dispose();
+        _voiceHoldRenewTimer = null;
+
+        try
+        {
+            if (_sttActive)
+            {
+                await JS.InvokeAsync<bool>("draftsVoice.stop");
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            // Give any final JS->.NET callback a brief chance to arrive before we drop _pttHeld.
+            await Task.Delay(1400);
+        }
+        catch
+        {
+        }
+
+        _sttActive = false;
+        _pttHeld = false;
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
+            {
+                GameService.ReleaseVoiceFloor(_gameId, _currentUserId);
+            }
+        }
+        catch
+        {
+        }
+
+        UpdateVoiceStatusFromGame();
+        await InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnInitializedAsync()
@@ -593,8 +1219,10 @@ else
 
         EnsureUiTimer();
 
-        _chatInText = FormatChat(_game);
+        _chatDisplayStartIndex = 0;
+        _chatInText = FormatChat(_game, _chatDisplayStartIndex);
         _lastChatCount = _game?.ChatMessages?.Count ?? 0;
+        _lastVoiceSpokenChatIndex = _lastChatCount;
         _chatScrollPending = true;
         GameService.GameUpdated += OnGameUpdated;
         _message = "Connected.";
@@ -605,6 +1233,8 @@ else
     {
         if (id != _gameId) return;
         _game = GameService.GetGame(id);
+
+        UpdateVoiceStatusFromGame();
 
         if (_game is not null
             && _game.ForcedJumpFromR.HasValue
@@ -634,9 +1264,15 @@ else
         var chatCount = _game?.ChatMessages?.Count ?? 0;
         if (chatCount != _lastChatCount)
         {
+            var priorChatCount = _lastChatCount;
             _lastChatCount = chatCount;
-            _chatInText = FormatChat(_game);
+            _chatInText = FormatChat(_game, _chatDisplayStartIndex);
             _chatScrollPending = true;
+
+            if (_talkEnabled)
+            {
+                QueueSpeakNewVoiceMessages(priorChatCount);
+            }
         }
 
         if (_game is null)
@@ -693,6 +1329,24 @@ else
             _chatScrollPending = false;
             await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatInRef);
             await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatOutRef);
+        }
+
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("draftsVoice.installTtsUnlocker");
+                _voiceSupported = await JS.InvokeAsync<bool>("draftsVoice.isSupported");
+                _talkEnabled = _voiceSupported;
+                _voiceStatus = _voiceSupported ? "Hold to talk" : "Talk not supported in this browser";
+
+                await InvokeAsync(StateHasChanged);
+            }
+            catch
+            {
+                _voiceSupported = false;
+                _voiceStatus = "Talk not supported";
+            }
         }
     }
 
@@ -791,12 +1445,85 @@ else
         _chatScrollPending = true;
     }
 
+    private async Task OnChatOutKeyDown(KeyboardEventArgs e)
+    {
+        _chatScrollPending = true;
+        if (e is null) return;
+        if (!string.Equals(e.Key, "Enter", StringComparison.Ordinal)) return;
+        if (e.ShiftKey) return;
+
+        await SendChat();
+    }
+
     private static string FormatChat(Drafts.Services.DraftsGame? game)
+    {
+        return FormatChat(game, 0);
+    }
+
+    private static string FormatChat(Drafts.Services.DraftsGame? game, int startIndex)
     {
         if (game is null) return "";
         if (game.ChatMessages.Count == 0) return "";
 
-        return string.Join("\n", game.ChatMessages.Select(m => $"{m.SenderName}: {m.Text}"));
+        if (startIndex < 0) startIndex = 0;
+        if (startIndex >= game.ChatMessages.Count) return "";
+
+        return string.Join("\n", game.ChatMessages.Skip(startIndex).Select(m => $"{m.SenderName}: {m.Text}"));
+    }
+
+    private async Task ClearChatReceive()
+    {
+        _chatInText = "";
+
+        var count = _game?.ChatMessages?.Count ?? 0;
+        _chatDisplayStartIndex = count;
+        _lastChatCount = count;
+        _lastVoiceSpokenChatIndex = count;
+        _chatScrollPending = true;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void QueueSpeakNewVoiceMessages(int fromChatIndex)
+    {
+        if (!_talkEnabled) return;
+        if (_game is null) return;
+        if (_currentUserId <= 0) return;
+
+        if (fromChatIndex < 0) fromChatIndex = 0;
+        if (fromChatIndex < _lastVoiceSpokenChatIndex) fromChatIndex = _lastVoiceSpokenChatIndex;
+
+        var messages = _game.ChatMessages;
+        if (fromChatIndex >= messages.Count) return;
+
+        _lastVoiceSpokenChatIndex = messages.Count;
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("draftsVoice.unlockTts");
+            }
+            catch
+            {
+            }
+
+            for (var i = fromChatIndex; i < messages.Count; i++)
+            {
+                var m = messages[i];
+                if (m.SenderUserId == _currentUserId) continue;
+
+                var t = m.Text ?? string.Empty;
+                if (!t.StartsWith(VoicePrefix, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var payload = t.Substring(VoicePrefix.Length).Trim();
+                if (string.IsNullOrWhiteSpace(payload)) continue;
+
+                if (!_talkEnabled) break;
+                var ok = await JS.InvokeAsync<bool>("draftsVoice.speak", payload);
+                _ = ok;
+            }
+        });
     }
 
     private async Task OpenJoinLinkNewWindow()
@@ -936,7 +1663,8 @@ else
         }
         else
         {
-            _selectedR = null; _selectedC = null;
+            _selectedR = null;
+            _selectedC = null;
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -976,7 +1704,6 @@ else
             _dragFromC = null;
             _dragHoverR = null;
             _dragHoverC = null;
-            _suppressNextClick = true;
             _selectedR = null;
             _selectedC = null;
             _ = InvokeAsync(StateHasChanged);
@@ -1226,6 +1953,31 @@ else
         _ = InvokeAsync(StateHasChanged);
     }
 
+    [JSInvokable]
+    public Task OnVoiceTranscript(string text)
+    {
+        if (!_pttHeld) return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(_gameId)) return Task.CompletedTask;
+        if (_currentUserId <= 0) return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(text)) return Task.CompletedTask;
+
+        GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, VoicePrefix + text.Trim());
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnVoiceError(string error)
+    {
+        _voiceStatus = "Mic error";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnVoiceEnded()
+    {
+        return Task.CompletedTask;
+    }
+
     public void Dispose()
     {
         GameService.GameUpdated -= OnGameUpdated;
@@ -1236,6 +1988,26 @@ else
         catch
         {
         }
+
+        try
+        {
+            _voiceHoldRenewTimer?.Dispose();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (_pttHeld && !string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
+            {
+                GameService.ReleaseVoiceFloor(_gameId, _currentUserId);
+            }
+        }
+        catch
+        {
+        }
+
         _dotNetRef?.Dispose();
     }
 }

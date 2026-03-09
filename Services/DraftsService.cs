@@ -269,6 +269,19 @@ namespace Drafts.Services
             text = (text ?? string.Empty).Replace("\r\n", "\n").Trim();
             if (string.IsNullOrWhiteSpace(text)) return false;
 
+            var senderDisplay = senderName ?? string.Empty;
+            if (text.StartsWith("[VOICE] ", StringComparison.OrdinalIgnoreCase))
+            {
+                var payload = text.Substring("[VOICE] ".Length).Trim();
+                _logger.LogInformation(
+                    "VOICE chat received: game={GameId} senderId={SenderUserId} sender={SenderName} len={Len} text={Text}",
+                    gameId,
+                    senderUserId,
+                    senderDisplay,
+                    payload.Length,
+                    payload);
+            }
+
             var game = GetGame(gameId);
             if (game is null) return false;
 
@@ -947,6 +960,71 @@ namespace Drafts.Services
 
             return (removed, warningsSent);
         }
+
+        public bool TryAcquireVoiceFloor(string gameId, int userId, string userName, int holdSeconds = 15)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return false;
+            if (userId <= 0) return false;
+
+            var game = GetGame(gameId);
+            if (game is null) return false;
+
+            var now = DateTime.UtcNow;
+            lock (game)
+            {
+                // Expire stale locks.
+                if (game.VoiceFloorUntilUtc.HasValue && game.VoiceFloorUntilUtc.Value <= now)
+                {
+                    game.VoiceFloorUserId = null;
+                    game.VoiceFloorUserName = null;
+                    game.VoiceFloorUntilUtc = null;
+                }
+
+                // Free.
+                if (!game.VoiceFloorUserId.HasValue)
+                {
+                    game.VoiceFloorUserId = userId;
+                    game.VoiceFloorUserName = userName ?? string.Empty;
+                    game.VoiceFloorUntilUtc = now.AddSeconds(Math.Max(3, holdSeconds));
+                    game.Touch();
+                    OnGameUpdated(gameId);
+                    return true;
+                }
+
+                // Re-entrant for current holder (renew).
+                if (game.VoiceFloorUserId.Value == userId)
+                {
+                    game.VoiceFloorUserName = userName ?? string.Empty;
+                    game.VoiceFloorUntilUtc = now.AddSeconds(Math.Max(3, holdSeconds));
+                    game.Touch();
+                    OnGameUpdated(gameId);
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        public bool ReleaseVoiceFloor(string gameId, int userId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return false;
+            if (userId <= 0) return false;
+
+            var game = GetGame(gameId);
+            if (game is null) return false;
+
+            lock (game)
+            {
+                if (game.VoiceFloorUserId != userId) return false;
+                game.VoiceFloorUserId = null;
+                game.VoiceFloorUserName = null;
+                game.VoiceFloorUntilUtc = null;
+                game.Touch();
+            }
+
+            OnGameUpdated(gameId);
+            return true;
+        }
     }
 
     public class DraftsGame
@@ -997,6 +1075,12 @@ namespace Drafts.Services
         public bool Player2Connected { get; set; } = false;
 
         public bool HadSecondPlayerConnected { get; set; } = false;
+
+        public int? VoiceFloorUserId { get; set; }
+
+        public string? VoiceFloorUserName { get; set; }
+
+        public DateTime? VoiceFloorUntilUtc { get; set; }
 
         public sealed record ChatMessage(DateTime Utc, int SenderUserId, string SenderName, string Text);
 
@@ -1065,6 +1149,10 @@ namespace Drafts.Services
 
             State = DraftsService.GameState.New;
             AdminMode = false;
+
+            VoiceFloorUserId = null;
+            VoiceFloorUserName = null;
+            VoiceFloorUntilUtc = null;
 
             WinnerPlayer = null;
             GameOverMessageSent = false;
