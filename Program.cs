@@ -19,6 +19,11 @@ namespace Drafts
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
 
+            builder.Services.AddSignalR(options =>
+            {
+                options.MaximumReceiveMessageSize = 1024 * 1024;
+            });
+
             builder.Services.AddHttpContextAccessor();
 
             builder.Services.AddDbContext<AppDbContext>(options =>

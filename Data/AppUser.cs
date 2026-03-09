@@ -19,4 +19,13 @@ public sealed class AppUser
 
     [Required]
     public byte[] PinHash { get; set; } = Array.Empty<byte>();
+
+    [MaxLength(1024)]
+    public string? PreferredTtsVoice { get; set; }
+
+    [MaxLength(16)]
+    public string? PreferredTtsLanguage { get; set; }
+
+    [MaxLength(16)]
+    public string? PreferredTtsRegion { get; set; }
 }

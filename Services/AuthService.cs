@@ -28,6 +28,69 @@ public sealed class AuthService
     public Task<List<AppUser>> ListUsersAsync()
         => _db.Users.OrderBy(x => x.Name).ToListAsync();
 
+    public Task<AppUser?> GetUserByIdAsync(int userId)
+        => _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+
+    public async Task<string?> GetPreferredTtsVoiceAsync(int userId)
+    {
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        return user?.PreferredTtsVoice;
+    }
+
+    public async Task<bool> UpdatePreferredTtsVoiceAsync(int userId, string? preferredVoice)
+    {
+        preferredVoice = (preferredVoice ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(preferredVoice)) preferredVoice = null;
+        if (preferredVoice is not null && preferredVoice.Length > 1024) return false;
+
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return false;
+
+        user.PreferredTtsVoice = preferredVoice;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<string?> GetPreferredTtsLanguageAsync(int userId)
+    {
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        return user?.PreferredTtsLanguage;
+    }
+
+    public async Task<bool> UpdatePreferredTtsLanguageAsync(int userId, string? language)
+    {
+        language = (language ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(language)) language = null;
+        if (language is not null && language.Length > 16) return false;
+
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return false;
+
+        user.PreferredTtsLanguage = language;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<string?> GetPreferredTtsRegionAsync(int userId)
+    {
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        return user?.PreferredTtsRegion;
+    }
+
+    public async Task<bool> UpdatePreferredTtsRegionAsync(int userId, string? region)
+    {
+        region = (region ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(region)) region = null;
+        if (region is not null && region.Length > 16) return false;
+
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return false;
+
+        user.PreferredTtsRegion = region;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<bool> ChangePinAsync(int userId, string currentPin, string newPin)
     {
         currentPin = (currentPin ?? string.Empty).Trim();

@@ -5,6 +5,7 @@
 @using Drafts.Services
 @using Drafts.Components
 @inject DraftsService GameService
+@inject AuthService Auth
 @inject SettingsService Settings
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
@@ -672,7 +673,49 @@ else
     }
   };
 
-  window.draftsVoice.speak = function (text) {
+  window.draftsVoice._selectVoice = function (preferredKey) {
+    try {
+      preferredKey = (preferredKey || '').trim();
+      if (!preferredKey) return null;
+
+      var vs = (window.speechSynthesis && window.speechSynthesis.getVoices)
+        ? window.speechSynthesis.getVoices()
+        : [];
+      if (!vs || !vs.length) return null;
+
+      var match = null;
+
+      if (preferredKey.indexOf('uri:') === 0) {
+        var uri = preferredKey.substring('uri:'.length);
+        match = vs.find(function (v) { return (v.voiceURI || '') === uri; }) || null;
+      }
+
+      if (!match && preferredKey.indexOf('name:') === 0) {
+        var parts = preferredKey.split('|lang:');
+        var name = (parts[0] || '').substring('name:'.length);
+        var lang = (parts[1] || '').trim();
+
+        match = vs.find(function (v) {
+          var vn = (v.name || '');
+          var vl = (v.lang || '');
+          if (!name) return false;
+          if (lang) return (vn === name) && (vl === lang);
+          return vn === name;
+        }) || null;
+      }
+
+      if (!match && preferredKey.indexOf('name:') === 0) {
+        var nameOnly = (preferredKey.split('|')[0] || '').substring('name:'.length);
+        match = vs.find(function (v) { return (v.name || '') === nameOnly; }) || null;
+      }
+
+      return match;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  window.draftsVoice.speak = function (text, preferredKey) {
     try {
       if (!text) return false;
       if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
@@ -695,6 +738,14 @@ else
       u.rate = 1;
       u.pitch = 1;
       u.volume = 1;
+
+      try {
+        var v = window.draftsVoice._selectVoice(preferredKey);
+        if (v) {
+          u.voice = v;
+        }
+      } catch (ePick) {
+      }
 
       window.speechSynthesis.speak(u);
       return true;
@@ -751,9 +802,11 @@ else
     private string _joinId = "";
 
     private const string VoicePrefix = "[VOICE] ";
+    private const string VoiceMetaPrefix = "[VOICE-META]";
     private bool _talkEnabled;
     private bool _sttActive;
     private bool _pttHeld;
+    private string _preferredTtsVoiceKey = "";
     private bool _voiceSupported;
     private string _voiceStatus = "";
     private DotNetObjectReference<DraftsGame>? _voiceDotNetRef;
@@ -1071,6 +1124,16 @@ else
             var returnUrl = Uri.EscapeDataString("/" + relative);
             Nav.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
             return;
+        }
+
+        try
+        {
+            var pref = await Auth.GetPreferredTtsVoiceAsync(_currentUserId);
+            _preferredTtsVoiceKey = pref ?? "";
+        }
+        catch
+        {
+            _preferredTtsVoiceKey = "";
         }
 
         _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
@@ -1508,9 +1571,10 @@ else
             {
             }
 
-            for (var i = fromChatIndex; i < messages.Count; i++)
+            for (var i = Math.Max(0, fromChatIndex); i < messages.Count; i++)
             {
                 var m = messages[i];
+                if (m is null) continue;
                 if (m.SenderUserId == _currentUserId) continue;
 
                 var t = m.Text ?? string.Empty;
@@ -1519,8 +1583,33 @@ else
                 var payload = t.Substring(VoicePrefix.Length).Trim();
                 if (string.IsNullOrWhiteSpace(payload)) continue;
 
+                string? voiceKey = null;
+                try
+                {
+                    if (payload.StartsWith(VoiceMetaPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var nl = payload.IndexOf('\n');
+                        if (nl >= 0)
+                        {
+                            var metaLine = payload.Substring(0, nl).Trim();
+                            var rest = payload.Substring(nl + 1).Trim();
+                            payload = rest;
+
+                            var eq = metaLine.IndexOf('=');
+                            if (eq >= 0)
+                            {
+                                voiceKey = metaLine.Substring(eq + 1).Trim();
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    voiceKey = null;
+                }
+
                 if (!_talkEnabled) break;
-                var ok = await JS.InvokeAsync<bool>("draftsVoice.speak", payload);
+                var ok = await JS.InvokeAsync<bool>("draftsVoice.speak", payload, voiceKey);
                 _ = ok;
             }
         });
@@ -1961,7 +2050,12 @@ else
         if (_currentUserId <= 0) return Task.CompletedTask;
         if (string.IsNullOrWhiteSpace(text)) return Task.CompletedTask;
 
-        GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, VoicePrefix + text.Trim());
+        var clean = text.Trim();
+        var meta = string.IsNullOrWhiteSpace(_preferredTtsVoiceKey)
+            ? ""
+            : $"{VoiceMetaPrefix}={_preferredTtsVoiceKey}\n";
+
+        GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, VoicePrefix + meta + clean);
         return Task.CompletedTask;
     }
 

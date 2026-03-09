@@ -105,6 +105,42 @@ public static class DbSeeder
         {
         }
 
+        try
+        {
+            if (!await HasColumnAsync(db, "Users", "PreferredTtsVoice"))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsVoice\" TEXT NULL;");
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (!await HasColumnAsync(db, "Users", "PreferredTtsLanguage"))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsLanguage\" TEXT NULL;");
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (!await HasColumnAsync(db, "Users", "PreferredTtsRegion"))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsRegion\" TEXT NULL;");
+            }
+        }
+        catch
+        {
+        }
+
         var settings = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1);
         if (settings is null)
         {
