@@ -109,6 +109,14 @@
       return 'ping-error';
     }
   };
+  window.draftsVoice.getVoicesCount = function () {
+    try {
+      var vs = window.draftsVoice.getVoices();
+      return (vs && vs.length) ? vs.length : 0;
+    } catch (e) {
+      return -1;
+    }
+  };
 
   window.draftsVoice.isProbablyPhone = function () {
     try {
@@ -122,14 +130,6 @@
       return false;
     } catch (e) {
       return false;
-    }
-  };
-  window.draftsVoice.getVoicesCount = function () {
-    try {
-      var vs = window.draftsVoice.getVoices();
-      return (vs && vs.length) ? vs.length : 0;
-    } catch (e) {
-      return -1;
     }
   };
 
