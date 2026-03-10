@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
-  </PropertyGroup>
+  </PropertyGroup> 
 
   <ItemGroup>
     <Content Remove="wwwroot\Images\Letsplay.ps" />
