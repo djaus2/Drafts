@@ -15,6 +15,13 @@
 
 <h4>Voice</h4>
 
+@if (_isPhoneClient)
+{
+    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
+        Voice selection is not supported on phones yet. Using default voice.
+    </div>
+}
+
 @if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
 {
     <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
@@ -24,7 +31,10 @@
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        @if (!_showVoiceSelection)
+        @if (_isPhoneClient)
+        {
+        }
+        else if (!_showVoiceSelection)
         {
             <button @onclick="ShowVoiceSelection" style="width:100%;">Change voice</button>
         }
@@ -72,7 +82,7 @@
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        <select @bind="_selectedGameId">
+        <select @bind="_selectedGameId" @onmousedown="OnGamesDropdownInteract" @onfocus="OnGamesDropdownInteract">
             <option value="">Select a game…</option>
             @foreach (var g in _joinableGames)
             {
@@ -97,6 +107,21 @@
       return window.draftsVoice.version || 'unknown';
     } catch (e) {
       return 'ping-error';
+    }
+  };
+
+  window.draftsVoice.isProbablyPhone = function () {
+    try {
+      var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
+      ua = (ua || '').toLowerCase();
+      if (ua.indexOf('android') >= 0) return true;
+      if (ua.indexOf('iphone') >= 0) return true;
+      if (ua.indexOf('ipad') >= 0) return true;
+      if (ua.indexOf('ipod') >= 0) return true;
+      if (ua.indexOf('mobile') >= 0) return true;
+      return false;
+    } catch (e) {
+      return false;
     }
   };
   window.draftsVoice.getVoicesCount = function () {
@@ -272,9 +297,13 @@
     private bool _loadedVoicePrefs = false;
     private bool _appliedVoiceDerivedDefaults = false;
 
+    private bool _isPhoneClient = false;
+
     private Dictionary<int, string> _userNames = new();
 
     private List<DraftsService.GameListItem> _joinableGames = new();
+
+    private System.Threading.Timer? _gamesRefreshTimer;
 
     protected override void OnInitialized()
     {
@@ -286,11 +315,32 @@
         });
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
+
+        _gamesRefreshTimer = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                RefreshGames();
+                _ = InvokeAsync(StateHasChanged);
+            }
+            catch
+            {
+            }
+        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
+
+        try
+        {
+            _isPhoneClient = await JS.InvokeAsync<bool>("draftsVoice.isProbablyPhone");
+        }
+        catch
+        {
+            _isPhoneClient = false;
+        }
 
         var uid = GetCurrentUserId();
         if (!uid.HasValue) return;
@@ -333,7 +383,7 @@
             _selectedRegion = "AU";
         }
 
-        _showVoiceSelection = string.IsNullOrWhiteSpace(_selectedVoiceKey);
+        _showVoiceSelection = !_isPhoneClient && string.IsNullOrWhiteSpace(_selectedVoiceKey);
         _loadedVoicePrefs = true;
 
         //await LoadVoicesAsync();
@@ -345,6 +395,14 @@
     {
         _showVoiceSelection = true;
         await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await LoadVoicesFromUserGesture();
+        }
+        catch
+        {
+        }
     }
 
     private async Task OnLanguageChanged(ChangeEventArgs e)
@@ -800,6 +858,25 @@
     public void Dispose()
     {
         GameService.GameUpdated -= OnGameUpdated;
+
+        try
+        {
+            _gamesRefreshTimer?.Dispose();
+        }
+        catch
+        {
+        }
+    }
+
+    private void OnGamesDropdownInteract()
+    {
+        try
+        {
+            RefreshGames();
+        }
+        catch
+        {
+        }
     }
 
     private int? GetCurrentUserId()

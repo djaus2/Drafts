@@ -715,6 +715,33 @@ else
     }
   };
 
+  window.draftsVoice.describeVoice = function (preferredKey) {
+    try {
+      preferredKey = (preferredKey || '').trim();
+      var v = null;
+      try { v = window.draftsVoice._selectVoice(preferredKey); } catch (eSel) { v = null; }
+
+      if (!v) {
+        if (!preferredKey) return 'Default voice';
+        return 'Default voice (preferredKey=' + preferredKey + ')';
+      }
+
+      var name = (v.name || '').trim();
+      var lang = (v.lang || '').trim();
+      var uri = (v.voiceURI || '').trim();
+
+      var label = name;
+      if (lang) label = label ? (label + ' (' + lang + ')') : ('(' + lang + ')');
+      if (uri) label = label ? (label + ' uri=' + uri) : ('uri=' + uri);
+      if (!label) label = 'Selected voice';
+      if (preferredKey) label = label + ' preferredKey=' + preferredKey;
+      if (label.length > 160) label = label.substring(0, 160);
+      return label;
+    } catch (e) {
+      return 'Default voice';
+    }
+  };
+
   window.draftsVoice.speak = function (text, preferredKey) {
     try {
       if (!text) return false;
@@ -1249,7 +1276,7 @@ else
 
         _status = "Joining...";
         GameService.GameUpdated -= OnGameUpdated;
-        var player = GameService.TryJoinGame(id, _currentUserId);
+        var player = GameService.TryJoinGame(id, _currentUserId, _currentUserName);
         if (player == -1)
         {
             var existing = GameService.GetActiveGameIdForUser(_currentUserId);
@@ -1547,7 +1574,7 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
-    private void QueueSpeakNewVoiceMessages(int fromChatIndex)
+    private async Task QueueSpeakNewVoiceMessages(int fromChatIndex)
     {
         if (!_talkEnabled) return;
         if (_game is null) return;
@@ -1609,8 +1636,28 @@ else
                 }
 
                 if (!_talkEnabled) break;
+
+                try
+                {
+                    var voiceLabel = await JS.InvokeAsync<string>("draftsVoice.describeVoice", voiceKey);
+                    _voiceStatus = $"Speaking: {voiceLabel}";
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch
+                {
+                }
+
                 var ok = await JS.InvokeAsync<bool>("draftsVoice.speak", payload, voiceKey);
                 _ = ok;
+
+                try
+                {
+                    UpdateVoiceStatusFromGame();
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch
+                {
+                }
             }
         });
     }

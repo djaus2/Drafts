@@ -124,11 +124,13 @@ namespace Drafts.Services
             {
                 game.Player1Connected = true;
                 game.Player1UserId = userId;
+                game.Player1Name = creatorName ?? string.Empty;
             }
             else
             {
                 game.Player2Connected = true;
                 game.Player2UserId = userId;
+                game.Player2Name = creatorName ?? string.Empty;
             }
 
             game.Touch();
@@ -151,7 +153,7 @@ namespace Drafts.Services
         }
 
         // Returns 1 or 2 for player number, 0 if cannot join
-        public int TryJoinGame(string id, int userId)
+        public int TryJoinGame(string id, int userId, string? userName)
         {
             var existing = FindActiveGameIdForUser(userId);
             if (!string.IsNullOrWhiteSpace(existing) && !string.Equals(existing, id, StringComparison.Ordinal))
@@ -169,8 +171,22 @@ namespace Drafts.Services
 
             lock (game)
             {
-                if (game.Player1UserId == userId) return 1;
-                if (game.Player2UserId == userId) return 2;
+                if (game.Player1UserId == userId)
+                {
+                    if (string.IsNullOrWhiteSpace(game.Player1Name) && !string.IsNullOrWhiteSpace(userName))
+                    {
+                        game.Player1Name = userName;
+                    }
+                    return 1;
+                }
+                if (game.Player2UserId == userId)
+                {
+                    if (string.IsNullOrWhiteSpace(game.Player2Name) && !string.IsNullOrWhiteSpace(userName))
+                    {
+                        game.Player2Name = userName;
+                    }
+                    return 2;
+                }
 
                 if (game.Player1Connected && game.Player2Connected)
                 {
@@ -181,6 +197,7 @@ namespace Drafts.Services
                 {
                     game.Player1Connected = true;
                     game.Player1UserId = userId;
+                    game.Player1Name = userName ?? string.Empty;
                     if (game.Player2Connected)
                     {
                         game.HadSecondPlayerConnected = true;
@@ -204,6 +221,7 @@ namespace Drafts.Services
                 {
                     game.Player2Connected = true;
                     game.Player2UserId = userId;
+                    game.Player2Name = userName ?? string.Empty;
                     if (game.Player1Connected)
                     {
                         game.HadSecondPlayerConnected = true;
@@ -226,6 +244,47 @@ namespace Drafts.Services
                 _logger.LogWarning("TryJoinGame: {GameId} unexpected state", id);
                 return 0;
             }
+        }
+
+        public bool TryAnnounceVoiceInfo(string gameId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return false;
+
+            var game = GetGame(gameId);
+            if (game is null) return false;
+
+            var did = false;
+            lock (game)
+            {
+                if (game.VoiceInfoAnnounced) return false;
+                if (!game.Player1Connected || !game.Player2Connected) return false;
+                if (!game.Player1UserId.HasValue || !game.Player2UserId.HasValue) return false;
+
+                var p1Id = game.Player1UserId.Value;
+                var p2Id = game.Player2UserId.Value;
+
+                var p1Name = string.IsNullOrWhiteSpace(game.Player1Name) ? $"User {p1Id}" : game.Player1Name;
+                var p2Name = string.IsNullOrWhiteSpace(game.Player2Name) ? $"User {p2Id}" : game.Player2Name;
+
+                var p1Voice = game.GetPreferredTtsVoiceForUserId(p1Id);
+                var p2Voice = game.GetPreferredTtsVoiceForUserId(p2Id);
+
+                var p1VoiceText = string.IsNullOrWhiteSpace(p1Voice) ? "(default voice)" : p1Voice;
+                var p2VoiceText = string.IsNullOrWhiteSpace(p2Voice) ? "(default voice)" : p2Voice;
+
+                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p1Name}: voice={p1VoiceText}"));
+                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p2Name}: voice={p2VoiceText}"));
+                game.VoiceInfoAnnounced = true;
+                game.Touch();
+                did = true;
+            }
+
+            if (did)
+            {
+                OnGameUpdated(gameId);
+            }
+
+            return did;
         }
 
         public int RemoveGamesForUser(int userId)
@@ -1025,6 +1084,49 @@ namespace Drafts.Services
             OnGameUpdated(gameId);
             return true;
         }
+
+        public bool SetPreferredTtsVoiceForUser(string gameId, int userId, string? preferredTtsVoiceKey)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return false;
+            if (userId <= 0) return false;
+
+            var game = GetGame(gameId);
+            if (game is null) return false;
+
+            preferredTtsVoiceKey = (preferredTtsVoiceKey ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(preferredTtsVoiceKey)) preferredTtsVoiceKey = null;
+
+            lock (game)
+            {
+                game.PreferredTtsVoiceByUserId[userId] = preferredTtsVoiceKey;
+                game.Touch();
+            }
+
+            OnGameUpdated(gameId);
+
+            try
+            {
+                TryAnnounceVoiceInfo(gameId);
+            }
+            catch
+            {
+            }
+            return true;
+        }
+
+        public string? GetPreferredTtsVoiceForUser(string gameId, int userId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return null;
+            if (userId <= 0) return null;
+
+            var game = GetGame(gameId);
+            if (game is null) return null;
+
+            lock (game)
+            {
+                return game.GetPreferredTtsVoiceForUserId(userId);
+            }
+        }
     }
 
     public class DraftsGame
@@ -1071,16 +1173,23 @@ namespace Drafts.Services
         public int? Player1UserId { get; set; }
         public int? Player2UserId { get; set; }
 
+        public string Player1Name { get; set; } = "";
+        public string Player2Name { get; set; } = "";
+
         public bool Player1Connected { get; set; } = false;
         public bool Player2Connected { get; set; } = false;
 
         public bool HadSecondPlayerConnected { get; set; } = false;
+
+        public bool VoiceInfoAnnounced { get; set; } = false;
 
         public int? VoiceFloorUserId { get; set; }
 
         public string? VoiceFloorUserName { get; set; }
 
         public DateTime? VoiceFloorUntilUtc { get; set; }
+
+        public Dictionary<int, string?> PreferredTtsVoiceByUserId { get; } = new();
 
         public sealed record ChatMessage(DateTime Utc, int SenderUserId, string SenderName, string Text);
 
@@ -1112,6 +1221,12 @@ namespace Drafts.Services
             IdleWarningSent = false;
             IdleKillMessageSent = false;
             KillAfterUtc = null;
+        }
+
+        public string? GetPreferredTtsVoiceForUserId(int userId)
+        {
+            if (userId <= 0) return null;
+            return PreferredTtsVoiceByUserId.TryGetValue(userId, out var v) ? v : null;
         }
 
         private void InitializeBoard()
@@ -1153,6 +1268,8 @@ namespace Drafts.Services
             VoiceFloorUserId = null;
             VoiceFloorUserName = null;
             VoiceFloorUntilUtc = null;
+
+            PreferredTtsVoiceByUserId.Clear();
 
             WinnerPlayer = null;
             GameOverMessageSent = false;
