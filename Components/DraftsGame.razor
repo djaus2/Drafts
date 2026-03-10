@@ -288,6 +288,10 @@ else
             </div>
         </div>
         <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
+        @if (!string.IsNullOrWhiteSpace(_ttsDebug))
+        {
+            <p style="font-size:11px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
+        }
     </div>
 }
 
@@ -355,6 +359,7 @@ else
     private int _chatDisplayStartIndex;
     private int _lastVoiceSpokenChatIndex;
     private bool _chatScrollPending;
+    private string _ttsDebug = "";
 
     private DotNetObjectReference<DraftsGame>? _dotNetRef;
     private bool _chatWired;
@@ -964,22 +969,6 @@ else
         static string FormatLine(Drafts.Services.DraftsGame.ChatMessage m)
         {
             var text = m.Text ?? string.Empty;
-
-            if (text.StartsWith(VoicePrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var payload = text.Substring(VoicePrefix.Length).Trim();
-                if (payload.StartsWith(VoiceMetaPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    var nl = payload.IndexOf('\n');
-                    if (nl >= 0)
-                    {
-                        payload = payload.Substring(nl + 1).Trim();
-                    }
-                }
-
-                text = VoicePrefix + payload;
-            }
-
             return $"{m.SenderName}: {text}";
         }
 
@@ -1039,24 +1028,6 @@ else
                 try
                 {
                     voiceKey = _game?.GetPreferredTtsVoiceForUserId(m.SenderUserId);
-
-                    if (string.IsNullOrWhiteSpace(voiceKey)
-                        && payload.StartsWith(VoiceMetaPrefix, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var nl = payload.IndexOf('\n');
-                        if (nl >= 0)
-                        {
-                            var metaLine = payload.Substring(0, nl).Trim();
-                            var rest = payload.Substring(nl + 1).Trim();
-                            payload = rest;
-
-                            var eq = metaLine.IndexOf('=');
-                            if (eq >= 0)
-                            {
-                                voiceKey = metaLine.Substring(eq + 1).Trim();
-                            }
-                        }
-                    }
                 }
                 catch
                 {
@@ -1064,6 +1035,11 @@ else
                 }
 
                 if (!_talkEnabled) break;
+
+                _ttsDebug = $"msg#{i} len={payload?.Length}: {payload?.Substring(0, Math.Min(80, payload?.Length ?? 0))}";
+                await InvokeAsync(StateHasChanged);
+                // Debug: log what we're about to speak
+                await JS.InvokeVoidAsync("console.log", $"[TTS] Speaking msg #{i}, payload.Length={payload?.Length ?? 0}, payload={payload?.Substring(0, Math.Min(100, payload?.Length ?? 0))}");
 
                 try
                 {
@@ -1543,11 +1519,8 @@ else
         if (string.IsNullOrWhiteSpace(text)) return Task.CompletedTask;
 
         var clean = text.Trim();
-        var meta = (_isPhoneClient || string.IsNullOrWhiteSpace(_preferredTtsVoiceKey))
-            ? ""
-            : $"{VoiceMetaPrefix}={_preferredTtsVoiceKey}\n";
-
-        GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, VoicePrefix + meta + clean);
+        // Voice preference is shared via SetPreferredTtsVoiceForUser on join, no need for metadata in messages
+        GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, VoicePrefix + clean);
         return Task.CompletedTask;
     }
 
