@@ -15,7 +15,11 @@
 
 <div style="display:flex;flex-direction:column;gap:6px">
     <a href="/admin/users">Manage players</a>
+    <a href="/admin/groups">Manage groups</a>
     <a href="/player">Reset your password</a>
+    <form method="get" action="/api/admin/download-database" style="display:inline;">
+    <button type="submit" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
+</form>
 </div>
 
 <div style="max-width:360px;margin-top:12px;">
@@ -260,6 +264,7 @@ else
         }
     }
 
+    
     private int? GetCurrentUserId()
     {
         var user = HttpContextAccessor.HttpContext?.User;

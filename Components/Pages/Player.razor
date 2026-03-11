@@ -76,8 +76,34 @@
     </div>
 </div>
 
+<h4>Group</h4>
+
+@if (_userGroups?.Any() == true)
+{
+    <div style="max-width:360px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+            <select @bind="_selectedGroupId">
+                <option value="0">No group (public game)</option>
+                @foreach (var g in _userGroups)
+                {
+                    <option value="@g.Id">@g.Name</option>
+                }
+            </select>
+            <div style="font-size:12px;opacity:0.85;">
+                Selected group will be assigned to new games you create
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div style="max-width:360px;font-size:12px;opacity:0.85;">
+        You are not a member of any groups. Games will be public.
+    </div>
+}
+
 <div style="max-width:360px;margin-top:12px;">
-    <button style="width:100%;padding:10px 12px;" onclick="location.href='/drafts'">Start a new game</button>
+    <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
 </div>
 
 <h4>Join Game</h4>
@@ -301,6 +327,10 @@
     private bool _appliedVoiceDerivedDefaults = false;
 
     private bool _isPhoneClient = false;
+
+    // Group selection
+    private List<Drafts.Data.Group>? _userGroups;
+    private int _selectedGroupId = 0;
     private int? _cachedUserId = null;
 
     private Dictionary<int, string> _userNames = new();
@@ -338,6 +368,13 @@
         {
             var users = await Auth.ListUsersAsync();
             _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
+
+            // Load user groups
+            if (_cachedUserId.HasValue)
+            {
+                _userGroups = await Auth.GetUserGroupsAsync(_cachedUserId.Value);
+            }
+
             await InvokeAsync(StateHasChanged);
         });
         RefreshGames();
@@ -943,6 +980,12 @@
             }
         }
         return null;
+    }
+
+    private void StartNewGame()
+    {
+        var groupId = _selectedGroupId > 0 ? _selectedGroupId : (int?)null;
+        Nav.NavigateTo($"/drafts?groupId={groupId}");
     }
 
     private void OnJoinGame()

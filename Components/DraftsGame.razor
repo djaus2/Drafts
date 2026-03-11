@@ -441,6 +441,7 @@ else
 
     private bool _gameClosedNotified;
     private bool _showCancelConfirm = false;
+    private int? _groupId;
 
     private DraftsService.GameState? _lastGameState;
     private int? _lastWinnerPlayer;
@@ -648,11 +649,19 @@ else
         _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
 
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
-        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("gameId", out var gid))
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        if (query.TryGetValue("gameId", out var gid))
         {
             _gameId = gid;
             BeginJoin(_gameId!);
             return;
+        }
+
+        // Check for groupId parameter for new game creation
+        if (query.TryGetValue("groupId", out var gIdStr) && int.TryParse(gIdStr, out var gId))
+        {
+            _groupId = gId;
         }
 
         // Auto-create and navigate; navigated instance will join.
@@ -674,7 +683,7 @@ else
             adminMode = false;
         }
 
-        _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode);
+        _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode, _groupId);
         Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
     }

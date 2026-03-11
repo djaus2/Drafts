@@ -94,6 +94,93 @@ public sealed class AuthService
         return true;
     }
 
+    // Group management methods
+    public async Task<List<Group>> ListGroupsAsync()
+        => await _db.Groups.Include(g => g.OwnerUser).Include(g => g.Members).ThenInclude(m => m.User).OrderBy(g => g.Name).ToListAsync();
+
+    public async Task<List<AppUser>> ListPlayersAsync()
+    {
+        var users = await _db.Users.Where(u => !string.IsNullOrWhiteSpace(u.Roles)).ToListAsync();
+        return users.Where(u => u.Roles.Contains("Player", StringComparison.OrdinalIgnoreCase) && !u.Roles.Contains("Admin", StringComparison.OrdinalIgnoreCase)).OrderBy(u => u.Name).ToList();
+    }
+
+    public async Task<List<Group>> GetUserGroupsAsync(int userId)
+        => await _db.Groups.Include(g => g.OwnerUser).Include(g => g.Members).Where(g => g.Members.Any(m => m.UserId == userId)).OrderBy(g => g.Name).ToListAsync();
+
+    public async Task<Group?> CreateGroupAsync(string name, string? description, int ownerUserId)
+    {
+        // Check if group name already exists
+        var existing = await _db.Groups.FirstOrDefaultAsync(g => g.Name == name);
+        if (existing != null) return null;
+
+        var group = new Group
+        {
+            Name = name,
+            Description = description,
+            OwnerUserId = ownerUserId
+        };
+
+        _db.Groups.Add(group);
+        await _db.SaveChangesAsync();
+
+        // Add owner as a member
+        await AddGroupMemberAsync(group.Id, ownerUserId);
+
+        return group;
+    }
+
+    public async Task<bool> DeleteGroupAsync(int groupId, int adminUserId, string adminPin)
+    {
+        var admin = await _db.Users.SingleOrDefaultAsync(x => x.Id == adminUserId);
+        if (admin is null || !HasRole(admin, "Admin")) return false;
+        if (!PinHasher.VerifyPin(adminPin, admin.PinSalt, admin.PinHash)) return false;
+
+        var group = await _db.Groups.FindAsync(groupId);
+        if (group == null) return false;
+
+        // Remove all members first
+        var members = await _db.GroupMembers.Where(m => m.GroupId == groupId).ToListAsync();
+        _db.GroupMembers.RemoveRange(members);
+
+        // Delete the group
+        _db.Groups.Remove(group);
+        await _db.SaveChangesAsync();
+
+        return true;
+    }
+
+    public async Task<List<GroupMember>> GetGroupMembersAsync(int groupId)
+        => await _db.GroupMembers.Include(m => m.User).Where(m => m.GroupId == groupId).OrderBy(m => m.User != null ? m.User.Name : "").ToListAsync();
+
+    public async Task<bool> AddGroupMemberAsync(int groupId, int userId)
+    {
+        // Check if already a member
+        var existing = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == userId);
+        if (existing != null) return false;
+
+        var member = new GroupMember
+        {
+            GroupId = groupId,
+            UserId = userId
+        };
+
+        _db.GroupMembers.Add(member);
+        await _db.SaveChangesAsync();
+
+        return true;
+    }
+
+    public async Task<bool> RemoveGroupMemberAsync(int groupId, int userId)
+    {
+        var member = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == groupId && m.UserId == userId);
+        if (member == null) return false;
+
+        _db.GroupMembers.Remove(member);
+        await _db.SaveChangesAsync();
+
+        return true;
+    }
+
     public async Task<bool> ChangePinAsync(int userId, string currentPin, string newPin)
     {
         currentPin = (currentPin ?? string.Empty).Trim();

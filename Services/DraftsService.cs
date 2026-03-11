@@ -95,10 +95,10 @@ namespace Drafts.Services
 
         public string CreateGame(int userId, int creatorPlayerNumber = 1, bool adminMode = false)
         {
-            return CreateGame(userId, "", creatorPlayerNumber, adminMode);
+            return CreateGame(userId, "", creatorPlayerNumber, adminMode, null);
         }
 
-        public string CreateGame(int userId, string creatorName, int creatorPlayerNumber = 1, bool adminMode = false)
+        public string CreateGame(int userId, string creatorName, int creatorPlayerNumber = 1, bool adminMode = false, int? groupId = null)
         {
             var existing = FindActiveGameIdForUser(userId);
             if (!string.IsNullOrWhiteSpace(existing))
@@ -110,7 +110,8 @@ namespace Drafts.Services
             var id = Guid.NewGuid().ToString("n").Substring(0, 8);
             var game = new DraftsGame(id)
             {
-                CreatedByUserId = userId
+                CreatedByUserId = userId,
+                GroupId = groupId
             };
 
             game.AdminMode = adminMode;
@@ -1205,6 +1206,7 @@ namespace Drafts.Services
         public DateTime? ForcedJumpOpponentCanClaimAfterUtc { get; set; }
 
         public int CreatedByUserId { get; set; }
+        public int? GroupId { get; set; }
         public int? Player1UserId { get; set; }
         public int? Player2UserId { get; set; }
 

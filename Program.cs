@@ -103,6 +103,95 @@ namespace Drafts
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
+            app.MapGet("/api/admin/download-database", (HttpContext ctx) =>
+            {
+                Console.WriteLine($"Download request received. User: {ctx.User.Identity?.Name}, Authenticated: {ctx.User.Identity?.IsAuthenticated}, IsAdmin: {ctx.User.IsInRole("Admin")}");
+                
+                if (!ctx.User.IsInRole("Admin"))
+                {
+                    Console.WriteLine("User not in Admin role - forbidding access");
+                    return Results.Forbid();
+                }
+
+                try
+                {
+                    var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "auth.db");
+                    Console.WriteLine($"Database path: {dbPath}");
+                    
+                    if (!System.IO.File.Exists(dbPath))
+                    {
+                        Console.WriteLine("Database file not found");
+                        return Results.NotFound("Database file not found");
+                    }
+
+                    // Create a temporary copy to avoid file locking issues
+                    var tempPath = Path.Combine(Path.GetTempPath(), $"auth_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.db");
+                    Console.WriteLine($"Creating temporary copy: {tempPath}");
+                    
+                    try
+                    {
+                        System.IO.File.Copy(dbPath, tempPath, true);
+                        var fileBytes = System.IO.File.ReadAllBytes(tempPath);
+                        var fileName = $"auth_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}.db";
+                        Console.WriteLine($"Returning file: {fileName}, size: {fileBytes.Length} bytes");
+                        
+                        return Results.File(fileBytes, "application/octet-stream", fileName);
+                    }
+                    finally
+                    {
+                        // Clean up temporary file
+                        if (System.IO.File.Exists(tempPath))
+                        {
+                            try
+                            {
+                                System.IO.File.Delete(tempPath);
+                                Console.WriteLine($"Cleaned up temporary file: {tempPath}");
+                            }
+                            catch (Exception cleanupEx)
+                            {
+                                Console.WriteLine($"Failed to cleanup temporary file: {cleanupEx}");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Database download error: {ex}");
+                    return Results.Problem($"Error downloading database: {ex.Message}");
+                }
+            }).RequireAuthorization(builder => builder.RequireRole("Admin"));
+
+            app.MapGet("/debug/admin-check", async (AppDbContext db) =>
+            {
+                var admin = await db.Users.SingleOrDefaultAsync(x => x.Name == "Admin");
+                if (admin == null)
+                {
+                    return Results.Json(new { adminExists = false, message = "Admin user not found" });
+                }
+                return Results.Json(new { 
+                    adminExists = true, 
+                    adminName = admin.Name,
+                    adminRoles = admin.Roles,
+                    hasPinSalt = admin.PinSalt != null,
+                    hasPinHash = admin.PinHash != null
+                });
+            });
+
+            app.MapGet("/debug/login-test", async (AuthService auth, string name = "Admin", string pin = "1371") =>
+            {
+                var user = await auth.ValidateLoginAsync(name, pin);
+                if (user == null)
+                {
+                    return Results.Json(new { success = false, message = "Login validation failed" });
+                }
+                return Results.Json(new { 
+                    success = true, 
+                    userName = user.Name,
+                    userRoles = user.Roles,
+                    userId = user.Id
+                });
+            });
+
             app.MapGet("/logout", async (HttpContext ctx, DraftsService drafts) =>
             {
                 var raw = ctx.User?.FindFirst("uid")?.Value;
@@ -114,6 +203,33 @@ namespace Drafts
                 return Results.Redirect("/login", permanent: false);
             });
 
+            app.MapGet("/debug/auth-test", async (AuthService auth, HttpContext ctx) =>
+            {
+                try
+                {
+                    var user = await auth.ValidateLoginAsync("Admin", "1371");
+                    if (user == null)
+                    {
+                        return Results.Json(new { success = false, message = "User validation failed" });
+                    }
+
+                    var principal = AuthService.BuildPrincipal(user);
+                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+                    return Results.Json(new { 
+                        success = true, 
+                        message = "Authentication test successful",
+                        userName = user.Name,
+                        userRoles = user.Roles,
+                        isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false
+                    });
+                }
+                catch (Exception ex)
+                {
+                    return Results.Json(new { success = false, message = $"Auth test failed: {ex.Message}" });
+                }
+            });
+
             app.MapPost("/auth/login", async (
                 HttpContext ctx,
                 AuthService auth,
@@ -121,30 +237,39 @@ namespace Drafts
                 [FromForm] string pin,
                 [FromForm] string? returnUrl) =>
             {
-                name = (name ?? string.Empty).Trim();
-                pin = (pin ?? string.Empty).Trim();
-
-                if (string.IsNullOrWhiteSpace(name) || pin.Length != 4 || !pin.All(char.IsDigit))
+                try
                 {
+                    name = (name ?? string.Empty).Trim();
+                    pin = (pin ?? string.Empty).Trim();
+
+                    if (string.IsNullOrWhiteSpace(name) || pin.Length != 4 || !pin.All(char.IsDigit))
+                    {
+                        return Results.Redirect("/login?error=1", permanent: false);
+                    }
+
+                    var user = await auth.ValidateLoginAsync(name, pin);
+                    if (user is null)
+                    {
+                        return Results.Redirect("/login?error=1", permanent: false);
+                    }
+
+                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, AuthService.BuildPrincipal(user));
+
+                    if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+                    {
+                        return Results.Redirect(returnUrl, permanent: false);
+                    }
+
+                    var roles = (user.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    var isAdmin = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+                    return Results.Redirect(isAdmin ? "/admin" : "/player", permanent: false);
+                }
+                catch (Exception ex)
+                {
+                    // Log the error for debugging
+                    Console.WriteLine($"Login error: {ex}");
                     return Results.Redirect("/login?error=1", permanent: false);
                 }
-
-                var user = await auth.ValidateLoginAsync(name, pin);
-                if (user is null)
-                {
-                    return Results.Redirect("/login?error=1", permanent: false);
-                }
-
-                await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, AuthService.BuildPrincipal(user));
-
-                if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
-                {
-                    return Results.Redirect(returnUrl, permanent: false);
-                }
-
-                var roles = (user.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                var isAdmin = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
-                return Results.Redirect(isAdmin ? "/admin" : "/player", permanent: false);
             }).DisableAntiforgery();
 
             app.Run();
