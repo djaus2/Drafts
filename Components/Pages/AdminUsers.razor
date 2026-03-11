@@ -2,6 +2,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @using Drafts.Services
+@using Drafts.Data
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 
@@ -34,11 +35,13 @@
 }
 else
 {
-    <table style="border-collapse:collapse;">
-        <thead>
+    <div style="width:150%;max-width:150%;overflow-x:auto;">
+        <table style="border-collapse:collapse;width:100%;">
+            <thead>
             <tr>
                 <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Name</th>
                 <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Roles</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Voice</th>
                 <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Actions</th>
             </tr>
         </thead>
@@ -52,6 +55,9 @@ else
                 <tr>
                     <td style="padding:4px 8px;border-bottom:1px solid #eee;">@u.Name</td>
                     <td style="padding:4px 8px;border-bottom:1px solid #eee;">@u.Roles</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@GetVoiceDisplay(u)">
+                        @GetVoiceDisplay(u)
+                    </td>
                     <td style="padding:4px 8px;border-bottom:1px solid #eee;">
                         <button @onclick="() => SelectReset(u.Id, u.Name)">Reset PIN to 9999</button>
                         <button style="margin-left:6px" @onclick="() => SelectDelete(u.Id, u.Name)">Delete</button>
@@ -61,6 +67,7 @@ else
             <a href="/admin">Back</a>
         </tbody>
     </table>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(_actionTargetName))
     {
@@ -200,6 +207,28 @@ else
 
         _actionMessage = ok ? "Done." : "Failed (check admin PIN, or target is protected).";
         _users = await Auth.ListUsersAsync();
+    }
+
+    private string GetVoiceDisplay(AppUser user)
+    {
+        if (string.IsNullOrWhiteSpace(user.PreferredTtsVoice))
+            return "Default";
+        
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(user.PreferredTtsLanguage))
+            parts.Add(user.PreferredTtsLanguage);
+        if (!string.IsNullOrWhiteSpace(user.PreferredTtsRegion))
+            parts.Add(user.PreferredTtsRegion.ToUpper());
+        
+        var voice = user.PreferredTtsVoice;
+        if (voice.StartsWith("uri:"))
+            voice = voice.Substring(4);
+        
+        var display = voice;
+        if (parts.Count > 0)
+            display += $" ({string.Join(", ", parts)})";
+        
+        return display;
     }
 
     private int? GetCurrentUserId()
