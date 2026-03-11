@@ -53,6 +53,23 @@
     text-shadow:0 1px 0 rgba(0,0,0,0.15);
   }
 
+  .game-btn {
+    min-width:120px;
+    padding:6px 12px;
+    border-radius:4px;
+    border:1px solid #888;
+    background:#f3f3f3;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+  }
+  .game-btn:disabled {
+    opacity:0.5;
+    cursor:not-allowed;
+  }
+
   @@keyframes funkyGradient {
     0% { background-position:0% 50%; }
     100% { background-position:100% 50%; }
@@ -194,7 +211,7 @@ else
         @if (_game is not null && _game.CreatedByUserId == _currentUserId)
         {
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                <button @onclick="CancelOrExitGame" style="margin-left:auto;background:#b00020;color:#fff;border:1px solid #7a0016;border-radius:4px;padding:6px 10px;">@CancelOrExitButtonText</button>
+                <button class="game-btn" @onclick="CancelOrExitGame">@CancelOrExitButtonText</button>
             </div>
         }
         @if (_game is not null && _game.HadSecondPlayerConnected)
@@ -263,6 +280,23 @@ else
         <div style="margin-top:10px;width:384px;max-width:calc(100vw - 24px);display:flex;flex-direction:column;gap:8px;">
             <div class="funky-heading">Chat</div>
             <textarea @ref="_chatInRef" rows="4" style="width:100%;resize:vertical;min-height:80px;" readonly>@_chatInText</textarea>
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
+                <button class="game-btn" @onclick="ClearChatReceive">Clear Chat</button>
+                <button class="game-btn" @onclick="ToggleHideVoiceInChat"
+                        style="background:@(_hideVoiceInChat ? "#cce5ff" : "#f3f3f3");"
+                        title="@(_hideVoiceInChat ? "Voice messages hidden from chat" : "Voice messages shown in chat")">
+                    @if (_hideVoiceInChat)
+                    {
+                        <span style="font-size:18px;">💬</span>
+                        <span>Voice Hidden</span>
+                    }
+                    else
+                    {
+                        <span style="font-size:18px;">👁</span>
+                        <span>Show Voice</span>
+                    }
+                </button>
+            </div>
             <div class="funky-heading">Send</div>
             <textarea @ref="_chatOutRef" rows="4" style="width:100%;resize:vertical;min-height:80px;" placeholder="Type message and press Enter"
                       @bind-value="_chatOutText" @bind-value:event="oninput"
@@ -270,13 +304,23 @@ else
                       @onkeyup="OnChatOutKeyUp"
                       ></textarea>
 
-            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <button @onclick="SendChat">Send</button>
-                    <button @onclick="ClearChatReceive">Clear</button>
+            @if (_game?.HadSecondPlayerConnected == true)
+            {
+                <div style="display:flex;align-items:center;width:100%;gap:12px;">
+                    <button class="game-btn" @onclick="SendChat">Send</button>
                 </div>
+            }
+        </div>
+        <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
+        @if (!string.IsNullOrWhiteSpace(_ttsDebug))
+        {
+            <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
+        }
 
-                <button disabled="@(!CanPressToTalk)"
+        @if (_game?.HadSecondPlayerConnected == true)
+        {
+            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
+                <button class="game-btn" disabled="@(!CanPressToTalk)"
                         @onpointerdown="OnTalkPointerDown"
                         @onpointerup="OnTalkPointerUp"
                         @onpointercancel="OnTalkPointerCancel"
@@ -285,12 +329,28 @@ else
                         @onpointerup:preventDefault="true">
                     @TalkButtonText
                 </button>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
+                    {
+                        <span style="font-size:14px;color:#666;">(muted by @_game.VoiceMutedByUserName)</span>
+                    }
+                    <button class="game-btn" @onclick="ToggleMute" 
+                            disabled="@(IsVoiceMuted && !CanUnmute)"
+                            style="background:@(IsVoiceMuted ? "#ffcccc" : "#f3f3f3");"
+                            title="@MuteButtonTitle">
+                        @if (IsVoiceMuted)
+                        {
+                            <span style="font-size:18px;">🔇</span>
+                            <span>Unmute</span>
+                        }
+                        else
+                        {
+                            <span style="font-size:18px;">🔊</span>
+                            <span>Mute</span>
+                        }
+                    </button>
+                </div>
             </div>
-        </div>
-        <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
-        @if (!string.IsNullOrWhiteSpace(_ttsDebug))
-        {
-            <p style="font-size:11px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
         }
     </div>
 }
@@ -320,6 +380,7 @@ else
     private string _preferredTtsVoiceKey = "";
     private bool _isPhoneClient;
     private bool _voiceSupported;
+    private bool _hideVoiceInChat = true;
     private string _voiceStatus = "";
     private string _ttsStatus = "";
     private int _ttsStatusVersion;
@@ -450,7 +511,7 @@ else
         }
     }
 
-    private bool CanPressToTalk => _voiceSupported && _talkEnabled && !_pttHeld && !IsVoiceFloorHeldByOther;
+    private bool CanPressToTalk => _voiceSupported && _talkEnabled && !_pttHeld && !IsVoiceFloorHeldByOther && !IsVoiceMuted;
 
     private string TalkButtonText
     {
@@ -458,6 +519,7 @@ else
         {
             if (!_voiceSupported) return "Talk";
             if (!_talkEnabled) return "Talk";
+            if (IsVoiceMuted) return "Muted";
             if (_pttHeld) return "Talking…";
             if (IsVoiceFloorHeldByOther) return "Other talking…";
             return "Hold to talk";
@@ -492,6 +554,38 @@ else
         }
 
         _voiceStatus = "Hold to talk";
+    }
+
+    private bool IsVoiceMuted => _game?.VoiceMuted ?? false;
+
+    private bool CanUnmute => _game?.VoiceMutedByUserId == _currentUserId;
+
+    private string MuteButtonTitle
+    {
+        get
+        {
+            if (!IsVoiceMuted) return "Mute voice for both players";
+            if (CanUnmute) return "Unmute voice";
+            return $"Muted by {_game?.VoiceMutedByUserName ?? "other player"} - only they can unmute";
+        }
+    }
+
+    private async Task ToggleMute()
+    {
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+        if (_currentUserId <= 0) return;
+
+        var (ok, msg) = GameService.ToggleVoiceMute(_gameId, _currentUserId, _currentUserName);
+        if (!ok && !string.IsNullOrWhiteSpace(msg))
+        {
+            _message = msg;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleHideVoiceInChat()
+    {
+        _hideVoiceInChat = !_hideVoiceInChat;
     }
 
     protected override async Task OnInitializedAsync()
@@ -669,8 +763,7 @@ else
         }
         if (player == 0)
         {
-            _status = "Unable to join (game full or not found).";
-            _connected = false;
+            Nav.NavigateTo("/", forceLoad: true);
             return;
         }
         _playerNumber = player;
@@ -953,12 +1046,12 @@ else
         await SendChat();
     }
 
-    private static string FormatChat(Drafts.Services.DraftsGame? game)
+    private string FormatChat(Drafts.Services.DraftsGame? game)
     {
         return FormatChat(game, 0);
     }
 
-    private static string FormatChat(Drafts.Services.DraftsGame? game, int startIndex)
+    private string FormatChat(Drafts.Services.DraftsGame? game, int startIndex)
     {
         if (game is null) return "";
         if (game.ChatMessages.Count == 0) return "";
@@ -966,13 +1059,13 @@ else
         if (startIndex < 0) startIndex = 0;
         if (startIndex >= game.ChatMessages.Count) return "";
 
-        static string FormatLine(Drafts.Services.DraftsGame.ChatMessage m)
-        {
-            var text = m.Text ?? string.Empty;
-            return $"{m.SenderName}: {text}";
-        }
+        var hideVoice = _hideVoiceInChat;
+        var lines = game.ChatMessages
+            .Skip(startIndex)
+            .Where(m => !hideVoice || !m.Text.StartsWith(VoicePrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(m => $"{m.SenderName}: {m.Text ?? string.Empty}");
 
-        return string.Join("\n", game.ChatMessages.Skip(startIndex).Select(FormatLine));
+        return string.Join("\n", lines);
     }
 
     private async Task ClearChatReceive()
@@ -993,6 +1086,7 @@ else
         if (!_talkEnabled) return;
         if (_game is null) return;
         if (_currentUserId <= 0) return;
+        if (_game.VoiceMuted) return;
 
         if (fromChatIndex < 0) fromChatIndex = 0;
         if (fromChatIndex < _lastVoiceSpokenChatIndex) fromChatIndex = _lastVoiceSpokenChatIndex;
@@ -1517,6 +1611,7 @@ else
         if (string.IsNullOrWhiteSpace(_gameId)) return Task.CompletedTask;
         if (_currentUserId <= 0) return Task.CompletedTask;
         if (string.IsNullOrWhiteSpace(text)) return Task.CompletedTask;
+        if (_game?.VoiceMuted == true) return Task.CompletedTask;
 
         var clean = text.Trim();
         // Voice preference is shared via SetPreferredTtsVoiceForUser on join, no need for metadata in messages

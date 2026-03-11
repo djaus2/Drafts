@@ -6,7 +6,7 @@
         <h1 style="margin:0;font-weight:800;letter-spacing:0.5px;background:linear-gradient(90deg,#ff3d00,#ffca28,#00c853,#2979ff,#d500f9);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 1px 0 rgba(0,0,0,0.15);">Checkers</h1>
         @if (HttpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true)
         {
-            <button onclick="location.href='/logout'">Logout</button>
+            <button onclick="location.href='/logout'" style="min-width:120px;padding:6px 12px;border-radius:4px;border:1px solid #888;background:#f3f3f3;cursor:pointer;">Logout</button>
         }
     </div>
 </div>

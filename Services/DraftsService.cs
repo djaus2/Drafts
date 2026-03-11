@@ -1127,6 +1127,41 @@ namespace Drafts.Services
                 return game.GetPreferredTtsVoiceForUserId(userId);
             }
         }
+
+        public (bool ok, string? msg) ToggleVoiceMute(string gameId, int userId, string userName)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return (false, "No game");
+            if (userId <= 0) return (false, "Invalid user");
+
+            var game = GetGame(gameId);
+            if (game is null) return (false, "Game not found");
+
+            lock (game)
+            {
+                if (game.VoiceMuted)
+                {
+                    // Only the user who muted can unmute
+                    if (game.VoiceMutedByUserId != userId)
+                    {
+                        return (false, $"Only {game.VoiceMutedByUserName ?? "the player who muted"} can unmute");
+                    }
+                    game.VoiceMuted = false;
+                    game.VoiceMutedByUserId = null;
+                    game.VoiceMutedByUserName = null;
+                    game.Touch();
+                }
+                else
+                {
+                    game.VoiceMuted = true;
+                    game.VoiceMutedByUserId = userId;
+                    game.VoiceMutedByUserName = userName;
+                    game.Touch();
+                }
+            }
+
+            OnGameUpdated(gameId);
+            return (true, null);
+        }
     }
 
     public class DraftsGame
@@ -1190,6 +1225,10 @@ namespace Drafts.Services
         public DateTime? VoiceFloorUntilUtc { get; set; }
 
         public Dictionary<int, string?> PreferredTtsVoiceByUserId { get; } = new();
+
+        public bool VoiceMuted { get; set; } = false;
+        public int? VoiceMutedByUserId { get; set; }
+        public string? VoiceMutedByUserName { get; set; }
 
         public sealed record ChatMessage(DateTime Utc, int SenderUserId, string SenderName, string Text);
 
