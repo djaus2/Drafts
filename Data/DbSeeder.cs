@@ -105,40 +105,56 @@ public static class DbSeeder
         {
         }
 
-        try
+        // Force add voice preference columns - retry multiple times
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            if (!await HasColumnAsync(db, "Users", "PreferredTtsVoice"))
+            try
             {
-                await db.Database.ExecuteSqlRawAsync(
-                    "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsVoice\" TEXT NULL;");
+                if (!await HasColumnAsync(db, "Users", "PreferredTtsVoice"))
+                {
+                    await db.Database.ExecuteSqlRawAsync(
+                        "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsVoice\" TEXT NULL;");
+                }
+                break;
             }
-        }
-        catch
-        {
+            catch
+            {
+                await Task.Delay(100);
+            }
         }
 
-        try
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            if (!await HasColumnAsync(db, "Users", "PreferredTtsLanguage"))
+            try
             {
-                await db.Database.ExecuteSqlRawAsync(
-                    "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsLanguage\" TEXT NULL;");
+                if (!await HasColumnAsync(db, "Users", "PreferredTtsLanguage"))
+                {
+                    await db.Database.ExecuteSqlRawAsync(
+                        "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsLanguage\" TEXT NULL;");
+                }
+                break;
             }
-        }
-        catch
-        {
+            catch
+            {
+                await Task.Delay(100);
+            }
         }
 
-        try
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            if (!await HasColumnAsync(db, "Users", "PreferredTtsRegion"))
+            try
             {
-                await db.Database.ExecuteSqlRawAsync(
-                    "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsRegion\" TEXT NULL;");
+                if (!await HasColumnAsync(db, "Users", "PreferredTtsRegion"))
+                {
+                    await db.Database.ExecuteSqlRawAsync(
+                        "ALTER TABLE \"Users\" ADD COLUMN \"PreferredTtsRegion\" TEXT NULL;");
+                }
+                break;
             }
-        }
-        catch
-        {
+            catch
+            {
+                await Task.Delay(100);
+            }
         }
 
         var settings = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1);

@@ -31,6 +31,9 @@ public sealed class AuthService
     public Task<AppUser?> GetUserByIdAsync(int userId)
         => _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
 
+    public Task<AppUser?> GetUserByNameAsync(string name)
+        => _db.Users.SingleOrDefaultAsync(x => x.Name.ToUpper() == name.ToUpper());
+
     public async Task<string?> GetPreferredTtsVoiceAsync(int userId)
     {
         var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);

@@ -3,8 +3,10 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
 @implements IDisposable
 @using Drafts.Services
+@using Microsoft.AspNetCore.Components.Authorization
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
+@inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject DraftsService GameService
@@ -291,6 +293,7 @@
     private string _selectedVoiceKey = "";
     private string _selectedVoiceDisplay = "";
     private string _voiceSaveMessage = "";
+    private string _voiceLoadError = "";
     private string _voiceDebugStatus = "";
     private bool _voicesLoaded = false;
     private bool _showVoiceSelection = true;
@@ -298,6 +301,7 @@
     private bool _appliedVoiceDerivedDefaults = false;
 
     private bool _isPhoneClient = false;
+    private int? _cachedUserId = null;
 
     private Dictionary<int, string> _userNames = new();
 
@@ -307,6 +311,29 @@
 
     protected override void OnInitialized()
     {
+        // Cache user ID using AuthenticationStateProvider (works with SignalR)
+        _ = InvokeAsync(async () =>
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var raw = user?.FindFirst("uid")?.Value;
+            if (int.TryParse(raw, out var id))
+            {
+                _cachedUserId = id;
+            }
+            else
+            {
+                // Fallback: lookup by username
+                var name = user?.Identity?.Name;
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    var appUser = await Auth.GetUserByNameAsync(name);
+                    if (appUser != null) _cachedUserId = appUser.Id;
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        });
+
         _ = InvokeAsync(async () =>
         {
             var users = await Auth.ListUsersAsync();
@@ -351,8 +378,9 @@
             _selectedVoiceKey = preferred ?? "";
             _selectedVoiceDisplay = _selectedVoiceKey;
         }
-        catch
+        catch (Exception ex)
         {
+            _voiceLoadError = $"Voice load error: {ex.GetType().Name}: {ex.Message}";
         }
 
         try
@@ -360,8 +388,9 @@
             var lang = await Auth.GetPreferredTtsLanguageAsync(uid.Value);
             _selectedLanguage = (lang ?? string.Empty).Trim();
         }
-        catch
+        catch (Exception ex)
         {
+            _voiceLoadError += $" | Lang error: {ex.Message}";
         }
 
         try
@@ -369,8 +398,9 @@
             var region = await Auth.GetPreferredTtsRegionAsync(uid.Value);
             _selectedRegion = (region ?? string.Empty).Trim();
         }
-        catch
+        catch (Exception ex)
         {
+            _voiceLoadError += $" | Region error: {ex.Message}";
         }
 
         if (string.IsNullOrWhiteSpace(_selectedLanguage))
@@ -383,12 +413,24 @@
             _selectedRegion = "AU";
         }
 
-        _showVoiceSelection = !_isPhoneClient && string.IsNullOrWhiteSpace(_selectedVoiceKey);
+        _showVoiceSelection = !_isPhoneClient;
         _loadedVoicePrefs = true;
 
-        //await LoadVoicesAsync();
-
         await InvokeAsync(StateHasChanged);
+
+        // Auto-load voices to populate dropdowns with saved selections
+        if (!_isPhoneClient)
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+            }
+            catch
+            {
+            }
+
+            await LoadVoicesAsync();
+        }
     }
 
     private async Task ShowVoiceSelection()
@@ -881,9 +923,26 @@
 
     private int? GetCurrentUserId()
     {
+        if (_cachedUserId.HasValue) return _cachedUserId;
         var user = HttpContextAccessor.HttpContext?.User;
         var raw = user?.FindFirst("uid")?.Value;
-        return int.TryParse(raw, out var id) ? id : null;
+        if (int.TryParse(raw, out var id))
+        {
+            _cachedUserId = id;
+            return id;
+        }
+        // Fallback: lookup by username if uid claim not found
+        var name = user?.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var appUser = Auth.GetUserByNameAsync(name).GetAwaiter().GetResult();
+            if (appUser != null)
+            {
+                _cachedUserId = appUser.Id;
+                return appUser.Id;
+            }
+        }
+        return null;
     }
 
     private void OnJoinGame()
