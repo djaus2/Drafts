@@ -368,6 +368,20 @@ else
     </div>
 }
 
+@if (_showCancelConfirm)
+{
+    <div class="gameover-overlay" @onclick="() => _showCancelConfirm = false">
+        <div class="gameover-card" @onclick:stopPropagation="true">
+            <div class="gameover-title">Cancel game?</div>
+            <div class="gameover-sub">Are you sure you want to cancel this game?</div>
+            <div class="gameover-actions">
+                <button @onclick="() => _showCancelConfirm = false">No</button>
+                <button class="game-btn" @onclick="ConfirmCancelGame">Yes, Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private string? _gameId;
     private string _joinId = "";
@@ -426,6 +440,7 @@ else
     private bool _chatWired;
 
     private bool _gameClosedNotified;
+    private bool _showCancelConfirm = false;
 
     private DraftsService.GameState? _lastGameState;
     private int? _lastWinnerPlayer;
@@ -978,6 +993,14 @@ else
             return;
         }
 
+        // Show confirmation dialog for active games
+        _showCancelConfirm = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ConfirmCancelGame()
+    {
+        _showCancelConfirm = false;
         await CancelGame();
     }
 
@@ -999,6 +1022,9 @@ else
         if (string.IsNullOrWhiteSpace(_gameId)) return;
         if (_game is null) return;
         if (_game.CreatedByUserId != _currentUserId) return;
+
+        // Set flag to prevent "Game was closed" alert for initiator
+        _gameClosedNotified = true;
 
         GameService.RemoveGame(_gameId);
 
