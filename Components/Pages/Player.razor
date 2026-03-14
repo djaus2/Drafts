@@ -110,7 +110,7 @@ else
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        <select @bind="_selectedGameId" @onmousedown="OnGamesDropdownInteract" @onfocus="OnGamesDropdownInteract">
+        <select @bind="_selectedGameId" @onmousedown="@(async () => await OnGamesDropdownInteract())" @onfocus="@(async () => await OnGamesDropdownInteract())">
             <option value="">Select a game…</option>
             @foreach (var g in _joinableGames)
             {
@@ -339,10 +339,10 @@ else
 
     private System.Threading.Timer? _gamesRefreshTimer;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         // Cache user ID using AuthenticationStateProvider (works with SignalR)
-        _ = InvokeAsync(async () =>
+        await InvokeAsync(async () =>
         {
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var user = authState.User;
@@ -377,14 +377,14 @@ else
 
             await InvokeAsync(StateHasChanged);
         });
-        RefreshGames();
+        await RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
 
-        _gamesRefreshTimer = new System.Threading.Timer(_ =>
+        _gamesRefreshTimer = new System.Threading.Timer(async _ =>
         {
             try
             {
-                RefreshGames();
+                await RefreshGames();
                 _ = InvokeAsync(StateHasChanged);
             }
             catch
@@ -947,11 +947,11 @@ else
         }
     }
 
-    private void OnGamesDropdownInteract()
+    private async Task OnGamesDropdownInteract()
     {
         try
         {
-            RefreshGames();
+            await RefreshGames();
         }
         catch
         {
@@ -1002,21 +1002,30 @@ else
         Nav.NavigateTo($"/drafts?gameId={gameId}");
     }
 
-    private void OnGameUpdated(string _)
+    private async void OnGameUpdated(string _)
     {
-        RefreshGames();
-        InvokeAsync(StateHasChanged);
+        await RefreshGames();
+        await InvokeAsync(StateHasChanged);
     }
 
-    private void RefreshGames()
+    private async Task RefreshGames()
     {
         var uid = GetCurrentUserId();
         var games = GameService.ListGames();
+
+        // Get user's groups for filtering
+        var userGroupIds = new List<int>();
+        if (uid.HasValue && _userGroups?.Any() == true)
+        {
+            userGroupIds = _userGroups.Select(g => g.Id).ToList();
+        }
 
         _joinableGames = games
             .Where(g => !g.HadSecondPlayerConnected)
             .Where(g => !(g.Player1Connected && g.Player2Connected))
             .Where(g => !(uid.HasValue && (g.Player1UserId == uid.Value || g.Player2UserId == uid.Value)))
+            // Group filtering: show public games (no GroupId) or games where user is a member of the group
+            .Where(g => !g.GroupId.HasValue || userGroupIds.Contains(g.GroupId.Value))
             .OrderByDescending(g => g.CreatedUtc)
             .ToList();
 
@@ -1032,6 +1041,19 @@ else
         var connectedText = g.HadSecondPlayerConnected ? "(connected)" : "(not connected)";
         _userNames.TryGetValue(g.CreatedByUserId, out var name);
         name ??= "";
-        return $"{name}  {g.Id} — {createdLocal:yyyy-MM-dd HH:mm:ss} {connectedText}";
+        
+        // Add group information
+        var groupInfo = "";
+        if (g.GroupId.HasValue)
+        {
+            var group = _userGroups?.FirstOrDefault(ug => ug.Id == g.GroupId.Value);
+            groupInfo = group != null ? $" [{group.Name}]" : " [Group]";
+        }
+        else
+        {
+            groupInfo = " [Public]";
+        }
+        
+        return $"{name}  {g.Id} — {createdLocal:yyyy-MM-dd HH:mm:ss} {connectedText}{groupInfo}";
     }
 }

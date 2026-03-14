@@ -5,17 +5,30 @@
 @inject LobbyChatService LobbyChatSvc
 @inject IHttpContextAccessor HttpContextAccessor
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject AuthService Auth
 
 <div style="margin-top:18px;max-width:520px;">
     <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
         <span>Lobby Chat</span>
-        <button type="button" @onclick="ClearChat">Clear</button>
+        <button type="button" @onclick="ClearMyChat" title="Clear chat only for you">Clear My Chat</button>
     </div>
-    <textarea @ref="_chatInRef" rows="6" style="width:100%;resize:none;" readonly>@_chatInText</textarea>
-    <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;">Send</div>
-    <textarea @ref="_chatOutRef" rows="3" style="width:100%;resize:none;" placeholder="Type message and press Enter"
-              @bind-value="_chatOutText" @bind-value:event="oninput"
-              ></textarea>
+    
+    @if (_userGroups?.Any() == true)
+    {
+        <textarea @ref="_chatInRef" rows="6" style="width:100%;resize:none;" readonly>@_chatInText</textarea>
+        <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;">Send</div>
+        <textarea @ref="_chatOutRef" rows="3" style="width:100%;resize:none;" placeholder="Type message and press Enter"
+                  @bind-value="_chatOutText" @bind-value:event="oninput"
+                  ></textarea>
+    }
+    else
+    {
+        <div style="padding:20px;text-align:center;color:#666;border:1px solid #ddd;background:#f9f9f9;">
+            <div style="font-weight:bold;margin-bottom:8px;">Chat Access Required</div>
+            <div style="font-size:14px;">You must be a member of at least one group to participate in lobby chat.</div>
+            <div style="font-size:12px;margin-top:8px;">Contact an administrator to be added to a group.</div>
+        </div>
+    }
 </div>
 
 <script>
@@ -56,9 +69,12 @@
     private int _lastChatCount;
     private bool _scrollPending;
     private DotNetObjectReference<LobbyChat>? _dotNetRef;
+    private List<Drafts.Data.Group>? _userGroups;
+    private int? _currentUserId;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        await LoadUserData();
         RefreshChat();
         LobbyChatSvc.ChatUpdated += OnChatUpdated;
     }
@@ -75,9 +91,37 @@
         _ = InvokeAsync(StateHasChanged);
     }
 
+    private async Task LoadUserData()
+    {
+        // Clear chat display when loading user data (login/refresh)
+        _chatInText = "";
+        _chatOutText = "";
+        _lastChatCount = 0;
+        _scrollPending = false;
+        
+        // Get current user ID
+        var user = HttpContextAccessor.HttpContext?.User;
+        var rawUid = user?.FindFirst("uid")?.Value;
+        if (int.TryParse(rawUid, out var userId))
+        {
+            _currentUserId = userId;
+            
+            // Load user groups
+            try
+            {
+                _userGroups = await Auth.GetUserGroupsAsync(userId);
+            }
+            catch
+            {
+                _userGroups = new List<Drafts.Data.Group>();
+            }
+        }
+    }
+
     private void RefreshChat()
     {
-        var msgs = LobbyChatSvc.GetMessages();
+        var userGroupIds = _userGroups?.Select(g => g.Id) ?? Enumerable.Empty<int>();
+        var msgs = LobbyChatSvc.GetMessages(_currentUserId, userGroupIds);
         var count = msgs.Count;
         if (count != _lastChatCount)
         {
@@ -119,27 +163,57 @@
         var text = _chatOutText;
         if (string.IsNullOrWhiteSpace(text)) return;
 
+        if (!_currentUserId.HasValue) return;
+
         var user = HttpContextAccessor.HttpContext?.User;
-        var rawUid = user?.FindFirst("uid")?.Value;
         var senderName = user?.Identity?.Name ?? "";
 
-        var senderId = 0;
-        if (!int.TryParse(rawUid, out senderId)) senderId = 0;
+        var senderId = _currentUserId.Value;
+        var userGroupIds = _userGroups?.Select(g => g.Id) ?? Enumerable.Empty<int>();
 
-        var ok = LobbyChatSvc.AddMessage(senderId, senderName, text);
+        // Check if user is in any groups - if not, show message
+        if (!userGroupIds.Any())
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("alert", "You must be a member of at least one group to send chat messages.");
+            }
+            catch
+            {
+                // If alert fails, silently fail
+            }
+            return;
+        }
+
+        // For now, send as public message (no group)
+        // TODO: Add group selection UI for lobby chat
+        var ok = LobbyChatSvc.AddMessageWithGroupCheck(senderId, senderName, text, userGroupIds, groupId: null);
         if (ok)
         {
             _chatOutText = "";
             _scrollPending = true;
             await InvokeAsync(StateHasChanged);
         }
+        else
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("alert", "Failed to send message. You may not have permission for this group.");
+            }
+            catch
+            {
+                // If alert fails, silently fail
+            }
+        }
     }
 
-    private async Task ClearChat()
+    private async Task ClearMyChat()
     {
+        if (!_currentUserId.HasValue) return;
+
         try
         {
-            var ok = await JS.InvokeAsync<bool>("confirm", "This clears for everyone. Continue?");
+            var ok = await JS.InvokeAsync<bool>("confirm", "This will clear chat only for you. Continue?");
             if (!ok) return;
         }
         catch
@@ -148,7 +222,7 @@
             return;
         }
 
-        LobbyChatSvc.Clear();
+        LobbyChatSvc.ClearChatForUser(_currentUserId.Value);
         _lastChatCount = 0;
         _chatInText = "";
         _scrollPending = false;

@@ -140,3 +140,10 @@ button:disabled::before {
     0% { background-position: 0% 50%; }
     100% { background-position: 100% 50%; }
 }
+
+.image-label {
+    margin-top: 5px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+}

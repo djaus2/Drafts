@@ -21,27 +21,5 @@ public sealed class AppDbContext : DbContext
         {
             b.HasIndex(x => x.Name).IsUnique();
         });
-
-        modelBuilder.Entity<Group>(b =>
-        {
-            b.HasIndex(x => x.Name).IsUnique();
-            b.HasOne(x => x.OwnerUser)
-             .WithMany()
-             .HasForeignKey(x => x.OwnerUserId)
-             .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<GroupMember>(b =>
-        {
-            b.HasIndex(x => new { x.GroupId, x.UserId }).IsUnique();
-            b.HasOne(x => x.Group)
-             .WithMany(x => x.Members)
-             .HasForeignKey(x => x.GroupId)
-             .OnDelete(DeleteBehavior.Cascade);
-            b.HasOne(x => x.User)
-             .WithMany()
-             .HasForeignKey(x => x.UserId)
-             .OnDelete(DeleteBehavior.Cascade);
-        });
     }
 }

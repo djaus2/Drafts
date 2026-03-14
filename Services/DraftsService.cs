@@ -69,7 +69,8 @@ namespace Drafts.Services
             bool AdminMode,
             GameState State,
             int Player1PieceCount,
-            int Player2PieceCount);
+            int Player2PieceCount,
+            int? GroupId);
 
         public List<GameListItem> ListGames()
         {
@@ -89,7 +90,8 @@ namespace Drafts.Services
                     g.AdminMode,
                     g.State,
                     g.Player1PieceCount,
-                    g.Player2PieceCount))
+                    g.Player2PieceCount,
+                    g.GroupId))
                 .ToList();
         }
 
@@ -140,7 +142,7 @@ namespace Drafts.Services
             _logger.LogInformation("CreateGame: {GameId}", id);
 
             var displayName = string.IsNullOrWhiteSpace(creatorName) ? $"User {userId}" : creatorName;
-            _lobbyChat.AddSystemMessage($"New game started by {displayName}: {id}");
+            _lobbyChat.AddSystemMessage($"New game started by {displayName}: {id}", groupId);
 
             OnGameUpdated(id);
             return id;
