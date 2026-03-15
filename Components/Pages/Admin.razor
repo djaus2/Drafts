@@ -24,13 +24,13 @@
 
 <div style="max-width:360px;margin-top:12px;">
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
-        <div>Admin is</div>
+        <div>Game Initiator is:</div>
         <label style="display:flex;align-items:center;gap:6px;">
-            <input type="radio" name="adminColor" value="1" checked="@(_creatorPlayerNumber == 1)" @onchange="(() => _creatorPlayerNumber = 1)" />
+            <input type="radio" name="creatorColor" value="1" checked="@(_creatorPlayerNumber == 1)" @onchange="(() => _creatorPlayerNumber = 1)" />
             Black
         </label>
         <label style="display:flex;align-items:center;gap:6px;">
-            <input type="radio" name="adminColor" value="2" checked="@(_creatorPlayerNumber == 2)" @onchange="(() => _creatorPlayerNumber = 2)" />
+            <input type="radio" name="creatorColor" value="2" checked="@(_creatorPlayerNumber == 2)" @onchange="(() => _creatorPlayerNumber = 2)" />
             White
         </label>
     </div>
@@ -58,6 +58,11 @@
             Multi-jump grace period (seconds)
             <input type="number" min="0" step="0.5" @bind="_multiJumpGraceSeconds" inputmode="decimal" />
             <i><b>Nb:</b> 0.5s steps; rules default is 1.5s</i><br />
+        </label>
+        <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" @bind="_gameInitiatorGoesFirst" />
+            Game Initiator goes first
+            <br />
         </label>
         <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
@@ -144,6 +149,7 @@ else
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
     private double _multiJumpGraceSeconds = 1.5;
+    private bool _gameInitiatorGoesFirst = true;
     private string _settingsMessage = "";
 
     private sealed record ColorOption(string Label, string Value);
@@ -185,6 +191,7 @@ else
         _lastMoveHighlightColor = await Settings.GetLastMoveHighlightColorAsync();
         _entrapmentMode = await Settings.GetEntrapmentModeAsync();
         _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
+        _gameInitiatorGoesFirst = await Settings.GetGameInitiatorGoesFirstAsync();
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
     }
@@ -219,7 +226,8 @@ else
         var ok3 = await Settings.UpdateLastMoveHighlightColorAsync(_lastMoveHighlightColor);
         var ok4 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
         var ok5 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
-        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5) ? "Saved." : "Invalid value.";
+        var ok6 = await Settings.UpdateGameInitiatorGoesFirstAsync(_gameInitiatorGoesFirst);
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6) ? "Saved." : "Invalid value.";
     }
 
     private static string FormatAge(TimeSpan ts)

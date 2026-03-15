@@ -10,10 +10,29 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject DraftsService GameService
+@inject SettingsService Settings
 
 <PageTitleHeading Title="Player" HeadingLevel="2" />
 
 <p>You are logged in as <b>@(HttpContextAccessor.HttpContext?.User?.Identity?.Name)</b>.</p>
+
+<h4>Member of Groups:</h4>
+
+@if (_userGroups?.Any() == true)
+{
+    <div style="max-width:360px;font-size:14px;margin-bottom:12px;">
+        @foreach (var g in _userGroups)
+        {
+            <div style="padding:4px 0;">• @g.Name</div>
+        }
+    </div>
+}
+else
+{
+    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-bottom:12px;">
+        You are not a member of any groups.
+    </div>
+}
 
 <h4>Voice</h4>
 
@@ -101,6 +120,19 @@ else
         You are not a member of any groups. Games will be public.
     </div>
 }
+
+<h4>Game Settings</h4>
+
+<div style="max-width:360px;margin-bottom:12px;">
+    <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" @bind="_playFirst" />
+        I play first
+        <br />
+    </label>
+    <div style="font-size:12px;opacity:0.85;">
+        Determines who plays first when you start a game
+    </div>
+</div>
 
 <div style="max-width:360px;margin-top:12px;">
     <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
@@ -333,6 +365,9 @@ else
     private int _selectedGroupId = 0;
     private int? _cachedUserId = null;
 
+    // Game settings
+    private bool _playFirst = true;
+
     private Dictionary<int, string> _userNames = new();
 
     private List<DraftsService.GameListItem> _joinableGames = new();
@@ -374,6 +409,9 @@ else
             {
                 _userGroups = await Auth.GetUserGroupsAsync(_cachedUserId.Value);
             }
+
+            // Load game initiator setting
+            _playFirst = await Settings.GetGameInitiatorGoesFirstAsync();
 
             await InvokeAsync(StateHasChanged);
         });
@@ -985,7 +1023,8 @@ else
     private void StartNewGame()
     {
         var groupId = _selectedGroupId > 0 ? _selectedGroupId : (int?)null;
-        Nav.NavigateTo($"/drafts?groupId={groupId}");
+        var creatorPlayerNumber = _playFirst ? 1 : 2;
+        Nav.NavigateTo($"/drafts?groupId={groupId}&creator={creatorPlayerNumber}");
     }
 
     private void OnJoinGame()

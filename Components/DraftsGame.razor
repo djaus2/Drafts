@@ -212,6 +212,13 @@ else
         {
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
                 <button class="game-btn" @onclick="CancelOrExitGame">@CancelOrExitButtonText</button>
+                <button class="game-btn" @onclick="ShowConcedeConfirm" style="background:#ff6b6b;color:white;">Concede</button>
+            </div>
+        }
+        @if (_game is not null && _game.HadSecondPlayerConnected && _game.CreatedByUserId != _currentUserId)
+        {
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                <button class="game-btn" @onclick="ShowConcedeConfirm" style="background:#ff6b6b;color:white;">Concede</button>
             </div>
         }
         @if (_game is not null && _game.HadSecondPlayerConnected)
@@ -382,6 +389,20 @@ else
     </div>
 }
 
+@if (_showConcedeConfirm)
+{
+    <div class="gameover-overlay" @onclick="() => _showConcedeConfirm = false">
+        <div class="gameover-card" @onclick:stopPropagation="true">
+            <div class="gameover-title">Concede game?</div>
+            <div class="gameover-sub">Are you sure you want to concede? You will lose and the other player will win.</div>
+            <div class="gameover-actions">
+                <button @onclick="() => _showConcedeConfirm = false">No</button>
+                <button class="game-btn" @onclick="ConfirmConcede" style="background:#ff6b6b;color:white;">Yes, Concede</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private string? _gameId;
     private string _joinId = "";
@@ -441,6 +462,7 @@ else
 
     private bool _gameClosedNotified;
     private bool _showCancelConfirm = false;
+    private bool _showConcedeConfirm = false;
     private int? _groupId;
 
     private DraftsService.GameState? _lastGameState;
@@ -1011,6 +1033,30 @@ else
     {
         _showCancelConfirm = false;
         await CancelGame();
+    }
+
+    private void ShowConcedeConfirm()
+    {
+        _showConcedeConfirm = true;
+    }
+
+    private async Task ConfirmConcede()
+    {
+        _showConcedeConfirm = false;
+        if (string.IsNullOrWhiteSpace(_gameId) || _currentUserId <= 0) return;
+        
+        // Determine the winner (the other player)
+        var winnerPlayer = _playerNumber == 1 ? 2 : 1;
+        
+        // Set the game as finished with the other player as winner
+        var (ok, msg) = GameService.SetGameWinner(_gameId, winnerPlayer, _currentUserId, _currentUserName);
+        
+        if (!ok && !string.IsNullOrWhiteSpace(msg))
+        {
+            _message = msg;
+        }
+        
+        await InvokeAsync(StateHasChanged);
     }
 
     private string CancelOrExitButtonText

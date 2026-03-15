@@ -1165,6 +1165,35 @@ namespace Drafts.Services
             OnGameUpdated(gameId);
             return (true, null);
         }
+
+        public (bool ok, string? msg) SetGameWinner(string gameId, int winnerPlayer, int userId, string userName)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return (false, "No game");
+            if (userId <= 0) return (false, "Invalid user");
+            if (winnerPlayer != 1 && winnerPlayer != 2) return (false, "Invalid winner player");
+
+            var game = GetGame(gameId);
+            if (game is null) return (false, "Game not found");
+
+            lock (game)
+            {
+                if (game.State == GameState.Finished || game.State == GameState.Abandoned)
+                {
+                    return (false, $"Game is {game.State}");
+                }
+
+                // Add concession message to chat
+                var concessionText = $"{userName} conceded. Player {winnerPlayer} wins!";
+                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, userId, "System", concessionText));
+
+                // Mark the game as finished with the specified winner
+                MarkFinishedWithWinner(game, winnerPlayer);
+                game.Touch();
+            }
+
+            OnGameUpdated(gameId);
+            return (true, null);
+        }
     }
 
     public class DraftsGame

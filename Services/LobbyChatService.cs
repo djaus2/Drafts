@@ -31,7 +31,13 @@ public sealed class LobbyChatService
             if (userGroupIds != null)
             {
                 var groupIds = userGroupIds.ToList();
-                messages = messages.Where(m => !m.GroupId.HasValue || groupIds.Contains(m.GroupId.Value)).ToList();
+                // Only show messages that are:
+                // 1. Public messages (GroupId = null) from admins OR
+                // 2. Messages from groups the user is actually a member of
+                messages = messages.Where(m => 
+                    (!m.GroupId.HasValue && m.SenderName.StartsWith("[ADMIN]")) || 
+                    (m.GroupId.HasValue && groupIds.Contains(m.GroupId.Value))
+                ).ToList();
             }
             
             // Filter out messages deleted by this user
@@ -88,6 +94,47 @@ public sealed class LobbyChatService
         {
             var messageIndex = _messages.Count;
             _messages.Add(new ChatMessage(DateTime.UtcNow, senderUserId, senderName ?? string.Empty, text, groupId, messageIndex));
+            TrimIfNeeded();
+        }
+
+        ChatUpdated?.Invoke();
+        return true;
+    }
+
+    public bool AddAdminBroadcast(int senderUserId, string senderName, string text)
+    {
+        if (senderUserId < 0) return false;
+
+        text = (text ?? string.Empty).Replace("\r\n", "\n").Trim();
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        lock (_lock)
+        {
+            var messageIndex = _messages.Count;
+            // Admin broadcasts use groupId = null to make them visible to all users with group access
+            _messages.Add(new ChatMessage(DateTime.UtcNow, senderUserId, $"[ADMIN] {senderName ?? string.Empty}", text, null, messageIndex));
+            TrimIfNeeded();
+        }
+
+        ChatUpdated?.Invoke();
+        return true;
+    }
+
+    public bool AddAdminBroadcastWithGroupCheck(int senderUserId, string senderName, string text, IEnumerable<int> userGroupIds, bool isAdmin)
+    {
+        if (senderUserId < 0) return false;
+
+        // Only admins can broadcast
+        if (!isAdmin) return false;
+
+        text = (text ?? string.Empty).Replace("\r\n", "\n").Trim();
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        lock (_lock)
+        {
+            var messageIndex = _messages.Count;
+            // Admin broadcasts use groupId = null to make them visible to all users with group access
+            _messages.Add(new ChatMessage(DateTime.UtcNow, senderUserId, $"[ADMIN] {senderName ?? string.Empty}", text, null, messageIndex));
             TrimIfNeeded();
         }
 

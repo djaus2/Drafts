@@ -11,13 +11,31 @@
     <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
         <span>Lobby Chat</span>
         <button type="button" @onclick="ClearMyChat" title="Clear chat only for you">Clear My Chat</button>
+        @if (_isAdmin)
+        {
+            <button type="button" @onclick="ToggleBroadcastMode" style="background:#ff6b6b;color:white;border:none;padding:2px 8px;border-radius:4px;font-size:12px;">
+                @(_broadcastMode ? "Normal Chat" : "Broadcast")
+            </button>
+        }
     </div>
     
-    @if (_userGroups?.Any() == true)
+    @if (!_dataLoaded)
+    {
+        <div style="padding:20px;text-align:center;color:#666;border:1px solid #ddd;background:#f9f9f9;">
+            <div style="font-weight:bold;margin-bottom:8px;">Loading chat...</div>
+        </div>
+    }
+    else if (_userGroups?.Any() == true || _isAdmin)
     {
         <textarea @ref="_chatInRef" rows="6" style="width:100%;resize:none;" readonly>@_chatInText</textarea>
-        <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;">Send</div>
-        <textarea @ref="_chatOutRef" rows="3" style="width:100%;resize:none;" placeholder="Type message and press Enter"
+        <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
+            <span>@(_broadcastMode ? "Broadcast to All" : "Send")</span>
+            @if (_broadcastMode && _isAdmin)
+            {
+                <span style="font-size:12px;color:#ff6b6b;font-weight:normal;">Admin Mode</span>
+            }
+        </div>
+        <textarea @ref="_chatOutRef" rows="3" style="width:100%;resize:none;" placeholder="@(_broadcastMode ? "Broadcast message to all logged-in players..." : "Type message and press Enter")"
                   @bind-value="_chatOutText" @bind-value:event="oninput"
                   ></textarea>
     }
@@ -71,6 +89,9 @@
     private DotNetObjectReference<LobbyChat>? _dotNetRef;
     private List<Drafts.Data.Group>? _userGroups;
     private int? _currentUserId;
+    private bool _isAdmin;
+    private bool _broadcastMode;
+    private bool _dataLoaded = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -98,13 +119,19 @@
         _chatOutText = "";
         _lastChatCount = 0;
         _scrollPending = false;
+        _dataLoaded = false;
         
-        // Get current user ID
+        // Get current user ID and admin status
         var user = HttpContextAccessor.HttpContext?.User;
         var rawUid = user?.FindFirst("uid")?.Value;
+        _isAdmin = user?.IsInRole("Admin") ?? false;
+        
         if (int.TryParse(rawUid, out var userId))
         {
             _currentUserId = userId;
+            
+            // Clear user's personal chat view to ensure fresh start on login
+            LobbyChatSvc.ClearChatForUser(userId);
             
             // Load user groups
             try
@@ -116,6 +143,12 @@
                 _userGroups = new List<Drafts.Data.Group>();
             }
         }
+        
+        _dataLoaded = true;
+        
+        // Refresh chat after data is loaded to apply proper filtering
+        RefreshChat();
+        await InvokeAsync(StateHasChanged);
     }
 
     private void RefreshChat()
@@ -171,6 +204,30 @@
         var senderId = _currentUserId.Value;
         var userGroupIds = _userGroups?.Select(g => g.Id) ?? Enumerable.Empty<int>();
 
+        // Handle admin broadcast
+        if (_broadcastMode && _isAdmin)
+        {
+            var broadcastOk = LobbyChatSvc.AddAdminBroadcastWithGroupCheck(senderId, senderName, text, userGroupIds, _isAdmin);
+            if (broadcastOk)
+            {
+                _chatOutText = "";
+                _scrollPending = true;
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("alert", "Failed to send broadcast. Admin access required.");
+                }
+                catch
+                {
+                    // If alert fails, silently fail
+                }
+            }
+            return;
+        }
+
         // Check if user is in any groups - if not, show message
         if (!userGroupIds.Any())
         {
@@ -185,9 +242,16 @@
             return;
         }
 
-        // For now, send as public message (no group)
-        // TODO: Add group selection UI for lobby chat
-        var ok = LobbyChatSvc.AddMessageWithGroupCheck(senderId, senderName, text, userGroupIds, groupId: null);
+        // Send message to all groups the user is a member of
+        // This creates separate messages for each group to ensure proper filtering
+        var messageSent = false;
+        foreach (var groupId in userGroupIds)
+        {
+            var success = LobbyChatSvc.AddMessageWithGroupCheck(senderId, senderName, text, userGroupIds, groupId);
+            if (success) messageSent = true;
+        }
+        
+        var ok = messageSent;
         if (ok)
         {
             _chatOutText = "";
@@ -205,6 +269,13 @@
                 // If alert fails, silently fail
             }
         }
+    }
+
+    private void ToggleBroadcastMode()
+    {
+        _broadcastMode = !_broadcastMode;
+        _chatOutText = ""; // Clear input when switching modes
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async Task ClearMyChat()

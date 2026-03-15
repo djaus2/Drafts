@@ -12,6 +12,7 @@ public sealed class SettingsService
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
     private double _multiJumpGraceSeconds = 1.5;
+    private bool _gameInitiatorGoesFirst = true;
     private bool _loaded;
 
     public SettingsService(IServiceScopeFactory scopeFactory)
@@ -74,6 +75,17 @@ public sealed class SettingsService
         }
     }
 
+    public bool GameInitiatorGoesFirst
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _gameInitiatorGoesFirst;
+            }
+        }
+    }
+
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -91,6 +103,7 @@ public sealed class SettingsService
                     : s.LastMoveHighlightColor;
                 _entrapmentMode = s.EntrapmentMode;
                 _multiJumpGraceSeconds = s.MultiJumpGraceSeconds;
+                _gameInitiatorGoesFirst = s.GameInitiatorGoesFirst;
                 _loaded = true;
             }
         }
@@ -103,6 +116,7 @@ public sealed class SettingsService
                 _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
                 _entrapmentMode = true;
                 _multiJumpGraceSeconds = 1.5;
+                _gameInitiatorGoesFirst = true;
                 _loaded = true;
             }
         }
@@ -200,6 +214,25 @@ public sealed class SettingsService
         lock (_lock)
         {
             return _multiJumpGraceSeconds;
+        }
+    }
+
+    public async Task<bool> GetGameInitiatorGoesFirstAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _gameInitiatorGoesFirst;
         }
     }
 
@@ -370,6 +403,42 @@ public sealed class SettingsService
         lock (_lock)
         {
             _multiJumpGraceSeconds = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateGameInitiatorGoesFirstAsync(bool newValue, CancellationToken cancellationToken = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings
+            {
+                Id = 1,
+                MaxTimeoutMins = 30,
+                ReaperPeriodSeconds = 30,
+                LastMoveHighlightColor = "rgba(255,0,0,0.85)",
+                EntrapmentMode = true,
+                MultiJumpGraceSeconds = 1.5,
+                GameInitiatorGoesFirst = newValue
+            };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.GameInitiatorGoesFirst = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _gameInitiatorGoesFirst = newValue;
             _loaded = true;
         }
 

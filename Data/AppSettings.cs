@@ -20,4 +20,7 @@ public sealed class AppSettings
 
     [Required]
     public double MultiJumpGraceSeconds { get; set; } = 1.5;
+
+    [Required]
+    public bool GameInitiatorGoesFirst { get; set; } = true;
 }

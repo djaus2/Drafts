@@ -1,7 +1,7 @@
 # Group Chat Enhancements
 
 ## Overview
-Implementation of group-specific lobby chat filtering, personal chat deletion, and group-only access control, enhancing the chat experience with better privacy, user control, and exclusive group communication.
+Implementation of group-specific lobby chat filtering, personal chat deletion, group-only access control, and admin broadcast functionality, enhancing the chat experience with better privacy, user control, exclusive group communication, and administrative messaging capabilities.
 
 ## The Specification:
 With the apps Groups can we now: 
@@ -13,6 +13,7 @@ With the apps Groups can we now:
   - It was decided to not allow non-group users to send messages at all.  as it would create confusion and potential privacy issues. 
   - Only users who are members of at least one group can send messages, and those messages will only be visible to members of the relevant groups (or public if no group specified).
 - Also Lobby Chat Textareas to be cleared when logging in
+- Additional - Allow Admin to broadcast to Lobby Chat to all players logged in
 
 ## Phase 1: Enhanced LobbyChatService
 
@@ -39,9 +40,12 @@ With the apps Groups can we now:
 - **Updated `AddMessage()`** - Accepts optional `groupId` parameter
 - **Updated `AddSystemMessage()`** - Accepts optional `groupId` parameter
 - **Added `AddMessageWithGroupCheck()`** - Validates group membership before sending
+- **Added `AddAdminBroadcast()`** - Admin broadcast to all logged-in players
+- **Added `AddAdminBroadcastWithGroupCheck()`** - Secure admin broadcast with validation
 - **Message indexing** - Each message gets unique index for deletion tracking
 - **Thread-safe operations** - All operations maintain thread safety
 - **Group validation** - Prevents non-group users from sending messages
+- **Admin authorization** - Only admins can broadcast messages
 
 ## Phase 2: LobbyChat Component Updates
 
@@ -51,33 +55,50 @@ With the apps Groups can we now:
 - **Added user data fields:**
   - `_userGroups` - User's group memberships
   - `_currentUserId` - Current authenticated user ID
-- **Updated `OnInitializedAsync()`** - Loads user groups and ID
+  - `_isAdmin` - Admin role status
+  - `_broadcastMode` - Admin broadcast toggle state
+- **Updated `OnInitializedAsync()`** - Loads user groups, ID, and admin status
 
-### 2.2 Group-Only UI Controls
-- **Conditional chat interface** - Shows chat only for users with groups
+### 2.2 Admin Broadcast UI
+- **Broadcast toggle button** - Only visible to admin users
+- **Mode indicator** - Shows current broadcast/normal mode
+- **Dynamic placeholders** - Context-aware input placeholders
+- **Admin mode styling** - Visual distinction for broadcast mode
+- **Chat access for admins** - Admins can chat even without group membership
+
+### 2.3 Group-Only UI Controls
+- **Conditional chat interface** - Shows chat for users with groups OR admins
 - **Access denied message** - Clear UI for users without group access
 - **Helpful guidance** - Directs users to contact admin for group membership
 - **Visual distinction** - Styled access requirement message
 
-### 2.3 Enhanced Chat Filtering
+### 2.4 Enhanced Chat Filtering
 - **Updated `RefreshChat()` method** - Applies group and personal deletion filters
 - **Group membership filtering** - Only shows messages from user's groups + public
 - **Personal deletion filtering** - Hides messages deleted by current user
 - **Real-time updates** - Chat updates respect user's filters
 
-### 2.4 Personal Chat Controls
+### 2.5 Personal Chat Controls
 - **Updated "Clear" button** - Now "Clear My Chat" (personal only)
 - **Confirmation dialog** - Confirms personal chat deletion
 - **Updated `ClearMyChat()` method** - Uses `ClearChatForUser()`
 - **User-friendly messaging** - Clear indication of personal-only action
 
-### 2.5 Secure Message Sending
-- **Updated `SendChat()` method** - Uses `AddMessageWithGroupCheck()` for validation
+### 2.6 Secure Message Sending
+- **Updated `SendChat()` method** - Handles both normal and broadcast modes
 - **Group membership validation** - Prevents non-group users from sending
+- **Admin broadcast routing** - Uses `AddAdminBroadcastWithGroupCheck()` for broadcasts
 - **Error handling** - Clear alerts for permission issues
 - **Access requirement messaging** - Explains group membership requirement
 
-### 2.6 Login Chat Clearing
+### 2.7 Admin Broadcast Functionality
+- **Broadcast mode toggle** - `ToggleBroadcastMode()` method
+- **Admin authorization check** - Validates admin role before broadcasting
+- **Message formatting** - Admin messages prefixed with "[ADMIN]"
+- **Mode switching** - Clears input when toggling between modes
+- **Universal visibility** - Broadcasts visible to all users with group access
+
+### 2.8 Login Chat Clearing
 - **Automatic clearing** - Chat textareas cleared on user data load
 - **Login refresh** - Clean slate on every login/session
 - **Privacy protection** - No residual chat text between sessions
@@ -135,6 +156,29 @@ public bool AddMessageWithGroupCheck(int senderUserId, string senderName, string
 }
 ```
 
+### 3. Admin Broadcast Implementation
+```csharp
+public bool AddAdminBroadcastWithGroupCheck(int senderUserId, string senderName, string text, IEnumerable<int> userGroupIds, bool isAdmin)
+{
+    // Only admins can broadcast
+    if (!isAdmin) return false;
+
+    text = (text ?? string.Empty).Replace("\r\n", "\n").Trim();
+    if (string.IsNullOrWhiteSpace(text)) return false;
+
+    lock (_lock)
+    {
+        var messageIndex = _messages.Count;
+        // Admin broadcasts use groupId = null to make them visible to all users with group access
+        _messages.Add(new ChatMessage(DateTime.UtcNow, senderUserId, $"[ADMIN] {senderName ?? string.Empty}", text, null, messageIndex));
+        TrimIfNeeded();
+    }
+
+    ChatUpdated?.Invoke();
+    return true;
+}
+```
+
 ### 3. Personal Deletion Filtering
 ```csharp
 // Personal deletion filtering
@@ -157,11 +201,33 @@ private async Task LoadUserData()
     _lastChatCount = 0;
     _scrollPending = false;
     
+    // Get current user ID and admin status
+    var user = HttpContextAccessor.HttpContext?.User;
+    var rawUid = user?.FindFirst("uid")?.Value;
+    _isAdmin = user?.IsInRole("Admin") ?? false;
+    
     // ... load user groups and ID
 }
 ```
 
-### 5. Message Index Management
+### 5. Admin Broadcast UI Logic
+```csharp
+private void ToggleBroadcastMode()
+{
+    _broadcastMode = !_broadcastMode;
+    _chatOutText = ""; // Clear input when switching modes
+    _ = InvokeAsync(StateHasChanged);
+}
+
+// Handle admin broadcast in SendChat()
+if (_broadcastMode && _isAdmin)
+{
+    var broadcastOk = LobbyChatSvc.AddAdminBroadcastWithGroupCheck(senderId, senderName, text, userGroupIds, _isAdmin);
+    // ... handle broadcast result
+}
+```
+
+### 6. Message Index Management
 ```csharp
 // Update indexes after trimming
 for (int i = 0; i < _messages.Count; i++)
@@ -174,29 +240,6 @@ for (int i = 0; i < _messages.Count; i++)
 foreach (var deletedSet in _userDeletedMessages.Values)
 {
     deletedSet.RemoveWhere(index => index >= _messages.Count);
-}
-```
-
-### 6. User Data Loading
-```csharp
-private async Task LoadUserData()
-{
-    // Clear chat display when loading user data (login/refresh)
-    _chatInText = "";
-    _chatOutText = "";
-    _lastChatCount = 0;
-    _scrollPending = false;
-    
-    // Get current user ID
-    var user = HttpContextAccessor.HttpContext?.User;
-    var rawUid = user?.FindFirst("uid")?.Value;
-    if (int.TryParse(rawUid, out var userId))
-    {
-        _currentUserId = userId;
-        
-        // Load user groups
-        _userGroups = await Auth.GetUserGroupsAsync(userId);
-    }
 }
 ```
 
@@ -225,6 +268,8 @@ No database changes required. All enhancements use in-memory storage:
 - `GetMessages(userId?, userGroupIds?)` - Enhanced filtering with group-only access
 - `AddMessage(senderUserId, senderName, text, groupId?)` - Group support
 - `AddMessageWithGroupCheck(senderUserId, senderName, text, userGroupIds, groupId?)` - Group validation
+- `AddAdminBroadcast(senderUserId, senderName, text)` - Admin broadcast to all
+- `AddAdminBroadcastWithGroupCheck(senderUserId, senderName, text, userGroupIds, isAdmin)` - Secure admin broadcast
 - `AddSystemMessage(text, groupId?)` - Group support
 - `DeleteMessageForUser(userId, messageIndex)` - Personal deletion
 - `ClearChatForUser(userId)` - Personal clear
@@ -242,8 +287,10 @@ No database changes required. All enhancements use in-memory storage:
 - Clear chat only affects individual user
 - Better privacy and control
 - Group-only access - users without groups cannot participate
+- Admin broadcast capability - admins can message all logged-in players
 - Clean chat interface on every login
 - Visual feedback for access requirements
+- Admin-only broadcast mode with visual indicators
 
 ## Usage Examples
 
@@ -262,6 +309,14 @@ No database changes required. All enhancements use in-memory storage:
 LobbyChatSvc.DeleteMessageForUser(userId, messageIndex);
 
 // Other users still see the message
+```
+
+### Admin Broadcast:
+```csharp
+// Admin broadcasts to all logged-in players
+LobbyChatSvc.AddAdminBroadcastWithGroupCheck(adminId, "AdminName", "Server maintenance in 5 minutes", userGroups, isAdmin: true);
+
+// All users with group access see: [ADMIN] AdminName: Server maintenance in 5 minutes
 ```
 
 ## Performance Considerations
@@ -306,6 +361,12 @@ LobbyChatSvc.DeleteMessageForUser(userId, messageIndex);
 - [ ] Alert messages show for permission violations
 - [ ] Chat textareas clear on login/session refresh
 - [ ] No residual chat text between user sessions
+- [ ] Admin broadcast toggle works correctly
+- [ ] Admin messages show [ADMIN] prefix
+- [ ] Broadcast mode indicator displays properly
+- [ ] Admin can chat even without group membership
+- [ ] Non-admin users cannot see broadcast toggle
+- [ ] Broadcast messages visible to all users with group access
 
 ## Future Enhancements
 
@@ -336,7 +397,7 @@ LobbyChatSvc.DeleteMessageForUser(userId, messageIndex);
 - **User inspection** - Verify user groups and ID loading
 - **Message tracking** - Log message creation and deletion operations
 
-**Status:** ✅ Complete implementation of group-specific lobby chat filtering, personal deletion, and group-only access control
+**Status:** ✅ Complete implementation of group-specific lobby chat filtering, personal deletion, group-only access control, and admin broadcast functionality
 
 ## Migration Notes
 
@@ -351,8 +412,10 @@ LobbyChatSvc.DeleteMessageForUser(userId, messageIndex);
 - **Group games** - Now have proper chat isolation
 - **User experience** - Enhanced privacy and control
 - **Non-group users** - No longer have chat access (breaking change)
+- **Admin functionality** - New broadcast capabilities for admins
 
 ### New Requirements:
-- **Group membership** - Required for chat participation
+- **Group membership** - Required for chat participation (except admins)
 - **Admin setup** - Users must be added to groups to chat
 - **User guidance** - Clear messaging for access requirements
+- **Admin training** - Admins need to understand broadcast functionality
