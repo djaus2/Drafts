@@ -1,6 +1,7 @@
 using Drafts.Components;
 using Drafts.Data;
 using Drafts.Services;
+using Drafts.Hubs;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
@@ -68,6 +69,9 @@ namespace Drafts
 
             builder.Services.AddSingleton<SettingsService>();
             builder.Services.AddHostedService<GameTimeoutReaper>();
+            
+            // Enhanced Voice Chat Services
+            builder.Services.AddSingleton<EnhancedVoiceChatService>();
 
             var app = builder.Build();
 
@@ -271,6 +275,9 @@ namespace Drafts
                     return Results.Redirect("/login?error=1", permanent: false);
                 }
             }).DisableAntiforgery();
+
+            // Map SignalR hubs
+            app.MapHub<VoiceChatHub>("/voiceChatHub");
 
             app.Run();
         }

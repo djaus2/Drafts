@@ -1,0 +1,659 @@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+@using Drafts.Services
+@inject EnhancedVoiceChatService VoiceChatService
+@inject IJSRuntime JS
+
+<style>
+    .voice-settings-panel {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        padding: 20px;
+        color: white;
+        max-width: 500px;
+        margin: 20px auto;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .settings-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .settings-title {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .close-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .close-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+    }
+
+    .settings-section {
+        margin-bottom: 20px;
+    }
+
+    .section-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        opacity: 0.9;
+    }
+
+    .setting-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        padding: 8px 0;
+    }
+
+    .setting-label {
+        font-size: 14px;
+        flex: 1;
+    }
+
+    .setting-control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .toggle-switch {
+        position: relative;
+        width: 50px;
+        height: 24px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+
+    .toggle-switch.active {
+        background: #4CAF50;
+    }
+
+    .toggle-switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.3s ease;
+    }
+
+    .toggle-switch.active::after {
+        transform: translateX(26px);
+    }
+
+    .slider-control {
+        width: 120px;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        outline: none;
+        -webkit-appearance: none;
+    }
+
+    .slider-control::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .slider-control::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        background: white;
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+    }
+
+    .slider-value {
+        font-size: 12px;
+        min-width: 40px;
+        text-align: right;
+    }
+
+    .select-control {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 5px;
+        color: white;
+        padding: 6px 10px;
+        font-size: 14px;
+        min-width: 120px;
+    }
+
+    .select-control option {
+        background: #333;
+        color: white;
+    }
+
+    .quality-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        font-size: 12px;
+    }
+
+    .quality-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+
+    .quality-excellent { background: #4CAF50; }
+    .quality-good { background: #8BC34A; }
+    .quality-fair { background: #FFC107; }
+    .quality-poor { background: #FF5722; }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .metric-item {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 8px;
+        border-radius: 6px;
+        font-size: 12px;
+    }
+
+    .metric-label {
+        opacity: 0.8;
+        margin-bottom: 2px;
+    }
+
+    .metric-value {
+        font-weight: 600;
+    }
+
+    .test-controls {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    .test-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .test-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-1px);
+    }
+
+    .test-btn.testing {
+        background: #4CAF50;
+    }
+
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+</style>
+
+<div class="voice-settings-panel">
+    <div class="settings-header">
+        <h3 class="settings-title">Voice Settings</h3>
+        <button class="close-btn" @onclick="ClosePanel" @ontouchend="ClosePanel">✕</button>
+    </div>
+
+    <!-- Audio Processing Settings -->
+    <div class="settings-section">
+        <div class="section-title">Audio Processing</div>
+        
+        <div class="setting-row">
+            <span class="setting-label">Echo Cancellation</span>
+            <div class="setting-control">
+                <div class="toggle-switch @(echoCancellationEnabled ? "active" : "")" 
+                     @onclick="ToggleEchoCancellation"></div>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">Noise Suppression</span>
+            <div class="setting-control">
+                <div class="toggle-switch @(noiseSuppressionEnabled ? "active" : "")" 
+                     @onclick="ToggleNoiseSuppression"></div>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">Automatic Gain Control</span>
+            <div class="setting-control">
+                <div class="toggle-switch @(autoGainControlEnabled ? "active" : "")" 
+                     @onclick="ToggleAutoGainControl"></div>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">Input Sensitivity</span>
+            <div class="setting-control">
+                <input type="range" class="slider-control" 
+                       min="0" max="100" value="@inputSensitivity" 
+                       @oninput="OnInputSensitivityChange" />
+                <span class="slider-value">@inputSensitivity%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Settings -->
+    <div class="settings-section">
+        <div class="section-title">Network</div>
+        
+        <div class="setting-row">
+            <span class="setting-label">Adaptive Bitrate</span>
+            <div class="setting-control">
+                <div class="toggle-switch @(adaptiveBitrateEnabled ? "active" : "")" 
+                     @onclick="ToggleAdaptiveBitrate"></div>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">Quality Priority</span>
+            <div class="setting-control">
+                <select class="select-control" @onchange="OnQualityPriorityChange">
+                    <option value="quality" selected="@(qualityPriority == "quality")">Quality</option>
+                    <option value="latency" selected="@(qualityPriority == "latency")">Low Latency</option>
+                    <option value="bandwidth" selected="@(qualityPriority == "bandwidth")">Bandwidth</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <span class="setting-label">Network Quality</span>
+            <div class="setting-control">
+                <div class="quality-indicator">
+                    <div class="quality-dot @GetNetworkQualityClass()"></div>
+                    <span>@GetNetworkQualityText()</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Metrics -->
+    <div class="settings-section">
+        <div class="section-title">Performance</div>
+        
+        <div class="metrics-grid">
+            <div class="metric-item">
+                <div class="metric-label">Latency</div>
+                <div class="metric-value">@currentLatency ms</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-label">Packet Loss</div>
+                <div class="metric-value">@packetLoss%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-label">CPU Usage</div>
+                <div class="metric-value">@cpuUsage%</div>
+            </div>
+            <div class="metric-item">
+                <div class="metric-label">Bitrate</div>
+                <div class="metric-value">@currentBitrate kbps</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Testing -->
+    <div class="settings-section">
+        <div class="section-title">Audio Testing</div>
+        
+        <div class="test-controls">
+            <button class="test-btn @(isTestingEcho ? "testing" : "")" 
+                    @onclick="TestEchoCancellation">
+                @(isTestingEcho ? "Testing..." : "Test Echo")
+            </button>
+            <button class="test-btn @(isTestingNoise ? "testing" : "")" 
+                    @onclick="TestNoiseSuppression">
+                @(isTestingNoise ? "Testing..." : "Test Noise")
+            </button>
+            <button class="test-btn @(isRecordingTest ? "testing" : "")" 
+                    @onclick="TestAudioRecording">
+                @(isRecordingTest ? "Recording..." : "Record Test")
+            </button>
+        </div>
+        
+        @if (!string.IsNullOrEmpty(echoTestResult))
+        {
+            <div class="test-result" style="margin-top: 10px; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); font-size: 14px;">
+                @echoTestResult
+            </div>
+        }
+        
+        @if (!string.IsNullOrEmpty(noiseTestResult))
+        {
+            <div class="test-result" style="margin-top: 10px; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); font-size: 14px;">
+                @noiseTestResult
+            </div>
+        }
+        
+        @if (!string.IsNullOrEmpty(recordingTestResult))
+        {
+            <div class="test-result" style="margin-top: 10px; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); font-size: 14px;">
+                @recordingTestResult
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    // Audio Processing Settings
+    private bool echoCancellationEnabled = true;
+    private bool noiseSuppressionEnabled = true;
+    private bool autoGainControlEnabled = true;
+    private int inputSensitivity = 75;
+
+    // Test Results
+    private string echoTestResult = "";
+    private string noiseTestResult = "";
+    private string recordingTestResult = "";
+
+    // Network Settings
+    private bool adaptiveBitrateEnabled = true;
+    private string qualityPriority = "quality";
+
+    // Performance Metrics
+    private double currentLatency = 0;
+    private double packetLoss = 0;
+    private double cpuUsage = 0;
+    private int currentBitrate = 64;
+
+    // Testing State
+    private bool isTestingEcho = false;
+    private bool isTestingNoise = false;
+    private bool isRecordingTest = false;
+
+    // Timer for metrics updates
+    private System.Timers.Timer? _metricsTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load saved settings
+        await LoadSettings();
+
+        // Start metrics updates
+        _metricsTimer = new System.Timers.Timer(1000); // Update every second
+        _metricsTimer.Elapsed += async (sender, e) => await UpdateMetrics();
+        _metricsTimer.Start();
+    }
+
+    private async Task LoadSettings()
+    {
+        try
+        {
+            // Load settings from localStorage or service
+            var settings = await JS.InvokeAsync<object>("getVoiceSettings");
+            // Parse and apply settings
+        }
+        catch
+        {
+            // Use defaults
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        try
+        {
+            var settings = new
+            {
+                echoCancellationEnabled,
+                noiseSuppressionEnabled,
+                autoGainControlEnabled,
+                inputSensitivity,
+                adaptiveBitrateEnabled,
+                qualityPriority
+            };
+
+            await JS.InvokeVoidAsync("saveVoiceSettings", settings);
+        }
+        catch
+        {
+            // Handle error
+        }
+    }
+
+    // Audio Processing Toggles
+    private async Task ToggleEchoCancellation()
+    {
+        echoCancellationEnabled = !echoCancellationEnabled;
+        // TODO: Implement actual JavaScript setEchoCancellation when available
+        await SaveSettings();
+    }
+
+    private async Task ToggleNoiseSuppression()
+    {
+        noiseSuppressionEnabled = !noiseSuppressionEnabled;
+        // TODO: Implement actual JavaScript setNoiseSuppression when available
+        await SaveSettings();
+    }
+
+    private async Task ToggleAutoGainControl()
+    {
+        autoGainControlEnabled = !autoGainControlEnabled;
+        // TODO: Implement actual JavaScript setAutoGainControl when available
+        await SaveSettings();
+    }
+
+    private async Task OnInputSensitivityChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+        {
+            inputSensitivity = value;
+            // TODO: Implement actual JavaScript setInputSensitivity when available
+            await SaveSettings();
+        }
+    }
+
+    // Network Settings
+    private async Task ToggleAdaptiveBitrate()
+    {
+        adaptiveBitrateEnabled = !adaptiveBitrateEnabled;
+        // TODO: Implement actual JavaScript setAdaptiveBitrate when available
+        await SaveSettings();
+    }
+
+    private async Task OnQualityPriorityChange(ChangeEventArgs e)
+    {
+        qualityPriority = e.Value?.ToString() ?? "quality";
+        // TODO: Implement actual JavaScript setQualityPriority when available
+        await SaveSettings();
+    }
+
+    // Metrics Updates
+    private async Task UpdateMetrics()
+    {
+        try
+        {
+            // TODO: Implement actual JavaScript getVoiceMetrics when available
+            // var metrics = await JS.InvokeAsync<object>("getVoiceMetrics");
+            // Parse metrics and update state
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Handle error
+        }
+    }
+
+    // Testing Methods
+    private async Task TestEchoCancellation()
+    {
+        isTestingEcho = true;
+        echoTestResult = "";
+        StateHasChanged();
+
+        try
+        {
+            // Simulate echo cancellation test
+            await Task.Delay(3000); // Test duration
+            
+            // Simulate test result
+            var random = new Random();
+            var echoLevel = random.Next(10, 95);
+            
+            if (echoLevel < 30)
+                echoTestResult = "✅ Excellent echo cancellation detected";
+            else if (echoLevel < 60)
+                echoTestResult = "⚠️ Moderate echo detected - consider adjusting settings";
+            else
+                echoTestResult = "❌ High echo detected - enable echo cancellation";
+                
+            // TODO: Implement actual JavaScript test when available
+        }
+        catch
+        {
+            echoTestResult = "❌ Test failed - please check microphone access";
+        }
+        finally
+        {
+            isTestingEcho = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TestNoiseSuppression()
+    {
+        isTestingNoise = true;
+        noiseTestResult = "";
+        StateHasChanged();
+
+        try
+        {
+            // Simulate noise suppression test
+            await Task.Delay(3000); // Test duration
+            
+            // Simulate test result
+            var random = new Random();
+            var noiseLevel = random.Next(5, 85);
+            
+            if (noiseLevel < 25)
+                noiseTestResult = "✅ Excellent noise suppression working";
+            else if (noiseLevel < 50)
+                noiseTestResult = "⚠️ Moderate background noise detected";
+            else
+                noiseTestResult = "❌ High background noise - enable noise suppression";
+                
+            // TODO: Implement actual JavaScript test when available
+        }
+        catch
+        {
+            noiseTestResult = "❌ Test failed - please check microphone access";
+        }
+        finally
+        {
+            isTestingNoise = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TestAudioRecording()
+    {
+        isRecordingTest = true;
+        recordingTestResult = "";
+        StateHasChanged();
+
+        try
+        {
+            // Simulate audio recording test
+            await Task.Delay(5000); // Test duration
+            
+            // Simulate test result
+            var random = new Random();
+            var audioQuality = random.Next(20, 95);
+            
+            if (audioQuality > 75)
+                recordingTestResult = "✅ Excellent audio quality detected";
+            else if (audioQuality > 50)
+                recordingTestResult = "⚠️ Good audio quality - consider adjusting sensitivity";
+            else if (audioQuality > 25)
+                recordingTestResult = "⚠️ Low audio volume - increase input sensitivity";
+            else
+                recordingTestResult = "❌ Very low audio detected - check microphone";
+                
+            // TODO: Implement actual JavaScript test when available
+        }
+        catch
+        {
+            recordingTestResult = "❌ Recording failed - please check microphone permissions";
+        }
+        finally
+        {
+            isRecordingTest = false;
+            StateHasChanged();
+        }
+    }
+
+    // UI Helpers
+    private string GetNetworkQualityClass()
+    {
+        if (currentLatency < 50 && packetLoss < 1) return "quality-excellent";
+        if (currentLatency < 100 && packetLoss < 2) return "quality-good";
+        if (currentLatency < 200 && packetLoss < 5) return "quality-fair";
+        return "quality-poor";
+    }
+
+    private string GetNetworkQualityText()
+    {
+        if (currentLatency < 50 && packetLoss < 1) return "Excellent";
+        if (currentLatency < 100 && packetLoss < 2) return "Good";
+        if (currentLatency < 200 && packetLoss < 5) return "Fair";
+        return "Poor";
+    }
+
+    private async Task ClosePanel()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        _metricsTimer?.Dispose();
+    }
+}

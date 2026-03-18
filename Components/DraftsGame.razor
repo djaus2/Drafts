@@ -336,7 +336,7 @@ else
                         @onpointerup:preventDefault="true">
                     @TalkButtonText
                 </button>
-                <div style="display:flex;align-items:center;gap:8px;">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
                     {
                         <span style="font-size:14px;color:#666;">(muted by @_game.VoiceMutedByUserName)</span>
@@ -355,6 +355,12 @@ else
                             <span style="font-size:18px;">🔊</span>
                             <span>Mute</span>
                         }
+                    </button>
+                    <button class="game-btn" @onclick="ToggleVoiceSettings"
+                            style="background:@(_showVoiceSettings ? "#e6ccff" : "#f3f3f3");"
+                            title="Voice Settings">
+                        <span style="font-size:18px;">⚙️</span>
+                        <span>Settings</span>
                     </button>
                 </div>
             </div>
@@ -399,6 +405,15 @@ else
                 <button @onclick="() => _showConcedeConfirm = false">No</button>
                 <button class="game-btn" @onclick="ConfirmConcede" style="background:#ff6b6b;color:white;">Yes, Concede</button>
             </div>
+        </div>
+    </div>
+}
+
+@if (_showVoiceSettings)
+{
+    <div class="gameover-overlay" @onclick="() => _showVoiceSettings = false">
+        <div style="position:relative;max-width:90vw;max-height:90vh;overflow:auto;" @onclick:stopPropagation="true">
+            <VoiceSettingsPanel OnClose="() => _showVoiceSettings = false" />
         </div>
     </div>
 }
@@ -463,6 +478,7 @@ else
     private bool _gameClosedNotified;
     private bool _showCancelConfirm = false;
     private bool _showConcedeConfirm = false;
+    private bool _showVoiceSettings = false;
     private int? _groupId;
 
     private DraftsService.GameState? _lastGameState;
@@ -624,6 +640,11 @@ else
     private void ToggleHideVoiceInChat()
     {
         _hideVoiceInChat = !_hideVoiceInChat;
+    }
+
+    private void ToggleVoiceSettings()
+    {
+        _showVoiceSettings = !_showVoiceSettings;
     }
 
     protected override async Task OnInitializedAsync()
