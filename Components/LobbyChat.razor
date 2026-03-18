@@ -8,7 +8,7 @@
 @inject AuthService Auth
 
 <div style="margin-top:18px;max-width:520px;">
-    <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
+    <div class="rainbow-heading" style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
         <span>Lobby Chat</span>
         <button type="button" @onclick="ClearMyChat" title="Clear chat only for you">Clear My Chat</button>
         @if (_isAdmin)
@@ -28,7 +28,7 @@
     else if (_userGroups?.Any() == true || _isAdmin)
     {
         <textarea @ref="_chatInRef" rows="6" style="width:100%;resize:none;" readonly>@_chatInText</textarea>
-        <div style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
+        <div class="rainbow-heading" style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
             <span>@(_broadcastMode ? "Broadcast to All" : "Send")</span>
             @if (_broadcastMode && _isAdmin)
             {

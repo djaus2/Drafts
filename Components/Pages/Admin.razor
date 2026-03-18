@@ -277,6 +277,16 @@ else
     {
         var user = HttpContextAccessor.HttpContext?.User;
         var raw = user?.FindFirst("uid")?.Value;
-        return int.TryParse(raw, out var id) ? id : null;
+        if (int.TryParse(raw, out var id)) return id;
+        
+        // Fallback: lookup by username if uid claim not found
+        var name = user?.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var appUser = Auth.GetUserByNameAsync(name).GetAwaiter().GetResult();
+            if (appUser != null) return appUser.Id;
+        }
+        
+        return null;
     }
 }

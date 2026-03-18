@@ -1,6 +1,8 @@
 using Drafts.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Drafts.Data;
 
@@ -30,18 +32,8 @@ public static class DbSeeder
             });
         }
 
-        var admin = await db.Users.SingleOrDefaultAsync(x => x.Name == "Admin");
-        if (admin is null)
-        {
-            var (salt, hash) = PinHasher.HashPin("1371");
-            db.Users.Add(new AppUser
-            {
-                Name = "Admin",
-                Roles = "Admin,Player",
-                PinSalt = salt,
-                PinHash = hash
-            });
-        }
+        // Create users from auth.json
+        await CreateUsersFromAuthJson(db);
 
         //var penny = await db.Users.SingleOrDefaultAsync(x => x.Name == "Penny");
 
@@ -76,6 +68,109 @@ public static class DbSeeder
         }
 
         await db.SaveChangesAsync();
+
+        // Create groups and memberships from auth.json after users are saved
+        await CreateGroupsAndMembershipsFromAuthJson(db);
+
+        await db.SaveChangesAsync();
+        }
+    }
+
+    private static async Task CreateUsersFromAuthJson(AppDbContext db)
+    {
+        var authJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "auth.json");
+        
+        if (!File.Exists(authJsonPath))
+        {
+            Console.WriteLine("Warning: auth.json not found, skipping user creation from JSON");
+            return;
+        }
+
+        var json = await File.ReadAllTextAsync(authJsonPath);
+        var authExport = JsonSerializer.Deserialize<AuthExport>(json);
+        
+        if (authExport?.Users == null)
+        {
+            Console.WriteLine("Warning: No users found in auth.json");
+            return;
+        }
+
+        foreach (var authUser in authExport.Users)
+        {
+            var existingUser = await db.Users.SingleOrDefaultAsync(x => x.Name == authUser.Name);
+            if (existingUser is null)
+            {
+                var (salt, hash) = PinHasher.HashPin(authUser.Pin);
+                db.Users.Add(new AppUser
+                {
+                    Name = authUser.Name,
+                    Roles = authUser.Roles,
+                    PinSalt = salt,
+                    PinHash = hash
+                });
+            }
+        }
+    }
+
+    private static async Task CreateGroupsAndMembershipsFromAuthJson(AppDbContext db)
+    {
+        var authJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "auth.json");
+        
+        if (!File.Exists(authJsonPath))
+        {
+            Console.WriteLine("Warning: auth.json not found, skipping group creation from JSON");
+            return;
+        }
+
+        var json = await File.ReadAllTextAsync(authJsonPath);
+        var authExport = JsonSerializer.Deserialize<AuthExport>(json);
+        
+        if (authExport?.Groups == null)
+        {
+            Console.WriteLine("Warning: No groups found in auth.json");
+            return;
+        }
+
+        // Create groups
+        foreach (var authGroup in authExport.Groups)
+        {
+            var existingGroup = await db.Groups.FirstOrDefaultAsync(x => x.Name == authGroup.Name);
+            if (existingGroup is null)
+            {
+                // Find the owner user by name (lookup outside of EF query)
+                var ownerUserAuth = authExport.Users.FirstOrDefault(u => u.Id == authGroup.OwnerId);
+                if (ownerUserAuth != null)
+                {
+                    var ownerUser = await db.Users.SingleOrDefaultAsync(x => x.Name == ownerUserAuth.Name);
+                    if (ownerUser != null)
+                    {
+                        var newGroup = new Group
+                        {
+                            Name = authGroup.Name,
+                            Description = authGroup.Description,
+                            OwnerUserId = ownerUser.Id,
+                            CreatedAtUtc = DateTime.UtcNow
+                        };
+                        db.Groups.Add(newGroup);
+                        await db.SaveChangesAsync(); // Save to get the group ID
+
+                        // Add members
+                        foreach (var memberName in authGroup.Members)
+                        {
+                            var memberUser = await db.Users.SingleOrDefaultAsync(x => x.Name == memberName);
+                            if (memberUser != null)
+                            {
+                                db.GroupMembers.Add(new GroupMember
+                                {
+                                    GroupId = newGroup.Id,
+                                    UserId = memberUser.Id,
+                                    JoinedAtUtc = DateTime.UtcNow
+                                });
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
