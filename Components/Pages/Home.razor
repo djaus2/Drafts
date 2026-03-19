@@ -3,8 +3,9 @@
 @* @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
  *@
 @inject NavigationManager Nav
+@using System.Reflection
 
-<PageTitleHeading Title="Checkers online V4.2.0" HeadingLevel="2" />
+<PageTitleHeading Title="@($"Checkers online V{AppVersion}")" HeadingLevel="2" />
 
 <br />
 
@@ -17,6 +18,10 @@
 <img src="Images/TheBoard.png" width="250"/>
 
 @code{
+    public string AppVersion => Assembly.GetExecutingAssembly()
+        .GetName()
+        .Version?.ToString() ?? "Unknown";
+
     private void Start()
     {
         Nav.NavigateTo($"/login");
