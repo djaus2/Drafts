@@ -16,6 +16,21 @@
 
 <p>You are logged in as <b>@_currentUserName</b>.</p>
 
+<!-- Debug: Voice Chat Mode -->
+<div style="background: rgba(255,255,255,0.1); padding: 10px; margin: 10px 0; border-radius: 4px; font-family: monospace; font-size: 12px;">
+    <strong>🔧 Debug - Voice Chat Mode:</strong><br/>
+    @if (useDirectAudioVoiceChatLoaded)
+    {
+        <span style="color: @(useDirectAudioVoiceChat ? "#4CAF50" : "#FF9800");">
+            UseDirectAudioVoiceChat = @(useDirectAudioVoiceChat ? "TRUE (Direct Audio)" : "FALSE (TTS Mode)")
+        </span>
+    }
+    else
+    {
+        <span style="color: #F44336;">Loading...</span>
+    }
+</div>
+
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Member of Groups:</h4>
 
 @if (_userGroups?.Any() == true)
@@ -34,66 +49,65 @@ else
     </div>
 }
 
-<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voice</h4>
-
-@if (_isPhoneClient)
+@if (!useDirectAudioVoiceChat)
 {
-    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
-        Voice selection is not supported on phones yet. Using default voice.
+    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voice</h4>
+
+    @if (_isPhoneClient)
+    {
+        <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
+            Voice selection is not supported on phones yet. Using default voice.
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
+    {
+        <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
+            Selected voice: @_selectedVoiceDisplay
+        </div>
+    }
+
+    <div style="max-width:360px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+            @if (_isPhoneClient)
+            {
+            }
+            else if (!_showVoiceSelection)
+            {
+                <button @onclick="ShowVoiceSelection" style="width:100%;">Change voice</button>
+            }
+            else
+            {
+                <button @onclick="LoadVoicesFromUserGesture" style="width:100%;">Load voices</button>
+                <select @key="_voicesLoaded" value="@_selectedLanguage" @onchange="OnLanguageChanged" disabled="@(!_voicesLoaded)">
+                    <option value="">All languages</option>
+                    @foreach (var l in _languages)
+                    {
+                        <option @key="l" value="@l">@FormatLanguageLabel(l)</option>
+                    }
+                </select>
+                <select @key="_selectedLanguage" value="@_selectedRegion" @onchange="OnRegionChanged" disabled="@(!_regions.Any())">
+                    <option value="">All countries</option>
+                    @foreach (var r in _regions)
+                    {
+                        <option @key="r" value="@r">@FormatRegionLabel(_selectedLanguage, r)</option>
+                    }
+                </select>
+                <select @key="@($"{_selectedLanguage}|{_selectedRegion}")" value="@_selectedVoiceKey" @onchange="OnVoiceChanged">
+                    <option value="">Default voice</option>
+                    @foreach (var v in _voices)
+                    {
+                        <option @key="v.Key" value="@v.Key">@v.Label</option>
+                    }
+                </select>
+            }
+            @if (!string.IsNullOrWhiteSpace(_voiceSaveMessage))
+            {
+                <div>@_voiceSaveMessage</div>
+            }
+        </div>
     </div>
 }
-
-@if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
-{
-    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
-        Selected voice: @_selectedVoiceDisplay
-    </div>
-}
-
-<div style="max-width:360px">
-    <div style="display:flex;flex-direction:column;gap:8px">
-        @if (_isPhoneClient)
-        {
-        }
-        else if (!_showVoiceSelection)
-        {
-            <button @onclick="ShowVoiceSelection" style="width:100%;">Change voice</button>
-        }
-        else
-        {
-            <button @onclick="LoadVoicesFromUserGesture" style="width:100%;">Load voices</button>
-            <select @key="_voicesLoaded" value="@_selectedLanguage" @onchange="OnLanguageChanged" disabled="@(!_voicesLoaded)">
-                <option value="">All languages</option>
-                @foreach (var l in _languages)
-                {
-                    <option @key="l" value="@l">@FormatLanguageLabel(l)</option>
-                }
-            </select>
-            <select @key="_selectedLanguage" value="@_selectedRegion" @onchange="OnRegionChanged" disabled="@(!_regions.Any())">
-                <option value="">All countries</option>
-                @foreach (var r in _regions)
-                {
-                    <option @key="r" value="@r">@FormatRegionLabel(_selectedLanguage, r)</option>
-                }
-            </select>
-            <select @key="@($"{_selectedLanguage}|{_selectedRegion}")" value="@_selectedVoiceKey" @onchange="OnVoiceChanged">
-                <option value="">Default voice</option>
-                @foreach (var v in _voices)
-                {
-                    <option @key="v.Key" value="@v.Key">@v.Label</option>
-                }
-            </select>
-        }
-@*         @if (!string.IsNullOrWhiteSpace(_voiceDebugStatus))
-        {
-            <div style="font-size:12px;opacity:0.85">@_voiceDebugStatus</div>
-        } *@
-        @if (!string.IsNullOrWhiteSpace(_voiceSaveMessage))
-        {
-            <div>@_voiceSaveMessage</div>
-        }
-    </div>
-</div>
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Group</h4>
 
@@ -357,6 +371,10 @@ else
     private string _currentUserName = "";
     private bool _showVoiceSettings = false;
 
+    // Debug variables for voice chat mode
+    private bool useDirectAudioVoiceChat = true;
+    private bool useDirectAudioVoiceChatLoaded = false;
+
     private void OpenVoiceSettings()
     {
         _showVoiceSettings = true;
@@ -474,6 +492,20 @@ else
             {
             }
         }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+
+        // Load the current voice chat mode setting for debug display
+        try
+        {
+            useDirectAudioVoiceChat = await Settings.GetUseDirectAudioVoiceChatAsync();
+            useDirectAudioVoiceChatLoaded = true;
+            Console.WriteLine($"[Player Debug] UseDirectAudioVoiceChat loaded: {useDirectAudioVoiceChat}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Player Debug] Error loading UseDirectAudioVoiceChat: {ex.Message}");
+            useDirectAudioVoiceChat = true; // Default to direct audio
+            useDirectAudioVoiceChatLoaded = true;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

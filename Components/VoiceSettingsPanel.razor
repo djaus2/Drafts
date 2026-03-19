@@ -438,9 +438,11 @@
         </div>
     </div>
 
-    <!-- Testing -->
-    <div class="settings-section">
-        <div class="section-title">Audio Testing</div>
+    <!-- Audio Testing (only shown if admin allows TTS mode for audio processing tests) -->
+    @if (adminSettings?.UseDirectAudioVoiceChat == false)
+    {
+        <div class="settings-section">
+            <div class="section-title">Audio Testing</div>
         
         <div class="test-controls">
             <button class="test-btn @(isTestingEcho ? "testing" : "")" 
@@ -477,7 +479,9 @@
                 @recordingTestResult
             </div>
         }
+    }
     </div>
+    }
 
     <!-- Action Buttons -->
     <div class="settings-actions">
@@ -552,16 +556,30 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Console.WriteLine("[VoiceSettings] OnInitializedAsync started");
+        
         // Load admin settings first
         await LoadAdminSettings();
         
         // Load saved settings
         await LoadSettings();
+        
+        Console.WriteLine("[VoiceSettings] OnInitializedAsync completed");
+        
+        // Force UI update to ensure admin settings are reflected
+        StateHasChanged();
 
         // Start metrics updates
         _metricsTimer = new System.Timers.Timer(1000); // Update every second
         _metricsTimer.Elapsed += async (sender, e) => await UpdateMetrics();
         _metricsTimer.Start();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Console.WriteLine("[VoiceSettings] OnParametersSetAsync called");
+        await LoadAdminSettings();
+        StateHasChanged();
     }
 
     private async Task LoadSettings()
@@ -630,10 +648,15 @@
     {
         try
         {
+            Console.WriteLine("[VoiceSettings] LoadAdminSettings started");
+            
+            var useDirectAudio = await SettingsService.GetUseDirectAudioVoiceChatAsync();
+            Console.WriteLine($"[VoiceSettings] SettingsService returned: {useDirectAudio}");
+            
             // Create a new AppSettings instance with the current settings
             adminSettings = new AppSettings
             {
-                UseDirectAudioVoiceChat = await SettingsService.GetUseDirectAudioVoiceChatAsync()
+                UseDirectAudioVoiceChat = useDirectAudio
             };
             Console.WriteLine($"[VoiceSettings] Loaded admin settings - UseDirectAudioVoiceChat: {adminSettings?.UseDirectAudioVoiceChat}");
         }
@@ -642,6 +665,7 @@
             Console.WriteLine($"[VoiceSettings] Error loading admin settings: {ex.Message}");
             // Default to direct audio mode if settings can't be loaded
             adminSettings = new AppSettings { UseDirectAudioVoiceChat = true };
+            Console.WriteLine("[VoiceSettings] Using default admin settings (direct audio)");
         }
     }
 
