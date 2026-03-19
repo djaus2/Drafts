@@ -1,5 +1,29 @@
 # Player Voice Settings Documentation
 
+## 🎯 **Important: Settings Scope Clarification**
+
+**These voice settings primarily affect your local microphone capture and outgoing audio transmission, NOT the received audio from other players.**
+
+### **What These Settings Control:**
+- ✅ **Your microphone** processing (echo cancellation, noise suppression, gain control)
+- ✅ **Your input sensitivity** levels
+- ✅ **Your outgoing audio** transmission quality and bitrate
+- ✅ **Your voice chat system** choice (classic vs enhanced)
+
+### **What They DON'T Control:**
+- ❌ **Other player's microphone** processing (they control their own settings)
+- ❌ **Received audio playback** (handled by browser/system defaults)
+- ❌ **Remote player's audio quality** (they control their own transmission)
+
+### **How It Works:**
+```
+Your Mic → Your Settings → Network → Other Player's Settings → Their Speakers
+```
+
+Each player controls their own microphone input and transmission, creating a personalized voice chat experience for both participants.
+
+---
+
 ## Overview
 
 The Player Voice Settings system allows individual users to customize their voice chat preferences on a per-session basis. These settings are stored locally in the browser and persist across game sessions, but are cleared when users log out to ensure privacy.
