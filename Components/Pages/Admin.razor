@@ -64,6 +64,21 @@
             Game Initiator goes first
             <br />
         </label>
+        <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" @bind="_useDirectAudioVoiceChat" />
+            Use Direct Audio Voice Chat (Recommended)
+            <br />
+            <small style="color:#666;">
+                @if (_useDirectAudioVoiceChat)
+                {
+                    <text>Players will use direct audio transmission (natural voice). Voice selection options will be hidden.</text>
+                }
+                else
+                {
+                    <text>Players can choose between direct audio and text-to-speech. Voice selection options will be available.</text>
+                }
+            </small>
+        </label>
         <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
             <select @bind="_lastMoveHighlightColor">
@@ -158,6 +173,7 @@ else
     private bool _entrapmentMode = true;
     private double _multiJumpGraceSeconds = 1.5;
     private bool _gameInitiatorGoesFirst = true;
+    private bool _useDirectAudioVoiceChat = true; // Default to direct audio
     private string _settingsMessage = "";
 
     private sealed record ColorOption(string Label, string Value);
@@ -200,6 +216,7 @@ else
         _entrapmentMode = await Settings.GetEntrapmentModeAsync();
         _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
         _gameInitiatorGoesFirst = await Settings.GetGameInitiatorGoesFirstAsync();
+        _useDirectAudioVoiceChat = await Settings.GetUseDirectAudioVoiceChatAsync();
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
     }
@@ -235,7 +252,8 @@ else
         var ok4 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
         var ok5 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
         var ok6 = await Settings.UpdateGameInitiatorGoesFirstAsync(_gameInitiatorGoesFirst);
-        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6) ? "Saved." : "Invalid value.";
+        var ok7 = await Settings.UpdateUseDirectAudioVoiceChatAsync(_useDirectAudioVoiceChat);
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) ? "Saved." : "Invalid value.";
     }
 
     private static string FormatAge(TimeSpan ts)

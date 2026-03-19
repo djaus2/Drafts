@@ -1,11 +1,13 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 @using Drafts.Services
+@using Drafts.Data
 @using System.Text.Json
 @inject EnhancedVoiceChatService VoiceChatService
 @inject IJSRuntime JS
 @inject AdminVoiceSettingsService AdminVoiceSettings
 @inject AuthService Auth
+@inject SettingsService SettingsService
 
 <style>
     .voice-settings-panel {
@@ -304,44 +306,76 @@
         <h3 class="settings-title">Voice Settings</h3>
     </div>
 
-    <!-- Audio Processing Settings -->
-    <div class="settings-section">
-        <div class="section-title">Audio Processing</div>
-        
-        <div class="setting-row">
-            <span class="setting-label">Echo Cancellation</span>
-            <div class="setting-control">
-                <div class="toggle-switch @(echoCancellationEnabled ? "active" : "")" 
-                     @onclick="ToggleEchoCancellation"></div>
+    <!-- Audio Processing Settings (only shown for direct audio mode) -->
+    @if (adminSettings?.UseDirectAudioVoiceChat == true)
+    {
+        <div class="settings-section">
+            <div class="section-title">Audio Processing</div>
+            
+            <div class="setting-row">
+                <span class="setting-label">Echo Cancellation</span>
+                <div class="setting-control">
+                    <div class="toggle-switch @(echoCancellationEnabled ? "active" : "")" 
+                         @onclick="ToggleEchoCancellation"></div>
+                </div>
             </div>
-        </div>
 
-        <div class="setting-row">
-            <span class="setting-label">Noise Suppression</span>
-            <div class="setting-control">
-                <div class="toggle-switch @(noiseSuppressionEnabled ? "active" : "")" 
-                     @onclick="ToggleNoiseSuppression"></div>
+            <div class="setting-row">
+                <span class="setting-label">Noise Suppression</span>
+                <div class="setting-control">
+                    <div class="toggle-switch @(noiseSuppressionEnabled ? "active" : "")" 
+                         @onclick="ToggleNoiseSuppression"></div>
+                </div>
             </div>
-        </div>
 
-        <div class="setting-row">
-            <span class="setting-label">Automatic Gain Control</span>
-            <div class="setting-control">
-                <div class="toggle-switch @(autoGainControlEnabled ? "active" : "")" 
-                     @onclick="ToggleAutoGainControl"></div>
+            <div class="setting-row">
+                <span class="setting-label">Automatic Gain Control</span>
+                <div class="setting-control">
+                    <div class="toggle-switch @(autoGainControlEnabled ? "active" : "")" 
+                         @onclick="ToggleAutoGainControl"></div>
+                </div>
             </div>
-        </div>
 
-        <div class="setting-row">
-            <span class="setting-label">Input Sensitivity</span>
-            <div class="setting-control">
-                <input type="range" class="slider-control" 
-                       min="0" max="100" value="@inputSensitivity" 
-                       @oninput="OnInputSensitivityChange" />
-                <span class="slider-value">@inputSensitivity%</span>
+            <div class="setting-row">
+                <span class="setting-label">Input Sensitivity</span>
+                <div class="setting-control">
+                    <input type="range" class="slider-control" 
+                           min="0" max="100" value="@inputSensitivity" 
+                           @oninput="OnInputSensitivityChange" />
+                    <span class="slider-value">@inputSensitivity%</span>
+                </div>
             </div>
         </div>
-    </div>
+    }
+
+    <!-- Voice System Choice (only shown if admin allows TTS mode) -->
+    @if (ShowVoiceSystemChoice)
+    {
+        <div class="settings-section">
+            <div class="section-title">Voice System</div>
+            
+            <div class="setting-row">
+                <span class="setting-label">Use Enhanced Voice Chat</span>
+                <div class="setting-control">
+                    <div class="toggle-switch @(useEnhancedVoiceChat ? "active" : "")" 
+                         @onclick="ToggleEnhancedVoiceChat"></div>
+                </div>
+            </div>
+            
+            <div class="setting-description">
+                <small style="opacity: 0.8; display: block; margin-top: 5px;">
+                    @if (useEnhancedVoiceChat)
+                    {
+                        <text>Enhanced voice chat with advanced audio processing</text>
+                    }
+                    else
+                    {
+                        <text>Classic voice chat with text-to-speech synthesis</text>
+                    }
+                </small>
+            </div>
+        </div>
+    }
 
     <!-- Network Settings -->
     <div class="settings-section">
@@ -486,6 +520,10 @@
     // Voice System Choice
     private bool useEnhancedVoiceChat = false;  // Default to classic voice system
 
+    // Admin Settings
+    private AppSettings? adminSettings;
+    private bool ShowVoiceSystemChoice => adminSettings?.UseDirectAudioVoiceChat == false; // Show choice only if admin allows TTS mode
+
     // Test Results
     private string echoTestResult = "";
     private string noiseTestResult = "";
@@ -511,6 +549,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Load admin settings first
+        await LoadAdminSettings();
+        
         // Load saved settings
         await LoadSettings();
 
@@ -579,6 +620,25 @@
         catch (Exception ex)
         {
             Console.WriteLine($"[VoiceSettings] Error saving settings: {ex.Message}");
+        }
+    }
+
+    private async Task LoadAdminSettings()
+    {
+        try
+        {
+            // Create a new AppSettings instance with the current settings
+            adminSettings = new AppSettings
+            {
+                UseDirectAudioVoiceChat = await SettingsService.GetUseDirectAudioVoiceChatAsync()
+            };
+            Console.WriteLine($"[VoiceSettings] Loaded admin settings - UseDirectAudioVoiceChat: {adminSettings?.UseDirectAudioVoiceChat}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VoiceSettings] Error loading admin settings: {ex.Message}");
+            // Default to direct audio mode if settings can't be loaded
+            adminSettings = new AppSettings { UseDirectAudioVoiceChat = true };
         }
     }
 
