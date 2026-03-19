@@ -324,18 +324,6 @@ else
             <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
         }
 
-        // Always show voice settings for debugging (temporary)
-        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <button class="game-btn" @onclick="ToggleVoiceSettings"
-                        style="background:@(_showVoiceSettings ? "#e6ccff" : "#f3f3f3");"
-                        title="Voice Settings">
-                    <span style="font-size:18px;">⚙️</span>
-                    <span>Voice Settings</span>
-                </button>
-            </div>
-        </div>
-
         @if (_game?.HadSecondPlayerConnected == true)
         {
             <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
@@ -367,6 +355,12 @@ else
                             <span style="font-size:18px;">🔊</span>
                             <span>Mute</span>
                         }
+                    </button>
+                    <button class="game-btn" @onclick="ToggleVoiceSettings"
+                            style="background:@(_showVoiceSettings ? "#e6ccff" : "#f3f3f3");"
+                            title="Voice Settings">
+                        <span style="font-size:18px;">⚙️</span>
+                        <span>Voice Settings</span>
                     </button>
                 </div>
             </div>
