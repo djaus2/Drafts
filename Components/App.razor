@@ -16,6 +16,9 @@
     <Routes />
     <ReconnectModal />
     <script src="js/draftsGame.js"></script>
+    <script src="js/enhanced-voice-chat.js"></script>
+    <script src="js/advanced-audio-processing.js"></script>
+    <link rel="stylesheet" href="css/enhanced-voice-chat.css" />
     <script>
         function downloadFile(fileName, base64Data) {
             const byteCharacters = atob(base64Data);
@@ -24,7 +27,7 @@
                 byteNumbers[i] = byteCharacters.charCodeAt(i);
             }
             const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: 'application/octet-stream' });
+            const blob = new Blob([byteNumbers], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

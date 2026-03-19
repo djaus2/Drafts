@@ -10,69 +10,164 @@ public static class DbSeeder
 {
     public static async Task EnsureSeededAsync(AppDbContext db)
     {
-        // Only seed if database doesn't exist (fresh installation)
-        if (await db.Database.EnsureCreatedAsync())
+        try
         {
+            // Create database if it doesn't exist
+            await db.Database.EnsureCreatedAsync();
 
-        // Database was just created, so we can create the schema directly
-        // No need for migration logic since this is a fresh database
-
-        var settings = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1);
-        if (settings is null)
-        {
-            db.Settings.Add(new AppSettings
+            // Always create tables if they don't exist
+            await CreateUsersTable(db);
+            await CreateSettingsTable(db);
+            await CreateGroupsTable(db);
+            
+            // Check if database has any users
+            var hasUsers = await db.Users.AnyAsync();
+            
+            if (!hasUsers)
             {
-                Id = 1,
-                MaxTimeoutMins = 30,
-                ReaperPeriodSeconds = 30,
-                LastMoveHighlightColor = "rgba(255,0,0,0.85)",
-                EntrapmentMode = true,
-                MultiJumpGraceSeconds = 1.5,
-                GameInitiatorGoesFirst = true
-            });
+                Console.WriteLine("[DbSeeder] Database is empty, running full seeding...");
+                
+                // Create default settings
+                var settings = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1);
+                if (settings is null)
+                {
+                    db.Settings.Add(new AppSettings
+                    {
+                        Id = 1,
+                        MaxTimeoutMins = 30,
+                        ReaperPeriodSeconds = 30,
+                        LastMoveHighlightColor = "rgba(255,0,0,0.85)",
+                        EntrapmentMode = true,
+                        MultiJumpGraceSeconds = 1.5,
+                        GameInitiatorGoesFirst = true
+                    });
+                }
+
+                // Create users from auth.json
+                await CreateUsersFromAuthJson(db);
+
+                // Create groups and memberships from auth.json
+                await CreateGroupsAndMembershipsFromAuthJson(db);
+
+                await db.SaveChangesAsync();
+                Console.WriteLine("[DbSeeder] Seeding completed successfully");
+            }
+            else
+            {
+                Console.WriteLine("[DbSeeder] Database already has users, skipping seeding");
+            }
         }
-
-        // Create users from auth.json
-        await CreateUsersFromAuthJson(db);
-
-        //var penny = await db.Users.SingleOrDefaultAsync(x => x.Name == "Penny");
-
-        // Create Groups table if it doesn't exist
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Groups'").AnyAsync())
+        catch (Exception ex)
         {
-            await db.Database.ExecuteSqlRawAsync(@"
-                CREATE TABLE ""Groups"" (
-                    ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                    ""Name"" TEXT NOT NULL,
-                    ""Description"" TEXT NULL,
-                    ""OwnerUserId"" INTEGER NOT NULL,
-                    ""CreatedAtUtc"" TEXT NOT NULL,
-                    FOREIGN KEY (""OwnerUserId"") REFERENCES ""Users"" (""Id"") ON DELETE RESTRICT
-                )");
-            await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX \"IX_Groups_Name\" ON \"Groups\" (\"Name\")");
+            Console.WriteLine($"[DbSeeder] Error during seeding: {ex.Message}");
+            throw;
         }
+    }
 
-        // Create GroupMembers table if it doesn't exist
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='GroupMembers'").AnyAsync())
+    private static async Task CreateUsersTable(AppDbContext db)
+    {
+        try
         {
-            await db.Database.ExecuteSqlRawAsync(@"
-                CREATE TABLE ""GroupMembers"" (
-                    ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                    ""GroupId"" INTEGER NOT NULL,
-                    ""UserId"" INTEGER NOT NULL,
-                    ""JoinedAtUtc"" TEXT NOT NULL,
-                    FOREIGN KEY (""GroupId"") REFERENCES ""Groups"" (""Id"") ON DELETE CASCADE,
-                    FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE
-                )");
-            await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX \"IX_GroupMembers_GroupId_UserId\" ON \"GroupMembers\" (\"GroupId\", \"UserId\")");
+            // Check if Users table exists
+            var tableExists = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Users'").AnyAsync();
+            
+            if (!tableExists)
+            {
+                await db.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE ""Users"" (
+                        ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""Name"" TEXT NOT NULL,
+                        ""Roles"" TEXT NOT NULL,
+                        ""PinSalt"" BLOB NOT NULL,
+                        ""PinHash"" BLOB NOT NULL,
+                        ""PreferredTtsVoice"" TEXT NULL,
+                        ""PreferredTtsLanguage"" TEXT NULL,
+                        ""PreferredTtsRegion"" TEXT NULL,
+                        ""VoiceSettings"" TEXT NULL
+                    )");
+                Console.WriteLine("[DbSeeder] Created Users table");
+                
+                // Create unique index on Name
+                await db.Database.ExecuteSqlRawAsync(@"CREATE UNIQUE INDEX ""IX_Users_Name"" ON ""Users"" (""Name"")");
+                Console.WriteLine("[DbSeeder] Created Users table indexes");
+            }
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DbSeeder] Error creating Users table: {ex.Message}");
+        }
+    }
 
-        await db.SaveChangesAsync();
+    private static async Task CreateSettingsTable(AppDbContext db)
+    {
+        try
+        {
+            // Check if Settings table exists
+            var tableExists = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Settings'").AnyAsync();
+            
+            if (!tableExists)
+            {
+                await db.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE ""Settings"" (
+                        ""Id"" INTEGER NOT NULL PRIMARY KEY,
+                        ""MaxTimeoutMins"" INTEGER NOT NULL,
+                        ""ReaperPeriodSeconds"" INTEGER NOT NULL,
+                        ""LastMoveHighlightColor"" TEXT NOT NULL,
+                        ""EntrapmentMode"" INTEGER NOT NULL,
+                        ""MultiJumpGraceSeconds"" REAL NOT NULL,
+                        ""GameInitiatorGoesFirst"" INTEGER NOT NULL
+                    )");
+                Console.WriteLine("[DbSeeder] Created Settings table");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DbSeeder] Error creating Settings table: {ex.Message}");
+        }
+    }
 
-        // Create groups and memberships from auth.json after users are saved
-        await CreateGroupsAndMembershipsFromAuthJson(db);
-
-        await db.SaveChangesAsync();
+    private static async Task CreateGroupsTable(AppDbContext db)
+    {
+        try
+        {
+            // Check if Groups table exists
+            var tableExists = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Groups'").AnyAsync();
+            
+            if (!tableExists)
+            {
+                await db.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE ""Groups"" (
+                        ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""Name"" TEXT NOT NULL,
+                        ""Description"" TEXT NULL,
+                        ""OwnerUserId"" INTEGER NOT NULL,
+                        ""CreatedAtUtc"" TEXT NOT NULL,
+                        FOREIGN KEY (""OwnerUserId"") REFERENCES ""Users"" (""Id"") ON DELETE RESTRICT
+                    )");
+                Console.WriteLine("[DbSeeder] Created Groups table");
+                
+                // Create GroupMembers table
+                await db.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE ""GroupMembers"" (
+                        ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""GroupId"" INTEGER NOT NULL,
+                        ""UserId"" INTEGER NOT NULL,
+                        ""JoinedAtUtc"" TEXT NOT NULL,
+                        FOREIGN KEY (""GroupId"") REFERENCES ""Groups"" (""Id"") ON DELETE CASCADE,
+                        FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE
+                    )");
+                Console.WriteLine("[DbSeeder] Created GroupMembers table");
+                
+                // Create indexes
+                await db.Database.ExecuteSqlRawAsync(@"CREATE INDEX ""IX_GroupMembers_GroupId"" ON ""GroupMembers"" (""GroupId"")");
+                await db.Database.ExecuteSqlRawAsync(@"CREATE INDEX ""IX_GroupMembers_UserId"" ON ""GroupMembers"" (""UserId"")");
+                await db.Database.ExecuteSqlRawAsync(@"CREATE INDEX ""IX_Groups_OwnerUserId"" ON ""Groups"" (""OwnerUserId"")");
+                Console.WriteLine("[DbSeeder] Created table indexes");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DbSeeder] Error creating Groups tables: {ex.Message}");
         }
     }
 

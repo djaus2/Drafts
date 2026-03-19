@@ -1,8 +1,11 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 @using Drafts.Services
+@using System.Text.Json
 @inject EnhancedVoiceChatService VoiceChatService
 @inject IJSRuntime JS
+@inject AdminVoiceSettingsService AdminVoiceSettings
+@inject AuthService Auth
 
 <style>
     .voice-settings-panel {
@@ -383,11 +386,17 @@
     [Parameter]
     public EventCallback OnClose { get; set; }
 
+    [Parameter]
+    public bool IsAdminMode { get; set; } = false;
+
     // Audio Processing Settings
     private bool echoCancellationEnabled = true;
     private bool noiseSuppressionEnabled = true;
     private bool autoGainControlEnabled = true;
     private int inputSensitivity = 75;
+
+    // Voice System Choice
+    private bool useEnhancedVoiceChat = false;  // Default to classic voice system
 
     // Test Results
     private string echoTestResult = "";
@@ -427,13 +436,26 @@
     {
         try
         {
-            // Load settings from localStorage or service
-            var settings = await JS.InvokeAsync<object>("getVoiceSettings");
-            // Parse and apply settings
+            if (IsAdminMode)
+            {
+                // Load admin settings from database
+                var adminSettings = await AdminVoiceSettings.GetAdminVoiceSettingsAsync();
+                Console.WriteLine($"[VoiceSettings] Admin mode - received {adminSettings.Count} settings");
+                ApplySettings(adminSettings);
+                Console.WriteLine("[VoiceSettings] Loaded admin settings from database");
+            }
+            else
+            {
+                // Load player settings from localStorage (with admin defaults)
+                await LoadPlayerSettingsWithDefaults();
+                Console.WriteLine("[VoiceSettings] Loaded player settings from localStorage");
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"[VoiceSettings] Error loading settings: {ex.Message}");
             // Use defaults
+            ApplyDefaultSettings();
         }
     }
 
@@ -441,28 +463,266 @@
     {
         try
         {
-            var settings = new
-            {
-                echoCancellationEnabled,
-                noiseSuppressionEnabled,
-                autoGainControlEnabled,
-                inputSensitivity,
-                adaptiveBitrateEnabled,
-                qualityPriority
-            };
+            var settings = CreateSettingsDictionary();
 
-            await JS.InvokeVoidAsync("saveVoiceSettings", settings);
+            if (IsAdminMode)
+            {
+                // Save admin settings to database
+                var success = await AdminVoiceSettings.SaveAdminVoiceSettingsAsync(settings);
+                if (success)
+                {
+                    Console.WriteLine("[VoiceSettings] Admin settings saved to database");
+                }
+                else
+                {
+                    Console.WriteLine("[VoiceSettings] Failed to save admin settings");
+                }
+            }
+            else
+            {
+                // Save player settings to localStorage only
+                await SavePlayerSettingsToLocalStorage(settings);
+                Console.WriteLine("[VoiceSettings] Player settings saved to localStorage");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VoiceSettings] Error saving settings: {ex.Message}");
+        }
+    }
+
+    private async Task LoadPlayerSettingsWithDefaults()
+    {
+        try
+        {
+            // First load admin defaults
+            var adminDefaults = await AdminVoiceSettings.GetAdminVoiceSettingsAsync();
+            
+            // Then try to load player's localStorage settings
+            var playerSettingsJson = await JS.InvokeAsync<string>("localStorage.getItem", "voiceSettings");
+            Console.WriteLine($"[VoiceSettings] Loading from localStorage: {playerSettingsJson}");
+            
+            if (!string.IsNullOrWhiteSpace(playerSettingsJson))
+            {
+                var playerSettings = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(playerSettingsJson);
+                Console.WriteLine($"[VoiceSettings] Loaded {playerSettings?.Count ?? 0} player settings from localStorage");
+                ApplySettings(playerSettings);
+            }
+            else
+            {
+                Console.WriteLine("[VoiceSettings] No player settings in localStorage, using admin defaults");
+                // Use admin defaults for new players
+                ApplySettings(adminDefaults);
+            }
         }
         catch
         {
-            // Handle error
+            // Use admin defaults as fallback
+            var adminDefaults = await AdminVoiceSettings.GetAdminVoiceSettingsAsync();
+            ApplySettings(adminDefaults);
         }
+    }
+
+    private async Task SavePlayerSettingsToLocalStorage(Dictionary<string, object> settings)
+    {
+        var settingsJson = System.Text.Json.JsonSerializer.Serialize(settings);
+        Console.WriteLine($"[VoiceSettings] Saving to localStorage: {settingsJson}");
+        await JS.InvokeVoidAsync("localStorage.setItem", "voiceSettings", settingsJson);
+        
+        // Verify it was saved by reading it back
+        var savedJson = await JS.InvokeAsync<string>("localStorage.getItem", "voiceSettings");
+        Console.WriteLine($"[VoiceSettings] Verified localStorage contains: {savedJson}");
+    }
+
+    private void ApplySettings(Dictionary<string, object>? settings)
+    {
+        var stackTrace = new System.Diagnostics.StackTrace();
+        var callingMethod = stackTrace.GetFrame(1)?.GetMethod()?.Name ?? "Unknown";
+        Console.WriteLine($"[VoiceSettings] ApplySettings called by {callingMethod} with {settings?.Count ?? 0} settings");
+        if (settings == null) 
+        {
+            Console.WriteLine("[VoiceSettings] Settings is null, using defaults");
+            return;
+        }
+
+        Console.WriteLine($"[VoiceSettings] Settings keys: {string.Join(", ", settings.Keys)}");
+
+        if (settings.TryGetValue("echoCancellationEnabled", out var echoVal))
+        {
+            if (echoVal is bool echoBool)
+            {
+                echoCancellationEnabled = echoBool;
+                Console.WriteLine($"[VoiceSettings] echoCancellationEnabled = {echoBool} (bool)");
+            }
+            else if (echoVal is JsonElement echoElem)
+            {
+                var echoStr = echoElem.GetRawText();
+                if (bool.TryParse(echoStr, out var echoBoolFromElem))
+                {
+                    echoCancellationEnabled = echoBoolFromElem;
+                    Console.WriteLine($"[VoiceSettings] echoCancellationEnabled = {echoBoolFromElem} (JsonElement)");
+                }
+                else
+                {
+                    Console.WriteLine($"[VoiceSettings] echoCancellationEnabled - failed to parse: {echoStr}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[VoiceSettings] echoCancellationEnabled - unexpected type: {echoVal?.GetType().Name}");
+            }
+        }
+
+        if (settings.TryGetValue("noiseSuppressionEnabled", out var noiseVal))
+        {
+            if (noiseVal is bool noiseBool)
+            {
+                noiseSuppressionEnabled = noiseBool;
+                Console.WriteLine($"[VoiceSettings] noiseSuppressionEnabled = {noiseBool} (bool)");
+            }
+            else if (noiseVal is JsonElement noiseElem)
+            {
+                var noiseStr = noiseElem.GetRawText();
+                if (bool.TryParse(noiseStr, out var noiseBoolFromElem))
+                {
+                    noiseSuppressionEnabled = noiseBoolFromElem;
+                    Console.WriteLine($"[VoiceSettings] noiseSuppressionEnabled = {noiseBoolFromElem} (JsonElement)");
+                }
+                else
+                {
+                    Console.WriteLine($"[VoiceSettings] noiseSuppressionEnabled - failed to parse: {noiseStr}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[VoiceSettings] noiseSuppressionEnabled - unexpected type: {noiseVal?.GetType().Name}");
+            }
+        }
+
+        if (settings.TryGetValue("autoGainControlEnabled", out var gainVal))
+        {
+            if (gainVal is bool gainBool)
+            {
+                autoGainControlEnabled = gainBool;
+                Console.WriteLine($"[VoiceSettings] autoGainControlEnabled = {gainBool} (bool)");
+            }
+            else if (gainVal is JsonElement gainElem)
+            {
+                var gainStr = gainElem.GetRawText();
+                if (bool.TryParse(gainStr, out var gainBoolFromElem))
+                {
+                    autoGainControlEnabled = gainBoolFromElem;
+                    Console.WriteLine($"[VoiceSettings] autoGainControlEnabled = {gainBoolFromElem} (JsonElement)");
+                }
+                else
+                {
+                    Console.WriteLine($"[VoiceSettings] autoGainControlEnabled - failed to parse: {gainStr}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[VoiceSettings] autoGainControlEnabled - unexpected type: {gainVal?.GetType().Name}");
+            }
+        }
+
+        if (settings.TryGetValue("inputSensitivity", out var sensVal) && sensVal is JsonElement sensElem && sensElem.TryGetInt32(out var sensInt))
+        {
+            inputSensitivity = sensInt;
+            Console.WriteLine($"[VoiceSettings] inputSensitivity = {sensInt}");
+        }
+
+        if (settings.TryGetValue("adaptiveBitrateEnabled", out var adaptVal))
+        {
+            if (adaptVal is bool adaptBool)
+            {
+                adaptiveBitrateEnabled = adaptBool;
+                Console.WriteLine($"[VoiceSettings] adaptiveBitrateEnabled = {adaptBool} (bool)");
+            }
+            else if (adaptVal is JsonElement adaptElem)
+            {
+                var adaptStr = adaptElem.GetRawText();
+                if (bool.TryParse(adaptStr, out var adaptBoolFromElem))
+                {
+                    adaptiveBitrateEnabled = adaptBoolFromElem;
+                    Console.WriteLine($"[VoiceSettings] adaptiveBitrateEnabled = {adaptBoolFromElem} (JsonElement)");
+                }
+                else
+                {
+                    Console.WriteLine($"[VoiceSettings] adaptiveBitrateEnabled - failed to parse: {adaptStr}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[VoiceSettings] adaptiveBitrateEnabled - unexpected type: {adaptVal?.GetType().Name}");
+            }
+        }
+
+        if (settings.TryGetValue("qualityPriority", out var qualVal))
+        {
+            if (qualVal is string qualStr)
+            {
+                qualityPriority = qualStr;
+                Console.WriteLine($"[VoiceSettings] qualityPriority = {qualStr} (string)");
+            }
+            else if (qualVal is JsonElement qualElem)
+            {
+                var qualStrFromElem = qualElem.GetString();
+                if (!string.IsNullOrEmpty(qualStrFromElem))
+                {
+                    qualityPriority = qualStrFromElem;
+                    Console.WriteLine($"[VoiceSettings] qualityPriority = {qualStrFromElem} (JsonElement)");
+                }
+                else
+                {
+                    Console.WriteLine($"[VoiceSettings] qualityPriority - failed to parse from JsonElement");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[VoiceSettings] qualityPriority - unexpected type: {qualVal?.GetType().Name}");
+            }
+        }
+
+        if (settings.TryGetValue("useEnhancedVoiceChat", out var enhancedVal) && enhancedVal is bool enhancedBool)
+        {
+            useEnhancedVoiceChat = enhancedBool;
+            Console.WriteLine($"[VoiceSettings] useEnhancedVoiceChat = {enhancedBool}");
+        }
+
+        Console.WriteLine($"[VoiceSettings] Final settings applied - echo:{echoCancellationEnabled}, noise:{noiseSuppressionEnabled}, gain:{autoGainControlEnabled}, sensitivity:{inputSensitivity}, enhanced:{useEnhancedVoiceChat}");
+    }
+
+    private void ApplyDefaultSettings()
+    {
+        echoCancellationEnabled = true;
+        noiseSuppressionEnabled = true;
+        autoGainControlEnabled = true;
+        inputSensitivity = 75;
+        adaptiveBitrateEnabled = true;
+        qualityPriority = "quality";
+        useEnhancedVoiceChat = false;  // Default to classic voice system
+    }
+
+    private Dictionary<string, object> CreateSettingsDictionary()
+    {
+        Console.WriteLine($"[VoiceSettings] CreateSettingsDictionary - echo:{echoCancellationEnabled}, noise:{noiseSuppressionEnabled}, gain:{autoGainControlEnabled}, sensitivity:{inputSensitivity}, adaptive:{adaptiveBitrateEnabled}, quality:{qualityPriority}, enhanced:{useEnhancedVoiceChat}");
+        return new Dictionary<string, object>
+        {
+            { "echoCancellationEnabled", echoCancellationEnabled },
+            { "noiseSuppressionEnabled", noiseSuppressionEnabled },
+            { "autoGainControlEnabled", autoGainControlEnabled },
+            { "inputSensitivity", inputSensitivity },
+            { "adaptiveBitrateEnabled", adaptiveBitrateEnabled },
+            { "qualityPriority", qualityPriority },
+            { "useEnhancedVoiceChat", useEnhancedVoiceChat }
+        };
     }
 
     // Audio Processing Toggles
     private async Task ToggleEchoCancellation()
     {
         echoCancellationEnabled = !echoCancellationEnabled;
+        Console.WriteLine($"[VoiceSettings] ToggleEchoCancellation - new value: {echoCancellationEnabled}");
         // TODO: Implement actual JavaScript setEchoCancellation when available
         await SaveSettings();
     }

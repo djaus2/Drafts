@@ -28,4 +28,7 @@ public sealed class AppUser
 
     [MaxLength(16)]
     public string? PreferredTtsRegion { get; set; }
+
+    [MaxLength(2048)]
+    public string? VoiceSettings { get; set; }
 }

@@ -173,6 +173,22 @@ else
 
 <LobbyChat />
 
+<!-- Voice Chat Settings Panel -->
+@if (_showVoiceSettings)
+{
+    <div class="voice-settings-popup" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;background:white;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:500px;max-height:80vh;overflow:auto;">
+        <VoiceSettingsPanel OnClose="() => { _showVoiceSettings = false; StateHasChanged(); }" IsAdminMode="false" />
+    </div>
+    <div class="popup-backdrop" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999;" @onclick="() => { _showVoiceSettings = false; StateHasChanged(); }"></div>
+}
+
+<!-- Voice Settings Button -->
+<div style="margin-top:20px;">
+    <button @onclick="OpenVoiceSettings" style="padding:10px 20px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+        Voice Chat Settings
+    </button>
+</div>
+
 <script>
   window.draftsVoice = window.draftsVoice || {};
   window.draftsVoice.version = 'player-voices-2026-03-09a';
@@ -339,6 +355,13 @@ else
     private string _newPin = "";
     private string _pinMessage = "";
     private string _currentUserName = "";
+    private bool _showVoiceSettings = false;
+
+    private void OpenVoiceSettings()
+    {
+        _showVoiceSettings = true;
+        StateHasChanged();
+    }
 
     private sealed class VoiceOption
     {

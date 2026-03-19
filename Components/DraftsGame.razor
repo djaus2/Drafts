@@ -324,6 +324,18 @@ else
             <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
         }
 
+        // Always show voice settings for debugging (temporary)
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button class="game-btn" @onclick="ToggleVoiceSettings"
+                        style="background:@(_showVoiceSettings ? "#e6ccff" : "#f3f3f3");"
+                        title="Voice Settings">
+                    <span style="font-size:18px;">⚙️</span>
+                    <span>Voice Settings</span>
+                </button>
+            </div>
+        </div>
+
         @if (_game?.HadSecondPlayerConnected == true)
         {
             <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
@@ -355,12 +367,6 @@ else
                             <span style="font-size:18px;">🔊</span>
                             <span>Mute</span>
                         }
-                    </button>
-                    <button class="game-btn" @onclick="ToggleVoiceSettings"
-                            style="background:@(_showVoiceSettings ? "#e6ccff" : "#f3f3f3");"
-                            title="Voice Settings">
-                        <span style="font-size:18px;">⚙️</span>
-                        <span>Settings</span>
                     </button>
                 </div>
             </div>
@@ -983,6 +989,23 @@ else
                     _isPhoneClient = false;
                 }
 
+                // Initialize enhanced voice chat for settings panel - don't let this fail the whole initialization
+                try
+                {
+                    await JS.InvokeVoidAsync("enhancedVoiceChat.initialize", DotNetObjectReference.Create(this));
+                    Console.WriteLine("[EnhancedVoiceChat] Initialized successfully");
+                }
+                catch (TaskCanceledException)
+                {
+                    // Task cancellation is normal during rapid navigation - ignore it
+                    Console.WriteLine("[EnhancedVoiceChat] Initialization cancelled - normal during rapid navigation");
+                }
+                catch (Exception ex)
+                {
+                    // Don't let enhanced voice chat failure break the whole voice system
+                    Console.WriteLine($"[EnhancedVoiceChat] Initialization failed: {ex.Message}");
+                }
+
                 if (_isPhoneClient)
                 {
                     _preferredTtsVoiceKey = "";
@@ -1000,10 +1023,18 @@ else
 
                 await InvokeAsync(StateHasChanged);
             }
-            catch
+            catch (TaskCanceledException)
+            {
+                // Handle task cancellation at the top level - this is normal during navigation
+                Console.WriteLine("[Voice] Initialization cancelled - normal during rapid navigation");
+                _voiceSupported = false;
+                _voiceStatus = "Talk not supported";
+            }
+            catch (Exception ex)
             {
                 _voiceSupported = false;
                 _voiceStatus = "Talk not supported";
+                Console.WriteLine($"Voice initialization error: {ex.Message}");
             }
         }
     }
