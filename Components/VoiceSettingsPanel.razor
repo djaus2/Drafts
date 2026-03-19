@@ -235,12 +235,73 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
     }
+
+    .settings-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin-top: 20px;
+    }
+
+    .actions-left {
+        display: flex;
+        gap: 10px;
+    }
+
+    .actions-right {
+        display: flex;
+        gap: 10px;
+    }
+
+    .action-btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 80px;
+    }
+
+    .save-btn {
+        background: #4CAF50;
+        color: white;
+    }
+
+    .save-btn:hover {
+        background: #45a049;
+        transform: translateY(-1px);
+    }
+
+    .cancel-btn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .cancel-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-1px);
+    }
+
+    .restore-btn {
+        background: rgba(255, 152, 0, 0.8);
+        color: white;
+        border: 1px solid rgba(255, 152, 0, 0.5);
+    }
+
+    .restore-btn:hover {
+        background: rgba(255, 152, 0, 0.9);
+        transform: translateY(-1px);
+    }
 </style>
 
 <div class="voice-settings-panel">
     <div class="settings-header">
         <h3 class="settings-title">Voice Settings</h3>
-        <button class="close-btn" @onclick="ClosePanel" @ontouchend="ClosePanel">✕</button>
     </div>
 
     <!-- Audio Processing Settings -->
@@ -380,6 +441,33 @@
             </div>
         }
     </div>
+
+    <!-- Action Buttons -->
+    <div class="settings-actions">
+        <div class="actions-left">
+            @if (IsAdminMode)
+            {
+                <button class="action-btn restore-btn" @onclick="RestoreDefaults">
+                    Restore Defaults
+                </button>
+            }
+            else
+            {
+                <button class="action-btn restore-btn" @onclick="RestoreToAdmin">
+                    Restore to Admin
+                </button>
+            }
+        </div>
+        
+        <div class="actions-right">
+            <button class="action-btn cancel-btn" @onclick="CancelChanges">
+                Cancel
+            </button>
+            <button class="action-btn save-btn" @onclick="SaveAndClose">
+                Save
+            </button>
+        </div>
+    </div>
 </div>
 
 @code {
@@ -441,7 +529,9 @@
                 // Load admin settings from database
                 var adminSettings = await AdminVoiceSettings.GetAdminVoiceSettingsAsync();
                 Console.WriteLine($"[VoiceSettings] Admin mode - received {adminSettings.Count} settings");
+                Console.WriteLine($"[VoiceSettings] Admin settings keys: {string.Join(", ", adminSettings.Keys)}");
                 ApplySettings(adminSettings);
+                Console.WriteLine($"[VoiceSettings] After ApplySettings - echo:{echoCancellationEnabled}, noise:{noiseSuppressionEnabled}, gain:{autoGainControlEnabled}, sensitivity:{inputSensitivity}");
                 Console.WriteLine("[VoiceSettings] Loaded admin settings from database");
             }
             else
@@ -468,6 +558,7 @@
             if (IsAdminMode)
             {
                 // Save admin settings to database
+                Console.WriteLine($"[VoiceSettings] Admin mode - saving settings: {System.Text.Json.JsonSerializer.Serialize(settings)}");
                 var success = await AdminVoiceSettings.SaveAdminVoiceSettingsAsync(settings);
                 if (success)
                 {
@@ -625,10 +716,22 @@
             }
         }
 
-        if (settings.TryGetValue("inputSensitivity", out var sensVal) && sensVal is JsonElement sensElem && sensElem.TryGetInt32(out var sensInt))
+        if (settings.TryGetValue("inputSensitivity", out var sensVal))
         {
-            inputSensitivity = sensInt;
-            Console.WriteLine($"[VoiceSettings] inputSensitivity = {sensInt}");
+            if (sensVal is int sensInt)
+            {
+                inputSensitivity = sensInt;
+                Console.WriteLine($"[VoiceSettings] inputSensitivity = {sensInt} (int)");
+            }
+            else if (sensVal is JsonElement sensElem && sensElem.TryGetInt32(out var sensIntFromElem))
+            {
+                inputSensitivity = sensIntFromElem;
+                Console.WriteLine($"[VoiceSettings] inputSensitivity = {sensIntFromElem} (JsonElement)");
+            }
+            else
+            {
+                Console.WriteLine($"[VoiceSettings] inputSensitivity - unexpected type: {sensVal?.GetType().Name}");
+            }
         }
 
         if (settings.TryGetValue("adaptiveBitrateEnabled", out var adaptVal))
@@ -689,7 +792,7 @@
             Console.WriteLine($"[VoiceSettings] useEnhancedVoiceChat = {enhancedBool}");
         }
 
-        Console.WriteLine($"[VoiceSettings] Final settings applied - echo:{echoCancellationEnabled}, noise:{noiseSuppressionEnabled}, gain:{autoGainControlEnabled}, sensitivity:{inputSensitivity}, enhanced:{useEnhancedVoiceChat}");
+        Console.WriteLine($"[VoiceSettings] Final settings applied - echo:{echoCancellationEnabled}, noise:{noiseSuppressionEnabled}, gain:{autoGainControlEnabled}, sensitivity:{inputSensitivity}, adaptive:{adaptiveBitrateEnabled}, quality:{qualityPriority}, enhanced:{useEnhancedVoiceChat}");
     }
 
     private void ApplyDefaultSettings()
@@ -719,51 +822,67 @@
     }
 
     // Audio Processing Toggles
-    private async Task ToggleEchoCancellation()
+    private void ToggleEchoCancellation()
     {
         echoCancellationEnabled = !echoCancellationEnabled;
         Console.WriteLine($"[VoiceSettings] ToggleEchoCancellation - new value: {echoCancellationEnabled}");
         // TODO: Implement actual JavaScript setEchoCancellation when available
-        await SaveSettings();
+        // Settings will be saved when user clicks Save button
     }
 
-    private async Task ToggleNoiseSuppression()
+    private void ToggleNoiseSuppression()
     {
         noiseSuppressionEnabled = !noiseSuppressionEnabled;
+        Console.WriteLine($"[VoiceSettings] ToggleNoiseSuppression - new value: {noiseSuppressionEnabled}");
         // TODO: Implement actual JavaScript setNoiseSuppression when available
-        await SaveSettings();
+        // Settings will be saved when user clicks Save button
     }
 
-    private async Task ToggleAutoGainControl()
+    private void ToggleAutoGainControl()
     {
         autoGainControlEnabled = !autoGainControlEnabled;
+        Console.WriteLine($"[VoiceSettings] ToggleAutoGainControl - new value: {autoGainControlEnabled}");
         // TODO: Implement actual JavaScript setAutoGainControl when available
-        await SaveSettings();
+        // Settings will be saved when user clicks Save button
     }
 
-    private async Task OnInputSensitivityChange(ChangeEventArgs e)
+    private void OnInputSensitivityChange(ChangeEventArgs e)
     {
+        Console.WriteLine($"[VoiceSettings] OnInputSensitivityChange - raw value: {e.Value}");
         if (int.TryParse(e.Value?.ToString(), out var value))
         {
             inputSensitivity = value;
+            Console.WriteLine($"[VoiceSettings] OnInputSensitivityChange - parsed value: {value}, mode: {(IsAdminMode ? "Admin" : "Player")}");
             // TODO: Implement actual JavaScript setInputSensitivity when available
-            await SaveSettings();
+            // Settings will be saved when user clicks Save button
+        }
+        else
+        {
+            Console.WriteLine($"[VoiceSettings] OnInputSensitivityChange - failed to parse value: {e.Value}");
         }
     }
 
     // Network Settings
-    private async Task ToggleAdaptiveBitrate()
+    private void ToggleAdaptiveBitrate()
     {
         adaptiveBitrateEnabled = !adaptiveBitrateEnabled;
+        Console.WriteLine($"[VoiceSettings] ToggleAdaptiveBitrate - new value: {adaptiveBitrateEnabled}");
         // TODO: Implement actual JavaScript setAdaptiveBitrate when available
-        await SaveSettings();
+        // Settings will be saved when user clicks Save button
     }
 
-    private async Task OnQualityPriorityChange(ChangeEventArgs e)
+    private void OnQualityPriorityChange(ChangeEventArgs e)
     {
         qualityPriority = e.Value?.ToString() ?? "quality";
-        // TODO: Implement actual JavaScript setQualityPriority when available
-        await SaveSettings();
+        Console.WriteLine($"[VoiceSettings] OnQualityPriorityChange - new value: {qualityPriority}");
+        // Settings will be saved when user clicks Save button
+    }
+
+    private void ToggleEnhancedVoiceChat()
+    {
+        useEnhancedVoiceChat = !useEnhancedVoiceChat;
+        Console.WriteLine($"[VoiceSettings] ToggleEnhancedVoiceChat - new value: {useEnhancedVoiceChat}");
+        // Settings will be saved when user clicks Save button
     }
 
     // Metrics Updates
@@ -910,6 +1029,88 @@
     private async Task ClosePanel()
     {
         await OnClose.InvokeAsync();
+    }
+
+    private async Task SaveAndClose()
+    {
+        try
+        {
+            // Save current settings
+            await SaveSettings();
+            
+            // Close the panel
+            await OnClose.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VoiceSettings] Error saving and closing: {ex.Message}");
+        }
+    }
+
+    private async Task CancelChanges()
+    {
+        try
+        {
+            // Reload settings to discard changes
+            await LoadSettings();
+            
+            // Close the panel
+            await OnClose.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VoiceSettings] Error canceling changes: {ex.Message}");
+        }
+    }
+
+    private async Task RestoreDefaults()
+    {
+        try
+        {
+            Console.WriteLine("[VoiceSettings] Restoring to default settings");
+            
+            // Apply hardcoded defaults
+            ApplyDefaultSettings();
+            
+            // Save defaults to database (admin mode only)
+            if (IsAdminMode)
+            {
+                var defaultSettings = CreateSettingsDictionary();
+                var success = await AdminVoiceSettings.SaveAdminVoiceSettingsAsync(defaultSettings);
+                Console.WriteLine($"[VoiceSettings] Admin defaults saved: {success}");
+            }
+            
+            Console.WriteLine("[VoiceSettings] Default settings restored");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VoiceSettings] Error restoring defaults: {ex.Message}");
+        }
+    }
+
+    private async Task RestoreToAdmin()
+    {
+        try
+        {
+            Console.WriteLine("[VoiceSettings] Restoring to admin defaults");
+            
+            // Load admin defaults from database
+            var adminDefaults = await AdminVoiceSettings.GetAdminVoiceSettingsAsync();
+            ApplySettings(adminDefaults);
+            
+            // Save admin defaults to localStorage (player mode only)
+            if (!IsAdminMode)
+            {
+                await SavePlayerSettingsToLocalStorage(adminDefaults);
+                Console.WriteLine("[VoiceSettings] Admin defaults saved to localStorage");
+            }
+            
+            Console.WriteLine("[VoiceSettings] Admin defaults restored");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VoiceSettings] Error restoring to admin defaults: {ex.Message}");
+        }
     }
 
     public void Dispose()
