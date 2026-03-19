@@ -425,7 +425,7 @@ else
     private const string VoicePrefix = "[VOICE] ";
     private const string VoiceMetaPrefix = "[VOICE-META]";
     private bool _talkEnabled;
-    private bool _sttActive;
+    // private bool _sttActive; // Currently unused - remove when needed
     private bool _pttHeld;
     private string _preferredTtsVoiceKey = "";
     private bool _isPhoneClient;
@@ -905,7 +905,7 @@ else
 
             if (_talkEnabled)
             {
-                QueueSpeakNewVoiceMessages(priorChatCount);
+                _ = QueueSpeakNewVoiceMessages(priorChatCount);
             }
         }
 

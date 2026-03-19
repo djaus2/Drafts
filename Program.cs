@@ -324,7 +324,8 @@ namespace Drafts
                         ""LastMoveHighlightColor"" TEXT NOT NULL,
                         ""EntrapmentMode"" INTEGER NOT NULL,
                         ""MultiJumpGraceSeconds"" REAL NOT NULL,
-                        ""GameInitiatorGoesFirst"" INTEGER NOT NULL
+                        ""GameInitiatorGoesFirst"" INTEGER NOT NULL,
+                        ""UseDirectAudioVoiceChat"" INTEGER NOT NULL
                     )");
                     Console.WriteLine("[Program] Created Settings table");
                 }

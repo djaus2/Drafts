@@ -306,8 +306,8 @@
         <h3 class="settings-title">Voice Settings</h3>
     </div>
 
-    <!-- Audio Processing Settings (only shown for direct audio mode) -->
-    @if (adminSettings?.UseDirectAudioVoiceChat == true)
+    <!-- Audio Processing Settings (only shown if admin allows TTS mode for text-to-speech processing) -->
+    @if (adminSettings?.UseDirectAudioVoiceChat == false)
     {
         <div class="settings-section">
             <div class="section-title">Audio Processing</div>
@@ -349,6 +349,9 @@
     }
 
     <!-- Voice System Choice (only shown if admin allows TTS mode) -->
+    @{
+        Console.WriteLine($"[VoiceSettings] UI Check - adminSettings null: {adminSettings == null}, UseDirectAudioVoiceChat: {adminSettings?.UseDirectAudioVoiceChat}, ShowVoiceSystemChoice: {ShowVoiceSystemChoice}");
+    }
     @if (ShowVoiceSystemChoice)
     {
         <div class="settings-section">

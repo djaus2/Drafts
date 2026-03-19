@@ -39,7 +39,8 @@ public static class DbSeeder
                         LastMoveHighlightColor = "rgba(255,0,0,0.85)",
                         EntrapmentMode = true,
                         MultiJumpGraceSeconds = 1.5,
-                        GameInitiatorGoesFirst = true
+                        GameInitiatorGoesFirst = true,
+                        UseDirectAudioVoiceChat = true
                     });
                 }
 
@@ -115,7 +116,8 @@ public static class DbSeeder
                         ""LastMoveHighlightColor"" TEXT NOT NULL,
                         ""EntrapmentMode"" INTEGER NOT NULL,
                         ""MultiJumpGraceSeconds"" REAL NOT NULL,
-                        ""GameInitiatorGoesFirst"" INTEGER NOT NULL
+                        ""GameInitiatorGoesFirst"" INTEGER NOT NULL,
+                        ""UseDirectAudioVoiceChat"" INTEGER NOT NULL
                     )");
                 Console.WriteLine("[DbSeeder] Created Settings table");
             }
