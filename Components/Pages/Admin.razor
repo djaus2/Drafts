@@ -81,6 +81,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button @onclick="SelectAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Select filtered</button>
             <button @onclick="ClearAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Clear filtered</button>
+            <button @onclick="ToggleShowSelectedAdminVoices" disabled="@(!_adminSelectedVoiceTokens.Any())">@(_adminShowSelectedVoicesOnly ? "Show all voices" : "Show selected voices")</button>
             <button @onclick="SaveAllowedVoices" disabled="@(!_adminAllVoices.Any())">Save allowed voices</button>
         </div>
         @if (!string.IsNullOrWhiteSpace(_voiceCatalogMessage))
@@ -215,6 +216,7 @@ else
     private string _adminSelectedLanguage = "";
     private string _adminSelectedRegion = "";
     private string _adminFocusedVoiceKey = "";
+    private bool _adminShowSelectedVoicesOnly;
     private bool _adminVoicesLoaded;
 
     private sealed class JsVoiceInfo
@@ -446,6 +448,15 @@ else
             _adminSelectedVoiceTokens.Remove(voice.Token);
         }
 
+        ApplyAdminVoiceFilters();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task ToggleShowSelectedAdminVoices()
+    {
+        _adminShowSelectedVoicesOnly = !_adminShowSelectedVoicesOnly;
+        _adminFocusedVoiceKey = "";
+        ApplyAdminVoiceFilters();
         return InvokeAsync(StateHasChanged);
     }
 
@@ -553,9 +564,13 @@ else
             _adminSelectedRegion = "";
         }
 
-        _adminFilteredVoices = (string.IsNullOrWhiteSpace(_adminSelectedRegion)
-                ? langFiltered
-                : langFiltered.Where(v => string.Equals(GetRegion(v.Lang), _adminSelectedRegion, StringComparison.OrdinalIgnoreCase)).ToList())
+        var regionFiltered = string.IsNullOrWhiteSpace(_adminSelectedRegion)
+            ? langFiltered
+            : langFiltered.Where(v => string.Equals(GetRegion(v.Lang), _adminSelectedRegion, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        _adminFilteredVoices = (_adminShowSelectedVoicesOnly
+                ? regionFiltered.Where(v => _adminSelectedVoiceTokens.Contains(v.Token)).ToList()
+                : regionFiltered)
             .OrderBy(v => v.Label)
             .ToList();
 

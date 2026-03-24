@@ -37,13 +37,6 @@ else
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voice</h4>
 
-@if (_isPhoneClient)
-{
-    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
-        Voice selection is not supported on phones yet. Using default voice.
-    </div>
-}
-
 @if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
 {
     <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
@@ -53,10 +46,7 @@ else
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        @if (_isPhoneClient)
-        {
-        }
-        else if (!_showVoiceSelection)
+        @if (!_showVoiceSelection)
         {
             <button @onclick="ShowVoiceSelection" style="width:100%;">Change voice</button>
         }
@@ -515,7 +505,7 @@ else
             _selectedRegion = "AU";
         }
 
-        _showVoiceSelection = !_isPhoneClient;
+        _showVoiceSelection = false;
         _loadedVoicePrefs = true;
         _usableChromeVoiceTokens = UsableMsVoices.GetTokens("chrome").ToHashSet(StringComparer.OrdinalIgnoreCase);
 
