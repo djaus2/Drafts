@@ -5,9 +5,11 @@
 @using Drafts.Services
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject DraftsService GameService
 @inject SettingsService Settings
+@inject UsableMsVoiceService UsableMsVoices
 
 <PageTitleHeading Title="Admin" HeadingLevel="2" />
 
@@ -16,7 +18,6 @@
 <div style="display:flex;flex-direction:column;gap:6px">
     <a href="/admin/users">Manage players</a>
     <a href="/admin/groups">Manage groups</a>
-    <button type="button" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;" @onclick="OpenVoiceSettings">Manage voice settings</button>
     <a href="/player">Reset your password</a>
     <form method="get" action="/api/admin/download-database" style="display:inline;">
     <button type="submit" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
@@ -34,6 +35,58 @@
             <input type="radio" name="creatorColor" value="2" checked="@(_creatorPlayerNumber == 2)" @onchange="(() => _creatorPlayerNumber = 2)" />
             White
         </label>
+    </div>
+    <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
+</div>
+
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voices</h4>
+
+<div style="max-width:520px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+        <button @onclick="LoadAdminVoicesFromUserGesture" disabled="@_checkingChromeVoices">Load voices</button>
+        <select @key="_adminVoicesLoaded" value="@_adminSelectedLanguage" @onchange="OnAdminLanguageChanged" disabled="@(!_adminVoicesLoaded)">
+            <option value="">All languages</option>
+            @foreach (var l in _adminLanguages)
+            {
+                <option @key="l" value="@l">@FormatLanguageLabel(l)</option>
+            }
+        </select>
+        <select @key="_adminSelectedLanguage" value="@_adminSelectedRegion" @onchange="OnAdminRegionChanged" disabled="@(!_adminRegions.Any())">
+            <option value="">All countries</option>
+            @foreach (var r in _adminRegions)
+            {
+                <option @key="r" value="@r">@FormatRegionLabel(_adminSelectedLanguage, r)</option>
+            }
+        </select>
+        <select @key="@($"{_adminSelectedLanguage}|{_adminSelectedRegion}")" value="@_adminFocusedVoiceKey" @onchange="OnAdminFocusedVoiceChanged" disabled="@(!_adminFilteredVoices.Any())">
+            <option value="">Select a voice</option>
+            @foreach (var v in _adminFilteredVoices)
+            {
+                <option @key="v.Key" value="@v.Key">@v.Label</option>
+            }
+        </select>
+        <div style="font-size:12px;opacity:0.85;">Loaded voices: @_adminAllVoices.Count. Allowed for players: @_adminSelectedVoiceTokens.Count.</div>
+        @if (_adminFilteredVoices.Any())
+        {
+            <div style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;border:1px solid #ddd;padding:8px;">
+                @foreach (var voice in _adminFilteredVoices)
+                {
+                    <label style="display:flex;align-items:flex-start;gap:8px;">
+                        <input type="checkbox" checked="@_adminSelectedVoiceTokens.Contains(voice.Token)" @onchange="@(e => OnAdminVoiceCheckedChanged(voice, e))" />
+                        <span>@voice.Label</span>
+                    </label>
+                }
+            </div>
+        }
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button @onclick="SelectAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Select filtered</button>
+            <button @onclick="ClearAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Clear filtered</button>
+            <button @onclick="SaveAllowedVoices" disabled="@(!_adminAllVoices.Any())">Save allowed voices</button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_voiceCatalogMessage))
+        {
+            <div>@_voiceCatalogMessage</div>
+        }
     </div>
 </div>
 
@@ -64,21 +117,6 @@
             Game Initiator goes first
             <br />
         </label>
-        <label style="display:flex;align-items:center;gap:8px">
-            <input type="checkbox" @bind="_useDirectAudioVoiceChat" />
-            Use Direct Audio Voice Chat (Recommended)
-            <br />
-            <small style="color:#666;">
-                @if (_useDirectAudioVoiceChat)
-                {
-                    <text>Players will use direct audio transmission (natural voice). Voice selection options will be hidden.</text>
-                }
-                else
-                {
-                    <text>Players can choose between direct audio and text-to-speech. Voice selection options will be available.</text>
-                }
-            </small>
-        </label>
         <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
             <select @bind="_lastMoveHighlightColor">
@@ -95,14 +133,6 @@
         }
     </div>
 </div>
-
-@if (_showVoiceSettings)
-{
-    <div class="voice-settings-popup" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:500px;max-height:80vh;overflow:auto;">
-        <VoiceSettingsPanel OnClose="() => { _showVoiceSettings = false; StateHasChanged(); }" IsAdminMode="true" />
-    </div>
-    <div class="popup-backdrop" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999;" @onclick="() => { _showVoiceSettings = false; StateHasChanged(); }"></div>
-}
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Games</h4>
 
@@ -173,8 +203,36 @@ else
     private bool _entrapmentMode = true;
     private double _multiJumpGraceSeconds = 1.5;
     private bool _gameInitiatorGoesFirst = true;
-    private bool _useDirectAudioVoiceChat = true; // Default to direct audio
     private string _settingsMessage = "";
+    private string _voiceCatalogMessage = "";
+    private bool _checkingChromeVoices;
+    private List<Drafts.Data.UsableMsVoice> _chromeUsableVoices = new();
+    private List<VoiceOptionInternal> _adminAllVoices = new();
+    private List<VoiceOptionInternal> _adminFilteredVoices = new();
+    private List<string> _adminLanguages = new();
+    private List<string> _adminRegions = new();
+    private HashSet<string> _adminSelectedVoiceTokens = new(StringComparer.OrdinalIgnoreCase);
+    private string _adminSelectedLanguage = "";
+    private string _adminSelectedRegion = "";
+    private string _adminFocusedVoiceKey = "";
+    private bool _adminVoicesLoaded;
+
+    private sealed class JsVoiceInfo
+    {
+        public string? voiceURI { get; set; }
+        public string? name { get; set; }
+        public string? lang { get; set; }
+    }
+
+    private sealed class VoiceOptionInternal
+    {
+        public string Key { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string Lang { get; set; } = "";
+        public string Token { get; set; } = "";
+        public string VoiceName { get; set; } = "";
+        public string VoiceUri { get; set; } = "";
+    }
 
     private sealed record ColorOption(string Label, string Value);
 
@@ -216,7 +274,11 @@ else
         _entrapmentMode = await Settings.GetEntrapmentModeAsync();
         _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
         _gameInitiatorGoesFirst = await Settings.GetGameInitiatorGoesFirstAsync();
-        _useDirectAudioVoiceChat = await Settings.GetUseDirectAudioVoiceChatAsync();
+        _chromeUsableVoices = UsableMsVoices.GetVoices("chrome").ToList();
+        _adminSelectedVoiceTokens = _chromeUsableVoices
+            .Select(x => x.Token)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         RefreshGames();
         GameService.GameUpdated += OnGameUpdated;
     }
@@ -252,8 +314,301 @@ else
         var ok4 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
         var ok5 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
         var ok6 = await Settings.UpdateGameInitiatorGoesFirstAsync(_gameInitiatorGoesFirst);
-        var ok7 = await Settings.UpdateUseDirectAudioVoiceChatAsync(_useDirectAudioVoiceChat);
-        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7) ? "Saved." : "Invalid value.";
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6) ? "Saved." : "Invalid value.";
+    }
+
+    private async Task LoadAdminVoicesFromUserGesture()
+    {
+        _voiceCatalogMessage = "";
+        _checkingChromeVoices = true;
+
+        try
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+            }
+            catch
+            {
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            var raw = await JS.InvokeAsync<List<JsVoiceInfo>>("draftsVoice.getVoicesAsync", cts.Token);
+            _adminAllVoices = (raw ?? new List<JsVoiceInfo>())
+                .Select(v =>
+                {
+                    var voiceUri = (v?.voiceURI ?? string.Empty).Trim();
+                    var voiceName = (v?.name ?? string.Empty).Trim();
+                    var voiceLang = (v?.lang ?? string.Empty).Trim();
+                    var key = !string.IsNullOrWhiteSpace(voiceUri)
+                        ? $"uri:{voiceUri}"
+                        : $"name:{voiceName}|lang:{voiceLang}";
+                    var label = string.IsNullOrWhiteSpace(voiceLang)
+                        ? voiceName
+                        : $"{voiceName} ({voiceLang})";
+                    var token = VoiceCatalog.NormalizeToken(voiceName, voiceLang);
+
+                    return new VoiceOptionInternal
+                    {
+                        Key = key,
+                        Label = label,
+                        Lang = voiceLang,
+                        Token = token,
+                        VoiceName = voiceName,
+                        VoiceUri = voiceUri
+                    };
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Label))
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token))
+                .DistinctBy(x => x.Key)
+                .OrderBy(x => x.Label)
+                .ToList();
+
+            _adminVoicesLoaded = _adminAllVoices.Count > 0;
+            ApplyAdminVoiceFilters();
+            _voiceCatalogMessage = _adminAllVoices.Count == 0
+                ? "No voices found in this browser instance."
+                : $"Loaded {_adminAllVoices.Count} voices from this browser.";
+        }
+        catch (Exception ex)
+        {
+            var msg = ex.Message ?? string.Empty;
+            if (msg.Length > 160) msg = msg.Substring(0, 160);
+            _voiceCatalogMessage = $"Voice load failed: {ex.GetType().Name}: {msg}";
+        }
+        finally
+        {
+            _checkingChromeVoices = false;
+        }
+    }
+
+    private async Task OnAdminLanguageChanged(ChangeEventArgs e)
+    {
+        _adminSelectedLanguage = (e?.Value?.ToString() ?? string.Empty).Trim();
+        _adminSelectedRegion = "";
+        _adminFocusedVoiceKey = "";
+        ApplyAdminVoiceFilters();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnAdminRegionChanged(ChangeEventArgs e)
+    {
+        _adminSelectedRegion = (e?.Value?.ToString() ?? string.Empty).Trim();
+        _adminFocusedVoiceKey = "";
+        ApplyAdminVoiceFilters();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnAdminFocusedVoiceChanged(ChangeEventArgs e)
+    {
+        _adminFocusedVoiceKey = (e?.Value?.ToString() ?? string.Empty).Trim();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task OnAdminVoiceCheckedChanged(VoiceOptionInternal voice, ChangeEventArgs e)
+    {
+        var isChecked = false;
+        if (e?.Value is bool b)
+        {
+            isChecked = b;
+        }
+        else
+        {
+            _ = bool.TryParse(e?.Value?.ToString(), out isChecked);
+        }
+
+        if (isChecked)
+        {
+            _adminSelectedVoiceTokens.Add(voice.Token);
+        }
+        else
+        {
+            _adminSelectedVoiceTokens.Remove(voice.Token);
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task SelectAllFilteredAdminVoices()
+    {
+        foreach (var voice in _adminFilteredVoices)
+        {
+            _adminSelectedVoiceTokens.Add(voice.Token);
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private Task ClearAllFilteredAdminVoices()
+    {
+        foreach (var voice in _adminFilteredVoices)
+        {
+            _adminSelectedVoiceTokens.Remove(voice.Token);
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveAllowedVoices()
+    {
+        _voiceCatalogMessage = "";
+
+        try
+        {
+            var items = _adminAllVoices
+                .Where(x => _adminSelectedVoiceTokens.Contains(x.Token))
+                .Select(x => (x.Token, x.VoiceName, (string?)x.Lang, string.IsNullOrWhiteSpace(x.VoiceUri) ? null : x.VoiceUri))
+                .ToList();
+
+            var saved = await UsableMsVoices.ReplaceVoicesAsync("chrome", items);
+            _chromeUsableVoices = UsableMsVoices.GetVoices("chrome").ToList();
+            _adminSelectedVoiceTokens = _chromeUsableVoices
+                .Select(x => x.Token)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _voiceCatalogMessage = $"Saved {saved} allowed Chrome voices.";
+        }
+        catch (Exception ex)
+        {
+            var msg = ex.Message ?? string.Empty;
+            if (msg.Length > 160) msg = msg.Substring(0, 160);
+            _voiceCatalogMessage = $"Saving allowed voices failed: {ex.GetType().Name}: {msg}";
+        }
+    }
+
+    private void ApplyAdminVoiceFilters()
+    {
+        static HashSet<string> KnownLanguages() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            "en","fr","es","de","it","pt","nl","sv","da","no","fi"
+        };
+
+        static HashSet<string> KnownRegionsForLang(string? language)
+        {
+            if (!string.Equals(language, "en", StringComparison.OrdinalIgnoreCase))
+            {
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "US","GB","AU","CA","NZ","IE","IN","ZA"
+            };
+        }
+
+        static string GetLanguage(string? lang)
+        {
+            if (string.IsNullOrWhiteSpace(lang)) return "";
+            lang = lang.Trim();
+            var sep = lang.IndexOf('-');
+            if (sep < 0) sep = lang.IndexOf('_');
+            if (sep < 0) return lang.ToLowerInvariant();
+            if (sep <= 0) return "";
+            return lang.Substring(0, sep).Trim().ToLowerInvariant();
+        }
+
+        static string GetRegion(string? lang)
+        {
+            if (string.IsNullOrWhiteSpace(lang)) return "";
+            lang = lang.Trim();
+            var sep = lang.IndexOf('-');
+            if (sep < 0) sep = lang.IndexOf('_');
+            if (sep < 0) return "";
+            if (sep + 1 >= lang.Length) return "";
+            return lang.Substring(sep + 1).Trim().ToUpperInvariant();
+        }
+
+        _adminLanguages = _adminAllVoices
+            .Select(v => GetLanguage(v.Lang))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => KnownLanguages().Contains(x) ? 0 : 1)
+            .ThenBy(x => FormatLanguageLabel(x))
+            .ThenBy(x => x)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(_adminSelectedLanguage)
+            && !_adminLanguages.Contains(_adminSelectedLanguage, StringComparer.OrdinalIgnoreCase))
+        {
+            _adminSelectedLanguage = "";
+            _adminSelectedRegion = "";
+        }
+
+        var langFiltered = string.IsNullOrWhiteSpace(_adminSelectedLanguage)
+            ? _adminAllVoices
+            : _adminAllVoices.Where(v => string.Equals(GetLanguage(v.Lang), _adminSelectedLanguage, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        _adminRegions = langFiltered
+            .Select(v => GetRegion(v.Lang))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => KnownRegionsForLang(_adminSelectedLanguage).Contains(x) ? 0 : 1)
+            .ThenBy(x => FormatRegionLabel(_adminSelectedLanguage, x))
+            .ThenBy(x => x)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(_adminSelectedRegion)
+            && !_adminRegions.Contains(_adminSelectedRegion, StringComparer.OrdinalIgnoreCase))
+        {
+            _adminSelectedRegion = "";
+        }
+
+        _adminFilteredVoices = (string.IsNullOrWhiteSpace(_adminSelectedRegion)
+                ? langFiltered
+                : langFiltered.Where(v => string.Equals(GetRegion(v.Lang), _adminSelectedRegion, StringComparison.OrdinalIgnoreCase)).ToList())
+            .OrderBy(v => v.Label)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(_adminFocusedVoiceKey)
+            && !_adminFilteredVoices.Any(v => v.Key == _adminFocusedVoiceKey))
+        {
+            _adminFocusedVoiceKey = "";
+        }
+    }
+
+    private static string FormatLanguageLabel(string language)
+    {
+        language = (language ?? string.Empty).Trim().ToLowerInvariant();
+        return language switch
+        {
+            "en" => "English (en)",
+            "fr" => "French (fr)",
+            "es" => "Spanish (es)",
+            "de" => "German (de)",
+            "it" => "Italian (it)",
+            "pt" => "Portuguese (pt)",
+            "nl" => "Dutch (nl)",
+            "sv" => "Swedish (sv)",
+            "da" => "Danish (da)",
+            "no" => "Norwegian (no)",
+            "fi" => "Finnish (fi)",
+            _ => language
+        };
+    }
+
+    private static string FormatRegionLabel(string? language, string region)
+    {
+        var lang = (language ?? string.Empty).Trim();
+        region = (region ?? string.Empty).Trim().ToUpperInvariant();
+        if (string.Equals(lang, "en", StringComparison.OrdinalIgnoreCase))
+        {
+            return region switch
+            {
+                "US" => "United States (en-US)",
+                "GB" => "United Kingdom (en-GB)",
+                "AU" => "Australia (en-AU)",
+                "CA" => "Canada (en-CA)",
+                "NZ" => "New Zealand (en-NZ)",
+                "IE" => "Ireland (en-IE)",
+                "IN" => "India (en-IN)",
+                "ZA" => "South Africa (en-ZA)",
+                _ => region
+            };
+        }
+
+        return string.IsNullOrWhiteSpace(lang)
+            ? region
+            : $"{region} ({lang}-{region})";
     }
 
     private static string FormatAge(TimeSpan ts)
@@ -276,17 +631,6 @@ else
     private void StartNewGame()
     {
         Nav.NavigateTo($"/drafts?creator={_creatorPlayerNumber}&admin=1");
-    }
-
-    // Voice Settings
-    private bool _showVoiceSettings = false;
-    // private string _voiceSettingsMessage = ""; // Currently unused - remove when needed
-
-    private void OpenVoiceSettings()
-    {
-        _showVoiceSettings = true;
-        // _voiceSettingsMessage = ""; // Currently unused - remove when needed
-        StateHasChanged(); // Update UI to show the popup
     }
 
     private async Task OnChangePin()

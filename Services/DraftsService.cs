@@ -1117,6 +1117,43 @@ namespace Drafts.Services
             return true;
         }
 
+        public bool SetPreferredTtsSettingsForUser(string gameId, int userId, string? preferredTtsVoiceKey, string? preferredTtsLanguage, string? preferredTtsRegion)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return false;
+            if (userId <= 0) return false;
+
+            var game = GetGame(gameId);
+            if (game is null) return false;
+
+            preferredTtsVoiceKey = (preferredTtsVoiceKey ?? string.Empty).Trim();
+            preferredTtsLanguage = (preferredTtsLanguage ?? string.Empty).Trim().ToLowerInvariant();
+            preferredTtsRegion = (preferredTtsRegion ?? string.Empty).Trim().ToUpperInvariant();
+
+            if (string.IsNullOrWhiteSpace(preferredTtsVoiceKey)) preferredTtsVoiceKey = null;
+            if (string.IsNullOrWhiteSpace(preferredTtsLanguage)) preferredTtsLanguage = null;
+            if (string.IsNullOrWhiteSpace(preferredTtsRegion)) preferredTtsRegion = null;
+
+            lock (game)
+            {
+                game.PreferredTtsVoiceByUserId[userId] = preferredTtsVoiceKey;
+                game.PreferredTtsLanguageByUserId[userId] = preferredTtsLanguage;
+                game.PreferredTtsRegionByUserId[userId] = preferredTtsRegion;
+                game.Touch();
+            }
+
+            OnGameUpdated(gameId);
+
+            try
+            {
+                TryAnnounceVoiceInfo(gameId);
+            }
+            catch
+            {
+            }
+
+            return true;
+        }
+
         public string? GetPreferredTtsVoiceForUser(string gameId, int userId)
         {
             if (string.IsNullOrWhiteSpace(gameId)) return null;
@@ -1128,6 +1165,34 @@ namespace Drafts.Services
             lock (game)
             {
                 return game.GetPreferredTtsVoiceForUserId(userId);
+            }
+        }
+
+        public string? GetPreferredTtsLanguageForUser(string gameId, int userId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return null;
+            if (userId <= 0) return null;
+
+            var game = GetGame(gameId);
+            if (game is null) return null;
+
+            lock (game)
+            {
+                return game.GetPreferredTtsLanguageForUserId(userId);
+            }
+        }
+
+        public string? GetPreferredTtsRegionForUser(string gameId, int userId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return null;
+            if (userId <= 0) return null;
+
+            var game = GetGame(gameId);
+            if (game is null) return null;
+
+            lock (game)
+            {
+                return game.GetPreferredTtsRegionForUserId(userId);
             }
         }
 
@@ -1258,6 +1323,8 @@ namespace Drafts.Services
         public DateTime? VoiceFloorUntilUtc { get; set; }
 
         public Dictionary<int, string?> PreferredTtsVoiceByUserId { get; } = new();
+        public Dictionary<int, string?> PreferredTtsLanguageByUserId { get; } = new();
+        public Dictionary<int, string?> PreferredTtsRegionByUserId { get; } = new();
 
         public bool VoiceMuted { get; set; } = false;
         public int? VoiceMutedByUserId { get; set; }
@@ -1301,6 +1368,18 @@ namespace Drafts.Services
             return PreferredTtsVoiceByUserId.TryGetValue(userId, out var v) ? v : null;
         }
 
+        public string? GetPreferredTtsLanguageForUserId(int userId)
+        {
+            if (userId <= 0) return null;
+            return PreferredTtsLanguageByUserId.TryGetValue(userId, out var v) ? v : null;
+        }
+
+        public string? GetPreferredTtsRegionForUserId(int userId)
+        {
+            if (userId <= 0) return null;
+            return PreferredTtsRegionByUserId.TryGetValue(userId, out var v) ? v : null;
+        }
+
         private void InitializeBoard()
         {
             // Standard checkers initial placement on dark squares.
@@ -1342,6 +1421,8 @@ namespace Drafts.Services
             VoiceFloorUntilUtc = null;
 
             PreferredTtsVoiceByUserId.Clear();
+            PreferredTtsLanguageByUserId.Clear();
+            PreferredTtsRegionByUserId.Clear();
 
             WinnerPlayer = null;
             GameOverMessageSent = false;

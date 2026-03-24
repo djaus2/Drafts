@@ -11,25 +11,11 @@
 @inject NavigationManager Nav
 @inject DraftsService GameService
 @inject SettingsService Settings
+@inject UsableMsVoiceService UsableMsVoices
 
 <PageTitleHeading Title="Player" HeadingLevel="2" />
 
 <p>You are logged in as <b>@_currentUserName</b>.</p>
-
-<!-- Debug: Voice Chat Mode -->
-<div style="background: rgba(255,255,255,0.1); padding: 10px; margin: 10px 0; border-radius: 4px; font-family: monospace; font-size: 12px;">
-    <strong>🔧 Debug - Voice Chat Mode:</strong><br/>
-    @if (useDirectAudioVoiceChatLoaded)
-    {
-        <span style="color: @(useDirectAudioVoiceChat ? "#4CAF50" : "#FF9800");">
-            UseDirectAudioVoiceChat = @(useDirectAudioVoiceChat ? "TRUE (Direct Audio)" : "FALSE (TTS Mode)")
-        </span>
-    }
-    else
-    {
-        <span style="color: #F44336;">Loading...</span>
-    }
-</div>
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Member of Groups:</h4>
 
@@ -49,65 +35,66 @@ else
     </div>
 }
 
-@if (!useDirectAudioVoiceChat)
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voice</h4>
+
+@if (_isPhoneClient)
 {
-    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voice</h4>
-
-    @if (_isPhoneClient)
-    {
-        <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
-            Voice selection is not supported on phones yet. Using default voice.
-        </div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
-    {
-        <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
-            Selected voice: @_selectedVoiceDisplay
-        </div>
-    }
-
-    <div style="max-width:360px">
-        <div style="display:flex;flex-direction:column;gap:8px">
-            @if (_isPhoneClient)
-            {
-            }
-            else if (!_showVoiceSelection)
-            {
-                <button @onclick="ShowVoiceSelection" style="width:100%;">Change voice</button>
-            }
-            else
-            {
-                <button @onclick="LoadVoicesFromUserGesture" style="width:100%;">Load voices</button>
-                <select @key="_voicesLoaded" value="@_selectedLanguage" @onchange="OnLanguageChanged" disabled="@(!_voicesLoaded)">
-                    <option value="">All languages</option>
-                    @foreach (var l in _languages)
-                    {
-                        <option @key="l" value="@l">@FormatLanguageLabel(l)</option>
-                    }
-                </select>
-                <select @key="_selectedLanguage" value="@_selectedRegion" @onchange="OnRegionChanged" disabled="@(!_regions.Any())">
-                    <option value="">All countries</option>
-                    @foreach (var r in _regions)
-                    {
-                        <option @key="r" value="@r">@FormatRegionLabel(_selectedLanguage, r)</option>
-                    }
-                </select>
-                <select @key="@($"{_selectedLanguage}|{_selectedRegion}")" value="@_selectedVoiceKey" @onchange="OnVoiceChanged">
-                    <option value="">Default voice</option>
-                    @foreach (var v in _voices)
-                    {
-                        <option @key="v.Key" value="@v.Key">@v.Label</option>
-                    }
-                </select>
-            }
-            @if (!string.IsNullOrWhiteSpace(_voiceSaveMessage))
-            {
-                <div>@_voiceSaveMessage</div>
-            }
-        </div>
+    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
+        Voice selection is not supported on phones yet. Using default voice.
     </div>
 }
+
+@if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
+{
+    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
+        Selected voice: @_selectedVoiceDisplay
+    </div>
+}
+
+<div style="max-width:360px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+        @if (_isPhoneClient)
+        {
+        }
+        else if (!_showVoiceSelection)
+        {
+            <button @onclick="ShowVoiceSelection" style="width:100%;">Change voice</button>
+        }
+        else
+        {
+            <button @onclick="LoadVoicesFromUserGesture" style="width:100%;">Load voices</button>
+            <select @key="_voicesLoaded" value="@_selectedLanguage" @onchange="OnLanguageChanged" disabled="@(!_voicesLoaded)">
+                <option value="">All languages</option>
+                @foreach (var l in _languages)
+                {
+                    <option @key="l" value="@l">@FormatLanguageLabel(l)</option>
+                }
+            </select>
+            <select @key="_selectedLanguage" value="@_selectedRegion" @onchange="OnRegionChanged" disabled="@(!_regions.Any())">
+                <option value="">All countries</option>
+                @foreach (var r in _regions)
+                {
+                    <option @key="r" value="@r">@FormatRegionLabel(_selectedLanguage, r)</option>
+                }
+            </select>
+            <select @key="@($"{_selectedLanguage}|{_selectedRegion}")" value="@_selectedVoiceKey" @onchange="OnVoiceChanged">
+                <option value="">Default voice</option>
+                @foreach (var v in _voices)
+                {
+                    <option @key="v.Key" value="@v.Key">@v.Label</option>
+                }
+            </select>
+        }
+@*         @if (!string.IsNullOrWhiteSpace(_voiceDebugStatus))
+        {
+            <div style="font-size:12px;opacity:0.85">@_voiceDebugStatus</div>
+        } *@
+        @if (!string.IsNullOrWhiteSpace(_voiceSaveMessage))
+        {
+            <div>@_voiceSaveMessage</div>
+        }
+    </div>
+</div>
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Group</h4>
 
@@ -186,22 +173,6 @@ else
 </div>
 
 <LobbyChat />
-
-<!-- Voice Chat Settings Panel -->
-@if (_showVoiceSettings)
-{
-    <div class="voice-settings-popup" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1000;background:white;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:500px;max-height:80vh;overflow:auto;">
-        <VoiceSettingsPanel OnClose="() => { _showVoiceSettings = false; StateHasChanged(); }" IsAdminMode="false" />
-    </div>
-    <div class="popup-backdrop" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999;" @onclick="() => { _showVoiceSettings = false; StateHasChanged(); }"></div>
-}
-
-<!-- Voice Settings Button -->
-<div style="margin-top:20px;">
-    <button @onclick="OpenVoiceSettings" style="padding:10px 20px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
-        Voice Chat Settings
-    </button>
-</div>
 
 <script>
   window.draftsVoice = window.draftsVoice || {};
@@ -369,17 +340,6 @@ else
     private string _newPin = "";
     private string _pinMessage = "";
     private string _currentUserName = "";
-    private bool _showVoiceSettings = false;
-
-    // Debug variables for voice chat mode
-    private bool useDirectAudioVoiceChat = true;
-    private bool useDirectAudioVoiceChatLoaded = false;
-
-    private void OpenVoiceSettings()
-    {
-        _showVoiceSettings = true;
-        StateHasChanged();
-    }
 
     private sealed class VoiceOption
     {
@@ -399,10 +359,12 @@ else
         public string Key { get; set; } = "";
         public string Label { get; set; } = "";
         public string Lang { get; set; } = "";
+        public string Token { get; set; } = "";
     }
 
     private List<VoiceOption> _voices = new();
     private List<VoiceOptionInternal> _allVoices = new();
+    private HashSet<string> _usableChromeVoiceTokens = new(StringComparer.OrdinalIgnoreCase);
     private List<string> _languages = new();
     private List<string> _regions = new();
     private string _selectedLanguage = "";
@@ -462,7 +424,7 @@ else
             await InvokeAsync(StateHasChanged);
         });
 
-        _ = InvokeAsync(async () =>
+        await InvokeAsync(async () =>
         {
             var users = await Auth.ListUsersAsync();
             _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
@@ -475,6 +437,8 @@ else
 
             // Load game initiator setting
             _playFirst = await Settings.GetGameInitiatorGoesFirstAsync();
+
+            await RefreshGames();
 
             await InvokeAsync(StateHasChanged);
         });
@@ -492,20 +456,6 @@ else
             {
             }
         }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
-
-        // Load the current voice chat mode setting for debug display
-        try
-        {
-            useDirectAudioVoiceChat = await Settings.GetUseDirectAudioVoiceChatAsync();
-            useDirectAudioVoiceChatLoaded = true;
-            Console.WriteLine($"[Player Debug] UseDirectAudioVoiceChat loaded: {useDirectAudioVoiceChat}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Player Debug] Error loading UseDirectAudioVoiceChat: {ex.Message}");
-            useDirectAudioVoiceChat = true; // Default to direct audio
-            useDirectAudioVoiceChatLoaded = true;
-        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -567,6 +517,7 @@ else
 
         _showVoiceSelection = !_isPhoneClient;
         _loadedVoicePrefs = true;
+        _usableChromeVoiceTokens = UsableMsVoices.GetTokens("chrome").ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         await InvokeAsync(StateHasChanged);
 
@@ -805,6 +756,7 @@ else
                     var voiceURI = (v?.VoiceURI ?? string.Empty).Trim();
                     var name = (v?.Name ?? string.Empty).Trim();
                     var lang = (v?.Lang ?? string.Empty).Trim();
+                    var token = VoiceCatalog.NormalizeToken(name, lang);
 
                     var key = !string.IsNullOrWhiteSpace(voiceURI)
                         ? $"uri:{voiceURI}"
@@ -814,9 +766,10 @@ else
                         ? name
                         : $"{name} ({lang})";
 
-                    return new VoiceOptionInternal { Key = key, Label = label, Lang = lang };
+                    return new VoiceOptionInternal { Key = key, Label = label, Lang = lang, Token = token };
                 })
                 .Where(x => !string.IsNullOrWhiteSpace(x.Label))
+                .Where(x => _usableChromeVoiceTokens.Count == 0 || _usableChromeVoiceTokens.Contains(x.Token))
                 .DistinctBy(x => x.Key)
                 .OrderBy(x => x.Label)
                 .ToList();
@@ -1014,6 +967,48 @@ else
         _selectedVoiceKey = (e?.Value?.ToString() ?? string.Empty).Trim();
         _selectedVoiceDisplay = _selectedVoiceKey;
 
+        static string GetLanguage(string? lang)
+        {
+            if (string.IsNullOrWhiteSpace(lang)) return "";
+            lang = lang.Trim();
+            var sep = lang.IndexOf('-');
+            if (sep < 0) sep = lang.IndexOf('_');
+            if (sep < 0) return lang.ToLowerInvariant();
+            if (sep <= 0) return "";
+            return lang.Substring(0, sep).Trim().ToLowerInvariant();
+        }
+
+        static string GetRegion(string? lang)
+        {
+            if (string.IsNullOrWhiteSpace(lang)) return "";
+            lang = lang.Trim();
+            var sep = lang.IndexOf('-');
+            if (sep < 0) sep = lang.IndexOf('_');
+            if (sep < 0) return "";
+            if (sep + 1 >= lang.Length) return "";
+            return lang.Substring(sep + 1).Trim().ToUpperInvariant();
+        }
+
+        try
+        {
+            var selectedVoice = _allVoices.FirstOrDefault(v => v.Key == _selectedVoiceKey);
+            if (selectedVoice is not null)
+            {
+                var derivedLanguage = GetLanguage(selectedVoice.Lang);
+                var derivedRegion = GetRegion(selectedVoice.Lang);
+
+                if (!string.IsNullOrWhiteSpace(derivedLanguage))
+                {
+                    _selectedLanguage = derivedLanguage;
+                }
+
+                _selectedRegion = derivedRegion;
+            }
+        }
+        catch
+        {
+        }
+
         var uid = GetCurrentUserId();
         if (!uid.HasValue)
         {
@@ -1024,9 +1019,11 @@ else
         try
         {
             var ok = await Auth.UpdatePreferredTtsVoiceAsync(uid.Value, _selectedVoiceKey);
-            _voiceSaveMessage = ok ? "Saved." : "Save failed.";
+            var okLanguage = ok && await Auth.UpdatePreferredTtsLanguageAsync(uid.Value, _selectedLanguage);
+            var okRegion = ok && await Auth.UpdatePreferredTtsRegionAsync(uid.Value, _selectedRegion);
+            _voiceSaveMessage = (ok && okLanguage && okRegion) ? "Saved." : "Save failed.";
 
-            if (ok)
+            if (ok && okLanguage && okRegion)
             {
                 _showVoiceSelection = false;
 
@@ -1067,6 +1064,7 @@ else
         try
         {
             await RefreshGames();
+            await InvokeAsync(StateHasChanged);
         }
         catch
         {
@@ -1165,9 +1163,22 @@ else
             .OrderByDescending(g => g.CreatedUtc)
             .ToList();
 
+        var joinableGroupGames = _joinableGames
+            .Where(g => g.GroupId.HasValue && userGroupIds.Contains(g.GroupId.Value))
+            .ToList();
+
         if (!string.IsNullOrWhiteSpace(_selectedGameId) && !_joinableGames.Any(x => x.Id == _selectedGameId))
         {
             _selectedGameId = "";
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedGameId) && joinableGroupGames.Count == 1)
+        {
+            _selectedGameId = joinableGroupGames[0].Id;
+        }
+        else if (string.IsNullOrWhiteSpace(_selectedGameId) && _joinableGames.Count == 1)
+        {
+            _selectedGameId = _joinableGames[0].Id;
         }
     }
 

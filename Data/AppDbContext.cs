@@ -12,6 +12,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<AppSettings> Settings => Set<AppSettings>();
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
+    public DbSet<UsableMsVoice> UsableMsVoices => Set<UsableMsVoice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +21,11 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<AppUser>(b =>
         {
             b.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<UsableMsVoice>(b =>
+        {
+            b.HasIndex(x => new { x.BrowserFamily, x.Token }).IsUnique();
         });
     }
 }

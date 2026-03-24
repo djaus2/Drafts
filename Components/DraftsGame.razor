@@ -336,7 +336,7 @@ else
                         @onpointerup:preventDefault="true">
                     @TalkButtonText
                 </button>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:8px;">
                     @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
                     {
                         <span style="font-size:14px;color:#666;">(muted by @_game.VoiceMutedByUserName)</span>
@@ -355,12 +355,6 @@ else
                             <span style="font-size:18px;">🔊</span>
                             <span>Mute</span>
                         }
-                    </button>
-                    <button class="game-btn" @onclick="ToggleVoiceSettings"
-                            style="background:@(_showVoiceSettings ? "#e6ccff" : "#f3f3f3");"
-                            title="Voice Settings">
-                        <span style="font-size:18px;">⚙️</span>
-                        <span>Voice Settings</span>
                     </button>
                 </div>
             </div>
@@ -409,15 +403,6 @@ else
     </div>
 }
 
-@if (_showVoiceSettings)
-{
-    <div class="gameover-overlay" @onclick="() => _showVoiceSettings = false">
-        <div style="position:relative;max-width:90vw;max-height:90vh;overflow:auto;" @onclick:stopPropagation="true">
-            <VoiceSettingsPanel OnClose="() => _showVoiceSettings = false" />
-        </div>
-    </div>
-}
-
 @code {
     private string? _gameId;
     private string _joinId = "";
@@ -425,11 +410,14 @@ else
     private const string VoicePrefix = "[VOICE] ";
     private const string VoiceMetaPrefix = "[VOICE-META]";
     private bool _talkEnabled;
-    // private bool _sttActive; // Currently unused - remove when needed
+    private bool _sttActive;
     private bool _pttHeld;
     private string _preferredTtsVoiceKey = "";
+    private string _preferredTtsLanguage = "";
+    private string _preferredTtsRegion = "";
     private bool _isPhoneClient;
     private bool _voiceSupported;
+    private bool _voiceSupportChecked;
     private bool _hideVoiceInChat = true;
     private string _voiceStatus = "";
     private string _ttsStatus = "";
@@ -478,7 +466,6 @@ else
     private bool _gameClosedNotified;
     private bool _showCancelConfirm = false;
     private bool _showConcedeConfirm = false;
-    private bool _showVoiceSettings = false;
     private int? _groupId;
 
     private DraftsService.GameState? _lastGameState;
@@ -571,7 +558,7 @@ else
     {
         get
         {
-            if (!_voiceSupported) return "Talk";
+            if (!_voiceSupported) return "Talk not supported";
             if (!_talkEnabled) return "Talk";
             if (IsVoiceMuted) return "Muted";
             if (_pttHeld) return "Talking…";
@@ -580,8 +567,19 @@ else
         }
     }
 
+    private string GetConnectedMessage()
+    {
+        return _voiceSupportChecked && !_voiceSupported ? "Connected. Talk not supported" : "Connected.";
+    }
+
     private void UpdateVoiceStatusFromGame()
     {
+        if (!_voiceSupportChecked)
+        {
+            _voiceStatus = "";
+            return;
+        }
+
         if (!_voiceSupported)
         {
             _voiceStatus = "Talk not supported";
@@ -642,11 +640,6 @@ else
         _hideVoiceInChat = !_hideVoiceInChat;
     }
 
-    private void ToggleVoiceSettings()
-    {
-        _showVoiceSettings = !_showVoiceSettings;
-    }
-
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -687,6 +680,26 @@ else
         catch
         {
             _preferredTtsVoiceKey = "";
+        }
+
+        try
+        {
+            var lang = await Auth.GetPreferredTtsLanguageAsync(_currentUserId);
+            _preferredTtsLanguage = (lang ?? string.Empty).Trim().ToLowerInvariant();
+        }
+        catch
+        {
+            _preferredTtsLanguage = "";
+        }
+
+        try
+        {
+            var region = await Auth.GetPreferredTtsRegionAsync(_currentUserId);
+            _preferredTtsRegion = (region ?? string.Empty).Trim().ToUpperInvariant();
+        }
+        catch
+        {
+            _preferredTtsRegion = "";
         }
 
         _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
@@ -804,7 +817,7 @@ else
 
             GameService.GameUpdated -= OnGameUpdated;
             GameService.GameUpdated += OnGameUpdated;
-            _message = "Connected.";
+            _message = GetConnectedMessage();
             return;
         }
 
@@ -840,7 +853,7 @@ else
         {
             if (!string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
             {
-                GameService.SetPreferredTtsVoiceForUser(_gameId, _currentUserId, _preferredTtsVoiceKey);
+                GameService.SetPreferredTtsSettingsForUser(_gameId, _currentUserId, _preferredTtsVoiceKey, _preferredTtsLanguage, _preferredTtsRegion);
             }
         }
         catch
@@ -859,7 +872,7 @@ else
         _lastVoiceSpokenChatIndex = _lastChatCount;
         _chatScrollPending = true;
         GameService.GameUpdated += OnGameUpdated;
-        _message = "Connected.";
+        _message = GetConnectedMessage();
         return;
     }
 
@@ -895,6 +908,16 @@ else
             }
         }
 
+        if (_connected
+            && _game is not null
+            && string.IsNullOrWhiteSpace(_message)
+            && !_game.ForcedJumpFromR.HasValue
+            && _game.State != DraftsService.GameState.Finished
+            && _game.State != DraftsService.GameState.Abandoned)
+        {
+            _message = GetConnectedMessage();
+        }
+
         var chatCount = _game?.ChatMessages?.Count ?? 0;
         if (chatCount != _lastChatCount)
         {
@@ -905,7 +928,7 @@ else
 
             if (_talkEnabled)
             {
-                _ = QueueSpeakNewVoiceMessages(priorChatCount);
+                QueueSpeakNewVoiceMessages(priorChatCount);
             }
         }
 
@@ -953,16 +976,28 @@ else
     {
         if (!_chatWired)
         {
-            _dotNetRef ??= DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("draftsChat.wireEnterToSend", _chatOutRef, _dotNetRef);
-            _chatWired = true;
+            try
+            {
+                _dotNetRef ??= DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("draftsChat.wireEnterToSend", _chatOutRef, _dotNetRef);
+                _chatWired = true;
+            }
+            catch
+            {
+            }
         }
 
         if (_chatScrollPending)
         {
-            _chatScrollPending = false;
-            await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatInRef);
-            await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatOutRef);
+            try
+            {
+                _chatScrollPending = false;
+                await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatInRef);
+                await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatOutRef);
+            }
+            catch
+            {
+            }
         }
 
         if (firstRender)
@@ -971,6 +1006,7 @@ else
             {
                 await JS.InvokeAsync<bool>("draftsVoice.installTtsUnlocker");
                 _voiceSupported = await JS.InvokeAsync<bool>("draftsVoice.isSupported");
+                _voiceSupportChecked = true;
                 _talkEnabled = _voiceSupported;
                 _voiceStatus = _voiceSupported ? "Hold to talk" : "Talk not supported in this browser";
 
@@ -983,31 +1019,16 @@ else
                     _isPhoneClient = false;
                 }
 
-                // Initialize enhanced voice chat for settings panel - don't let this fail the whole initialization
-                try
-                {
-                    await JS.InvokeVoidAsync("enhancedVoiceChat.initialize", DotNetObjectReference.Create(this));
-                    Console.WriteLine("[EnhancedVoiceChat] Initialized successfully");
-                }
-                catch (TaskCanceledException)
-                {
-                    // Task cancellation is normal during rapid navigation - ignore it
-                    Console.WriteLine("[EnhancedVoiceChat] Initialization cancelled - normal during rapid navigation");
-                }
-                catch (Exception ex)
-                {
-                    // Don't let enhanced voice chat failure break the whole voice system
-                    Console.WriteLine($"[EnhancedVoiceChat] Initialization failed: {ex.Message}");
-                }
-
                 if (_isPhoneClient)
                 {
                     _preferredTtsVoiceKey = "";
+                    _preferredTtsLanguage = "";
+                    _preferredTtsRegion = "";
                     try
                     {
                         if (!string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
                         {
-                            GameService.SetPreferredTtsVoiceForUser(_gameId, _currentUserId, null);
+                            GameService.SetPreferredTtsSettingsForUser(_gameId, _currentUserId, null, null, null);
                         }
                     }
                     catch
@@ -1017,18 +1038,11 @@ else
 
                 await InvokeAsync(StateHasChanged);
             }
-            catch (TaskCanceledException)
-            {
-                // Handle task cancellation at the top level - this is normal during navigation
-                Console.WriteLine("[Voice] Initialization cancelled - normal during rapid navigation");
-                _voiceSupported = false;
-                _voiceStatus = "Talk not supported";
-            }
-            catch (Exception ex)
+            catch
             {
                 _voiceSupported = false;
+                _voiceSupportChecked = true;
                 _voiceStatus = "Talk not supported";
-                Console.WriteLine($"Voice initialization error: {ex.Message}");
             }
         }
     }
@@ -1246,13 +1260,19 @@ else
                 if (string.IsNullOrWhiteSpace(payload)) continue;
 
                 string? voiceKey = null;
+                string? voiceLanguage = null;
+                string? voiceRegion = null;
                 try
                 {
                     voiceKey = _game?.GetPreferredTtsVoiceForUserId(m.SenderUserId);
+                    voiceLanguage = _game?.GetPreferredTtsLanguageForUserId(m.SenderUserId);
+                    voiceRegion = _game?.GetPreferredTtsRegionForUserId(m.SenderUserId);
                 }
                 catch
                 {
                     voiceKey = null;
+                    voiceLanguage = null;
+                    voiceRegion = null;
                 }
 
                 if (!_talkEnabled) break;
@@ -1264,19 +1284,43 @@ else
 
                 try
                 {
-                    var voiceLabel = await JS.InvokeAsync<string>("draftsVoice.speakAndDescribe", payload, voiceKey);
+                    var voiceLabel = await JS.InvokeAsync<string>("draftsVoice.speakAndDescribe", payload, voiceKey, voiceLanguage, voiceRegion);
                     if (string.IsNullOrWhiteSpace(voiceLabel)) voiceLabel = "Default voice";
+
+                    var usedDefaultVoice = voiceLabel.StartsWith("Default voice", StringComparison.OrdinalIgnoreCase);
+                    string diagnosticSuffix = "";
+
+                    if (usedDefaultVoice)
+                    {
+                        try
+                        {
+                            var inspect = await JS.InvokeAsync<VoiceInspectResult>("draftsVoice.inspectVoiceMatch", voiceKey, voiceLanguage, voiceRegion);
+                            if (inspect is not null)
+                            {
+                                var keyText = string.IsNullOrWhiteSpace(inspect.preferredKey) ? "(empty)" : inspect.preferredKey;
+                                var matchedText = inspect.matched
+                                    ? $"matched={inspect.matchedLabel}"
+                                    : "matched=(none)";
+                                diagnosticSuffix = $" key={keyText}; voices={inspect.voicesCount}; {matchedText}";
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
 
                     _ttsStatusVersion++;
                     var v = _ttsStatusVersion;
-                    _ttsStatus = $"Speaking: {voiceLabel}";
+                    _ttsStatus = usedDefaultVoice
+                        ? $"Speaking: Default{diagnosticSuffix}"
+                        : $"Speaking: {voiceLabel}";
                     await InvokeAsync(StateHasChanged);
 
                     _ = InvokeAsync(async () =>
                     {
                         try
                         {
-                            await Task.Delay(5000);
+                            await Task.Delay(20000);
                             if (_ttsStatusVersion != v) return;
                             _ttsStatus = "";
                             await InvokeAsync(StateHasChanged);
@@ -1288,7 +1332,7 @@ else
                 }
                 catch
                 {
-                    var ok = await JS.InvokeAsync<bool>("draftsVoice.speak", payload, voiceKey);
+                    var ok = await JS.InvokeAsync<bool>("draftsVoice.speak", payload, voiceKey, voiceLanguage, voiceRegion);
                     _ = ok;
                 }
 
@@ -1314,6 +1358,17 @@ else
             JoinLink,
             "_blank",
             "noopener,noreferrer,width=1100,height=900");
+    }
+
+    private sealed class VoiceInspectResult
+    {
+        public string? preferredKey { get; set; }
+        public string? preferredLanguage { get; set; }
+        public string? preferredRegion { get; set; }
+        public int voicesCount { get; set; }
+        public bool matched { get; set; }
+        public string? matchedLabel { get; set; }
+        public List<string>? sampleVoices { get; set; }
     }
 
     private async Task OnCellClick(int r, int c)

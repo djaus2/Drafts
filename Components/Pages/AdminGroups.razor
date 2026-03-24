@@ -16,7 +16,7 @@
         <input @bind="_groupDescription" placeholder="Description (optional)" />
         <select @bind="_selectedOwnerId">
             <option value="">Select group owner</option>
-            @foreach (var player in _availablePlayers ?? new List<Drafts.Data.AppUser>())
+            @foreach (var player in _availablePlayers)
             {
                 <option value="@player.Id">@player.Name</option>
             }
@@ -101,7 +101,7 @@ else
                 <div style="font-weight:600;margin-bottom:6px;">Add Members:</div>
                 <select @bind="_selectedPlayerToAdd" style="margin-right:8px;">
                     <option value="">Select player to add</option>
-                    @foreach (var player in (_availablePlayers ?? new List<Drafts.Data.AppUser>()).Where(p => _groupMembers?.Any(m => m.UserId == p.Id) != true))
+                    @foreach (var player in _availablePlayers.Where(p => _groupMembers?.Any(m => m.UserId == p.Id) != true))
                     {
                         <option value="@player.Id">@player.Name</option>
                     }

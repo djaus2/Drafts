@@ -23,7 +23,4 @@ public sealed class AppSettings
 
     [Required]
     public bool GameInitiatorGoesFirst { get; set; } = true;
-
-    [Required]
-    public bool UseDirectAudioVoiceChat { get; set; } = true; // true = direct audio, false = text-to-speech
 }
