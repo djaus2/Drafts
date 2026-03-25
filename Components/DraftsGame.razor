@@ -1284,13 +1284,19 @@ else
 
                 try
                 {
-                    var voiceLabel = await JS.InvokeAsync<string>("draftsVoice.speakAndDescribe", payload, voiceKey, voiceLanguage, voiceRegion);
+                    var voiceLabel = _isPhoneClient
+                        ? await JS.InvokeAsync<string>("draftsVoice.speakDefaultAndDescribe", payload)
+                        : await JS.InvokeAsync<string>("draftsVoice.speakAndDescribe", payload, voiceKey, voiceLanguage, voiceRegion);
                     if (string.IsNullOrWhiteSpace(voiceLabel)) voiceLabel = "Default voice";
+
+                    await JS.InvokeVoidAsync(
+                        "console.log",
+                        $"[TTS] Received msg #{i} from user {m.SenderUserId} using voice: {voiceLabel}; phoneReceiver={_isPhoneClient}");
 
                     var usedDefaultVoice = voiceLabel.StartsWith("Default voice", StringComparison.OrdinalIgnoreCase);
                     string diagnosticSuffix = "";
 
-                    if (usedDefaultVoice)
+                    if (usedDefaultVoice && !_isPhoneClient)
                     {
                         try
                         {
@@ -1332,7 +1338,9 @@ else
                 }
                 catch
                 {
-                    var ok = await JS.InvokeAsync<bool>("draftsVoice.speak", payload, voiceKey, voiceLanguage, voiceRegion);
+                    var ok = _isPhoneClient
+                        ? await JS.InvokeAsync<bool>("draftsVoice.speakDefault", payload)
+                        : await JS.InvokeAsync<bool>("draftsVoice.speak", payload, voiceKey, voiceLanguage, voiceRegion);
                     _ = ok;
                 }
 
@@ -1804,7 +1812,10 @@ else
     [JSInvokable]
     public Task OnVoiceError(string error)
     {
-        _voiceStatus = "Mic error";
+        var text = (error ?? string.Empty).Trim();
+        _voiceStatus = string.IsNullOrWhiteSpace(text)
+            ? "Mic error"
+            : $"Mic error: {text}";
         return InvokeAsync(StateHasChanged);
     }
 

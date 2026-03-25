@@ -37,7 +37,13 @@ else
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voice</h4>
 
-@if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
+@if (_isPhoneClient)
+{
+    <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
+        Selected voice: Default voice
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
 {
     <div style="max-width:360px;font-size:12px;opacity:0.85;margin-top:-6px;margin-bottom:6px;">
         Selected voice: @_selectedVoiceDisplay
@@ -46,7 +52,11 @@ else
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        @if (!_showVoiceSelection)
+        @if (_isPhoneClient)
+        {
+            <div style="font-size:12px;opacity:0.85;">Voice selection is unavailable on phone. Default voice will be used.</div>
+        }
+        else if (!_showVoiceSelection)
         {
             <button @onclick="ShowVoiceSelection" style="width:100%;">Change voice</button>
         }
@@ -75,10 +85,10 @@ else
                 }
             </select>
         }
-@*         @if (!string.IsNullOrWhiteSpace(_voiceDebugStatus))
+        @if (!string.IsNullOrWhiteSpace(_voiceDebugStatus))
         {
             <div style="font-size:12px;opacity:0.85">@_voiceDebugStatus</div>
-        } *@
+        }
         @if (!string.IsNullOrWhiteSpace(_voiceSaveMessage))
         {
             <div>@_voiceSaveMessage</div>
@@ -182,7 +192,6 @@ else
       return -1;
     }
   };
-
   window.draftsVoice.isProbablyPhone = function () {
     try {
       var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
@@ -197,131 +206,7 @@ else
       return false;
     }
   };
-
-  window.draftsVoice.getVoicesAsyncCount = function () {
-    try {
-      return window.draftsVoice.getVoicesAsync().then(function (vs) {
-        try {
-          return (vs && vs.length) ? vs.length : 0;
-        } catch (e0) {
-          return -2;
-        }
-      });
-    } catch (e) {
-      return Promise.resolve(-3);
-    }
-  };
-  window.draftsVoice.getVoices = function () {
-    try {
-      var vs = (window.speechSynthesis && window.speechSynthesis.getVoices)
-        ? window.speechSynthesis.getVoices()
-        : [];
-
-      return (vs || []).map(function (v) {
-        return {
-          voiceURI: v.voiceURI || '',
-          name: v.name || '',
-          lang: v.lang || ''
-        };
-      });
-    } catch (e) {
-      return [];
-    }
-  };
-
-  window.draftsVoice.getVoicesAsync = function () {
-    try {
-      return new Promise(function (resolve) {
-        try {
-          var has = !!(window.speechSynthesis && window.speechSynthesis.getVoices);
-          if (!has) {
-            resolve([]);
-            return;
-          }
-
-          var start = Date.now();
-          var maxMs = 2500;
-          var tick = function () {
-            try {
-              // Kick loading.
-              try { window.speechSynthesis.getVoices(); } catch (eKick) { }
-
-              var existing = window.draftsVoice.getVoices();
-              if (existing && existing.length) {
-                resolve(existing);
-                return;
-              }
-
-              if ((Date.now() - start) >= maxMs) {
-                resolve([]);
-                return;
-              }
-
-              setTimeout(tick, 125);
-            } catch (eTick) {
-              resolve([]);
-            }
-          };
-
-          tick();
-        } catch (e0) {
-          resolve([]);
-        }
-      });
-    } catch (e) {
-      return Promise.resolve([]);
-    }
-  };
-
-  window.draftsVoice.warmupVoices = function () {
-    try {
-      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
-      try {
-        // Kick voices.
-        window.speechSynthesis.getVoices();
-      } catch (e0) {
-      }
-
-      try {
-        // Some engines only populate voices after a speak() call.
-        var u = new SpeechSynthesisUtterance(' ');
-        u.volume = 0;
-        u.rate = 1;
-        u.pitch = 1;
-        window.speechSynthesis.speak(u);
-      } catch (e1) {
-      }
-
-      return true;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  window.draftsVoice.refreshVoices = function () {
-    try {
-      // Some browsers require calling getVoices() and/or waiting for voiceschanged.
-      if (window.speechSynthesis && window.speechSynthesis.getVoices) {
-        window.speechSynthesis.getVoices();
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  try {
-    if (window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = function () {
-        try {
-          window.draftsVoice.refreshVoices();
-        } catch (e2) {
-        }
-      };
-    }
-  } catch (e3) {
-  }
-</script>
+ </script>
 
 @code {
     private string _selectedGameId = "";
@@ -349,12 +234,10 @@ else
         public string Key { get; set; } = "";
         public string Label { get; set; } = "";
         public string Lang { get; set; } = "";
-        public string Token { get; set; } = "";
     }
 
     private List<VoiceOption> _voices = new();
     private List<VoiceOptionInternal> _allVoices = new();
-    private HashSet<string> _usableChromeVoiceTokens = new(StringComparer.OrdinalIgnoreCase);
     private List<string> _languages = new();
     private List<string> _regions = new();
     private string _selectedLanguage = "";
@@ -461,6 +344,11 @@ else
             _isPhoneClient = false;
         }
 
+        if (_isPhoneClient)
+        {
+            await ForceDefaultVoiceForPhoneClient();
+        }
+
         var uid = GetCurrentUserId();
         if (!uid.HasValue) return;
 
@@ -495,6 +383,14 @@ else
             _voiceLoadError += $" | Region error: {ex.Message}";
         }
 
+        if (_isPhoneClient)
+        {
+            _selectedVoiceKey = "";
+            _selectedVoiceDisplay = "Default voice";
+            _selectedLanguage = "";
+            _selectedRegion = "";
+        }
+
         if (string.IsNullOrWhiteSpace(_selectedLanguage))
         {
             _selectedLanguage = "en";
@@ -507,7 +403,6 @@ else
 
         _showVoiceSelection = false;
         _loadedVoicePrefs = true;
-        _usableChromeVoiceTokens = UsableMsVoices.GetTokens("chrome").ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         await InvokeAsync(StateHasChanged);
 
@@ -526,8 +421,43 @@ else
         }
     }
 
+    private async Task ForceDefaultVoiceForPhoneClient()
+    {
+        _selectedVoiceKey = "";
+        _selectedVoiceDisplay = "Default voice";
+        _selectedLanguage = "";
+        _selectedRegion = "";
+        _showVoiceSelection = false;
+
+        var uid = GetCurrentUserId();
+        if (!uid.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var okVoice = await Auth.UpdatePreferredTtsVoiceAsync(uid.Value, null);
+            var okLanguage = okVoice && await Auth.UpdatePreferredTtsLanguageAsync(uid.Value, null);
+            var okRegion = okVoice && await Auth.UpdatePreferredTtsRegionAsync(uid.Value, null);
+            _voiceSaveMessage = (okVoice && okLanguage && okRegion) ? "Phone uses Default voice." : "Phone uses Default voice.";
+        }
+        catch
+        {
+            _voiceSaveMessage = "Phone uses Default voice.";
+        }
+    }
+
     private async Task ShowVoiceSelection()
     {
+        if (_isPhoneClient)
+        {
+            _showVoiceSelection = false;
+            _voiceSaveMessage = "Phone uses Default voice.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         _showVoiceSelection = true;
         await InvokeAsync(StateHasChanged);
 
@@ -689,6 +619,7 @@ else
         var c0 = "c0:?";
         var c1 = "c1:?";
         var c2 = "c2:?";
+        var rawCount = 0;
         try
         {
             using var pingCts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
@@ -738,15 +669,15 @@ else
                 c2 = "c2:err";
             }
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(16));
             var raw = await JS.InvokeAsync<List<VoiceInfo>>("draftsVoice.getVoicesAsync", cts.Token);
+            rawCount = raw?.Count ?? 0;
             _allVoices = (raw ?? new List<VoiceInfo>())
                 .Select(v =>
                 {
                     var voiceURI = (v?.VoiceURI ?? string.Empty).Trim();
                     var name = (v?.Name ?? string.Empty).Trim();
                     var lang = (v?.Lang ?? string.Empty).Trim();
-                    var token = VoiceCatalog.NormalizeToken(name, lang);
 
                     var key = !string.IsNullOrWhiteSpace(voiceURI)
                         ? $"uri:{voiceURI}"
@@ -756,10 +687,9 @@ else
                         ? name
                         : $"{name} ({lang})";
 
-                    return new VoiceOptionInternal { Key = key, Label = label, Lang = lang, Token = token };
+                    return new VoiceOptionInternal { Key = key, Label = label, Lang = lang };
                 })
                 .Where(x => !string.IsNullOrWhiteSpace(x.Label))
-                .Where(x => _usableChromeVoiceTokens.Count == 0 || _usableChromeVoiceTokens.Contains(x.Token))
                 .DistinctBy(x => x.Key)
                 .OrderBy(x => x.Label)
                 .ToList();
@@ -834,12 +764,12 @@ else
 
             var langText = string.IsNullOrWhiteSpace(_selectedLanguage) ? "all" : _selectedLanguage;
             var regionText = string.IsNullOrWhiteSpace(_selectedRegion) ? "all" : _selectedRegion;
-            _voiceDebugStatus = $"Voices: {_voices.Count} ({langText}/{regionText} of {_allVoices.Count}) ({sw.ElapsedMilliseconds}ms) ({ping}) ({c0}) ({c1}) ({c2})";
+            _voiceDebugStatus = $"Voices: raw {rawCount}, {_allVoices.Count} total, {_voices.Count} shown ({langText}/{regionText}) ({sw.ElapsedMilliseconds}ms) ({ping}) ({c0}) ({c1}) ({c2})";
             await InvokeAsync(StateHasChanged);
         }
         catch (OperationCanceledException ex)
         {
-            _voiceDebugStatus = $"Voices: canceled ({sw.ElapsedMilliseconds}ms) — {ex.GetType().Name} ({ping}) ({c0}) ({c1}) ({c2})";
+            _voiceDebugStatus = $"Voices: canceled after raw {rawCount} ({sw.ElapsedMilliseconds}ms) — {ex.GetType().Name} ({ping}) ({c0}) ({c1}) ({c2})";
             await InvokeAsync(StateHasChanged);
             _voices = new();
         }
@@ -848,7 +778,7 @@ else
             System.Diagnostics.Debug.WriteLine($"Error loading voices: {ex}");
             var msg = ex.Message ?? string.Empty;
             if (msg.Length > 140) msg = msg.Substring(0, 140);
-            _voiceDebugStatus = $"Voices: error ({sw.ElapsedMilliseconds}ms) — {ex.GetType().Name}: {msg} ({ping}) ({c0}) ({c1}) ({c2})";
+            _voiceDebugStatus = $"Voices: error after raw {rawCount} ({sw.ElapsedMilliseconds}ms) — {ex.GetType().Name}: {msg} ({ping}) ({c0}) ({c1}) ({c2})";
             await InvokeAsync(StateHasChanged);
             _voices = new();
         }

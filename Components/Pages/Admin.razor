@@ -66,6 +66,7 @@
             }
         </select>
         <div style="font-size:12px;opacity:0.85;">Loaded voices: @_adminAllVoices.Count. Allowed for players: @_adminSelectedVoiceTokens.Count.</div>
+        <div style="font-size:12px;opacity:0.85;">Raw browser voices: @_adminRawVoiceCount.@(_checkingChromeVoices ? " Loading…" : "")</div>
         @if (_adminFilteredVoices.Any())
         {
             <div style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;border:1px solid #ddd;padding:8px;">
@@ -218,12 +219,23 @@ else
     private string _adminFocusedVoiceKey = "";
     private bool _adminShowSelectedVoicesOnly;
     private bool _adminVoicesLoaded;
+    private int _adminRawVoiceCount;
+    private bool _adminHasSpeechSynthesis;
+    private bool _adminHasSpeechSynthesisUtterance;
+    private int _adminBrowserVoiceCount;
 
     private sealed class JsVoiceInfo
     {
         public string? voiceURI { get; set; }
         public string? name { get; set; }
         public string? lang { get; set; }
+    }
+
+    private sealed class VoiceDiagnostics
+    {
+        public bool hasSpeechSynthesis { get; set; }
+        public bool hasUtterance { get; set; }
+        public int voiceCount { get; set; }
     }
 
     private sealed class VoiceOptionInternal
@@ -334,8 +346,42 @@ else
             {
             }
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
-            var raw = await JS.InvokeAsync<List<JsVoiceInfo>>("draftsVoice.getVoicesAsync", cts.Token);
+            List<JsVoiceInfo>? raw = null;
+            VoiceDiagnostics? diagnostics = null;
+
+            try
+            {
+                using var diagCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                diagnostics = await JS.InvokeAsync<VoiceDiagnostics>("draftsVoice.getVoiceDiagnostics", diagCts.Token);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(16));
+                raw = await JS.InvokeAsync<List<JsVoiceInfo>>("draftsVoice.getVoicesAsync", cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    await JS.InvokeAsync<bool>("draftsVoice.refreshVoices");
+                }
+                catch
+                {
+                }
+
+                using var retryCts = new CancellationTokenSource(TimeSpan.FromSeconds(16));
+                raw = await JS.InvokeAsync<List<JsVoiceInfo>>("draftsVoice.getVoicesAsync", retryCts.Token);
+            }
+
+            _adminHasSpeechSynthesis = diagnostics?.hasSpeechSynthesis ?? false;
+            _adminHasSpeechSynthesisUtterance = diagnostics?.hasUtterance ?? false;
+            _adminBrowserVoiceCount = diagnostics?.voiceCount ?? -1;
+            _adminRawVoiceCount = raw?.Count ?? 0;
+
             _adminAllVoices = (raw ?? new List<JsVoiceInfo>())
                 .Select(v =>
                 {
@@ -369,8 +415,12 @@ else
             _adminVoicesLoaded = _adminAllVoices.Count > 0;
             ApplyAdminVoiceFilters();
             _voiceCatalogMessage = _adminAllVoices.Count == 0
-                ? "No voices found in this browser instance."
-                : $"Loaded {_adminAllVoices.Count} voices from this browser.";
+                ? $"No voices found in this browser instance. Raw voices: {_adminRawVoiceCount}. speechSynthesis: {_adminHasSpeechSynthesis}. utterance: {_adminHasSpeechSynthesisUtterance}. browser count: {_adminBrowserVoiceCount}."
+                : $"Loaded {_adminAllVoices.Count} voices from this browser. Raw voices: {_adminRawVoiceCount}. speechSynthesis: {_adminHasSpeechSynthesis}. utterance: {_adminHasSpeechSynthesisUtterance}. browser count: {_adminBrowserVoiceCount}.";
+        }
+        catch (OperationCanceledException)
+        {
+            _voiceCatalogMessage = $"Voice loading timed out. Tap Load voices again. speechSynthesis: {_adminHasSpeechSynthesis}. utterance: {_adminHasSpeechSynthesisUtterance}. browser count: {_adminBrowserVoiceCount}.";
         }
         catch (Exception ex)
         {

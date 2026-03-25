@@ -263,8 +263,15 @@ window.draftsVoice.start = function (dotNetRef) {
 
       rec.onerror = function (ev) {
         try {
+          var msg = (ev && ev.error) ? ('' + ev.error) : 'error';
+          var intentionalStop = !window.draftsVoice._shouldListen;
+          console.log('[draftsVoice] onerror', msg, 'intentionalStop=', intentionalStop);
+
+          if (intentionalStop && (msg === 'aborted' || msg === 'no-speech')) {
+            return;
+          }
+
           if (window.draftsVoice._dotNetRef) {
-            var msg = (ev && ev.error) ? ('' + ev.error) : 'error';
             window.draftsVoice._dotNetRef.invokeMethodAsync('OnVoiceError', msg);
           }
         } catch (e) {
@@ -413,6 +420,32 @@ window.draftsVoice.stop = function () {
   }
  };
 
+ window.draftsVoice.getVoiceDiagnostics = function () {
+  try {
+    var hasSpeechSynthesis = !!(window.speechSynthesis && window.speechSynthesis.getVoices);
+    var hasUtterance = !!window.SpeechSynthesisUtterance;
+    var voiceCount = 0;
+
+    try {
+      voiceCount = window.draftsVoice.getVoicesCount();
+    } catch (e0) {
+      voiceCount = -1;
+    }
+
+    return {
+      hasSpeechSynthesis: hasSpeechSynthesis,
+      hasUtterance: hasUtterance,
+      voiceCount: voiceCount
+    };
+  } catch (e) {
+    return {
+      hasSpeechSynthesis: false,
+      hasUtterance: false,
+      voiceCount: -1
+    };
+  }
+ };
+
  window.draftsVoice.getVoicesAsync = function () {
   try {
     return new Promise(function (resolve) {
@@ -442,6 +475,7 @@ window.draftsVoice.stop = function () {
         if (resolved) return;
 
         var pollCount = 0;
+        var maxPollCount = 80;
         var poller = setInterval(function () {
           pollCount++;
           tick();
@@ -449,7 +483,7 @@ window.draftsVoice.stop = function () {
             try { clearInterval(poller); } catch (eClear0) { }
             return;
           }
-          if (pollCount >= 30) {
+          if (pollCount >= maxPollCount) {
             try { clearInterval(poller); } catch (eClear1) { }
             finish([]);
           }
@@ -503,6 +537,11 @@ window.draftsVoice.stop = function () {
     if (!window.speechSynthesis || !window.speechSynthesis.getVoices) return false;
 
     try {
+      window.speechSynthesis.resume();
+    } catch (eResume) {
+    }
+
+    try {
       window.speechSynthesis.getVoices();
     } catch (e0) {
     }
@@ -512,6 +551,17 @@ window.draftsVoice.stop = function () {
         window.draftsVoice.refreshVoices();
       }
     } catch (e1) {
+    }
+
+    try {
+      if (window.SpeechSynthesisUtterance) {
+        var probe = new SpeechSynthesisUtterance(' ');
+        probe.volume = 0;
+        probe.rate = 1;
+        probe.pitch = 1;
+        window.speechSynthesis.speak(probe);
+      }
+    } catch (e2) {
     }
 
     return true;
@@ -877,6 +927,37 @@ window.draftsVoice.speak = async function (text, preferredKey, preferredLanguage
   }
 };
 
+window.draftsVoice.speakDefault = async function (text) {
+  try {
+    console.log('[draftsVoice.speakDefault] text=', text);
+    if (!text) return false;
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+    window.draftsVoice.unlockTts();
+
+    try {
+      window.speechSynthesis.resume();
+    } catch (eResume0) {
+    }
+
+    try {
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
+    } catch (eCancel0) {
+    }
+
+    var u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.pitch = 1;
+    u.volume = 1;
+
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 window.draftsVoice.speakAndDescribe = async function (text, preferredKey, preferredLanguage, preferredRegion) {
   try {
     console.log('[draftsVoice.speakAndDescribe] text=', text, 'preferredKey=', preferredKey, 'preferredLanguage=', preferredLanguage, 'preferredRegion=', preferredRegion);
@@ -985,6 +1066,43 @@ window.draftsVoice.speakAndDescribe = async function (text, preferredKey, prefer
     } catch (eDescribe) {
     }
 
+    try {
+      var msg = (e && e.message) ? ('' + e.message) : 'speak failed';
+      if (msg.length > 120) msg = msg.substring(0, 120);
+      return 'Speak failed: ' + msg;
+    } catch (eMsg) {
+      return 'Speak failed';
+    }
+  }
+};
+
+window.draftsVoice.speakDefaultAndDescribe = async function (text) {
+  try {
+    console.log('[draftsVoice.speakDefaultAndDescribe] text=', text);
+    if (!text) return '';
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return '';
+    window.draftsVoice.unlockTts();
+
+    try {
+      window.speechSynthesis.resume();
+    } catch (eResume0) {
+    }
+
+    try {
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
+    } catch (eCancel0) {
+    }
+
+    var u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.pitch = 1;
+    u.volume = 1;
+
+    window.speechSynthesis.speak(u);
+    return 'Default voice';
+  } catch (e) {
     try {
       var msg = (e && e.message) ? ('' + e.message) : 'speak failed';
       if (msg.length > 120) msg = msg.substring(0, 120);
