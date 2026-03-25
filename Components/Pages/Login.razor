@@ -7,7 +7,7 @@
 <form method="post" action="/auth/login" style="max-width:320px">
     <div style="display:flex;flex-direction:column;gap:8px">
         <input name="name" value="@_name" placeholder="Name" />
-        <input name="pin" value="@_pin" placeholder="4-digit PIN" inputmode="numeric" maxlength="4" />
+        <input name="pin" value="@_pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
         <input type="hidden" name="returnUrl" value="@ReturnUrl" />
         <button type="submit">Login</button>
         @if (_showError)

@@ -76,7 +76,7 @@ else
             <div style="font-weight:600">@_actionTitle</div>
             <div style="margin-top:6px;">Target group: <b>@_actionTargetName</b></div>
             <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
-                <input @bind="_adminPin" placeholder="Enter your admin PIN" inputmode="numeric" maxlength="4" />
+                <input @bind="_adminPin" placeholder="Enter your admin PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
                 <label>
                     <input type="checkbox" @bind="_confirm" /> Confirm
                 </label>

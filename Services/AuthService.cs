@@ -299,7 +299,7 @@ public sealed class AuthService
     }
 
     private static bool IsValidPin(string pin)
-        => pin.Length == 4 && pin.All(char.IsDigit);
+        => (pin.Length == 4 || pin.Length == 6) && pin.All(char.IsDigit);
 
     private static bool HasRole(AppUser user, string role)
     {
@@ -328,7 +328,7 @@ public sealed class AuthService
     public async Task<AppUser?> CreateUserAsync(string name, string pin, bool isAdmin, bool isPlayer)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
-        if (pin.Length != 4 || !pin.All(char.IsDigit)) return null;
+        if (!IsValidPin(pin)) return null;
 
         name = name.Trim();
         var lookup = name.ToUpperInvariant();

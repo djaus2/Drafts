@@ -4,7 +4,7 @@
  *@
 @inject NavigationManager Nav
 
-<PageTitleHeading Title="Checkers online V4.2.0" HeadingLevel="2" />
+<PageTitleHeading Title="@($"Checkers online V{Version}")" HeadingLevel="2" />
 
 <br />
 
@@ -17,6 +17,18 @@
 <img src="Images/TheBoard.png" width="250"/>
 
 @code{
+    private string Version 
+    {
+        get
+        {
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown";
+            var parts = version.Split('.');
+            if (parts.Length >= 3)
+                return $"{parts[0]}.{parts[1]}.{parts[2]}";
+            return version;
+        }
+    }
+
     private void Start()
     {
         Nav.NavigateTo($"/login");

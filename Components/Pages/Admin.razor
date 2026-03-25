@@ -179,8 +179,8 @@ else
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="4" />
-        <input @bind="_newPin" placeholder="New PIN" inputmode="numeric" maxlength="4" />
+        <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="6" />
+        <input @bind="_newPin" placeholder="New PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
         <button @onclick="OnChangePin">Change PIN</button>
         @if (!string.IsNullOrWhiteSpace(_pinMessage))
         {

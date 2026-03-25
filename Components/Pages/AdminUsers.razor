@@ -15,7 +15,7 @@
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
         <input @bind="_name" placeholder="Name" />
-        <input @bind="_pin" placeholder="4-digit PIN" inputmode="numeric" maxlength="4" />
+        <input @bind="_pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
         <label><input type="checkbox" @bind="_isPlayer" /> Player</label>
         <label><input type="checkbox" @bind="_isAdmin" /> Admin</label>
         <button @onclick="OnAdd">Add player</button>
@@ -97,7 +97,7 @@ else
             <div style="font-weight:600">@_actionTitle</div>
             <div style="margin-top:6px;">Target player: <b>@_actionTargetName</b></div>
             <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
-                <input @bind="_adminPin" placeholder="Enter your admin PIN" inputmode="numeric" maxlength="4" />
+                <input @bind="_adminPin" placeholder="Enter your admin PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
                 <label>
                     <input type="checkbox" @bind="_confirm" /> Confirm
                 </label>
