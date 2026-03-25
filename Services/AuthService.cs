@@ -94,6 +94,66 @@ public sealed class AuthService
         return true;
     }
 
+    public async Task<string?> GetAdminDesktopFallbackTtsVoiceAsync(int userId)
+    {
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        return user?.AdminDesktopFallbackTtsVoice;
+    }
+
+    public async Task<bool> UpdateAdminDesktopFallbackTtsVoiceAsync(int userId, string? preferredVoice)
+    {
+        preferredVoice = (preferredVoice ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(preferredVoice)) preferredVoice = null;
+        if (preferredVoice is not null && preferredVoice.Length > 1024) return false;
+
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return false;
+
+        user.AdminDesktopFallbackTtsVoice = preferredVoice;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<string?> GetAdminDesktopFallbackTtsLanguageAsync(int userId)
+    {
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        return user?.AdminDesktopFallbackTtsLanguage;
+    }
+
+    public async Task<bool> UpdateAdminDesktopFallbackTtsLanguageAsync(int userId, string? language)
+    {
+        language = (language ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(language)) language = null;
+        if (language is not null && language.Length > 16) return false;
+
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return false;
+
+        user.AdminDesktopFallbackTtsLanguage = language;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<string?> GetAdminDesktopFallbackTtsRegionAsync(int userId)
+    {
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        return user?.AdminDesktopFallbackTtsRegion;
+    }
+
+    public async Task<bool> UpdateAdminDesktopFallbackTtsRegionAsync(int userId, string? region)
+    {
+        region = (region ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(region)) region = null;
+        if (region is not null && region.Length > 16) return false;
+
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return false;
+
+        user.AdminDesktopFallbackTtsRegion = region;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     // Group management methods
     public async Task<List<Group>> ListGroupsAsync()
         => await _db.Groups.Include(g => g.OwnerUser).Include(g => g.Members).ThenInclude(m => m.User).OrderBy(g => g.Name).ToListAsync();

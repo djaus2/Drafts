@@ -4,6 +4,8 @@
 @using Drafts.Services
 @using Drafts.Data
 @inject AuthService Auth
+@inject UsableMsVoiceService UsableMsVoices
+@inject IJSRuntime JS
 @inject IHttpContextAccessor HttpContextAccessor
 
 <PageTitleHeading Title="Manage Players" HeadingLevel="2" />
@@ -41,7 +43,8 @@ else
             <tr>
                 <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Name</th>
                 <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Roles</th>
-                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Voice</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Player voice</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Desktop fallback voice</th>
                 <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #ccc;">Actions</th>
             </tr>
         </thead>
@@ -58,9 +61,28 @@ else
                     <td style="padding:4px 8px;border-bottom:1px solid #eee;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@GetVoiceDisplay(u)">
                         @GetVoiceDisplay(u)
                     </td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;min-width:320px;">
+                        <div style="display:flex;flex-direction:column;gap:6px;max-width:320px;">
+                            <select value="@GetFallbackSelection(u)" @onchange="(e => OnFallbackVoiceChanged(u.Id, e))">
+                                <option value="">Default</option>
+                                @foreach (var voice in _desktopFallbackVoices)
+                                {
+                                    <option @key="voice.Token" value="@GetFallbackVoiceKey(voice)">@FormatFallbackVoiceLabel(voice)</option>
+                                }
+                            </select>
+                            <div style="font-size:12px;opacity:0.85;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@GetAdminFallbackDisplay(u)">
+                                @GetAdminFallbackDisplay(u)
+                            </div>
+                        </div>
+                    </td>
                     <td style="padding:4px 8px;border-bottom:1px solid #eee;">
+                        <button @onclick="() => SaveFallbackVoiceAsync(u.Id)">Save fallback</button>
                         <button @onclick="() => SelectReset(u.Id, u.Name)">Reset PIN to 9999</button>
                         <button style="margin-left:6px" @onclick="() => SelectDelete(u.Id, u.Name)">Delete</button>
+                        @if (_fallbackMessages.TryGetValue(u.Id, out var fallbackMessage) && !string.IsNullOrWhiteSpace(fallbackMessage))
+                        {
+                            <div style="margin-top:6px;font-size:12px;max-width:260px;">@fallbackMessage</div>
+                        }
                     </td>
                 </tr>
             }
@@ -100,6 +122,9 @@ else
     private string _message = "";
 
     private List<Drafts.Data.AppUser>? _users;
+    private IReadOnlyList<UsableMsVoice> _desktopFallbackVoices = Array.Empty<UsableMsVoice>();
+    private Dictionary<int, string> _fallbackSelections = new();
+    private Dictionary<int, string> _fallbackMessages = new();
     private int? _actionTargetId;
     private string _actionTargetName = "";
     private string _adminPin = "";
@@ -111,6 +136,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         _users = await Auth.ListUsersAsync();
+        _desktopFallbackVoices = UsableMsVoices.GetVoices("chrome");
+        SyncFallbackSelections();
     }
 
     private async Task OnAdd()
@@ -130,6 +157,7 @@ else
         _isPlayer = true;
 
         _users = await Auth.ListUsersAsync();
+        SyncFallbackSelections();
     }
 
     private void SelectReset(int userId, string name)
@@ -207,6 +235,7 @@ else
 
         _actionMessage = ok ? "Done." : "Failed (check admin PIN, or target is protected).";
         _users = await Auth.ListUsersAsync();
+        SyncFallbackSelections();
     }
 
     private string GetVoiceDisplay(AppUser user)
@@ -229,6 +258,100 @@ else
             display += $" ({string.Join(", ", parts)})";
         
         return display;
+    }
+
+    private string GetAdminFallbackDisplay(AppUser user)
+    {
+        if (string.IsNullOrWhiteSpace(user.AdminDesktopFallbackTtsVoice))
+            return "Default";
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(user.AdminDesktopFallbackTtsLanguage))
+            parts.Add(user.AdminDesktopFallbackTtsLanguage);
+        if (!string.IsNullOrWhiteSpace(user.AdminDesktopFallbackTtsRegion))
+            parts.Add(user.AdminDesktopFallbackTtsRegion.ToUpper());
+
+        var voice = user.AdminDesktopFallbackTtsVoice;
+        if (voice.StartsWith("uri:"))
+            voice = voice.Substring(4);
+
+        var display = voice;
+        if (parts.Count > 0)
+            display += $" ({string.Join(", ", parts)})";
+
+        return display;
+    }
+
+    private string GetFallbackSelection(AppUser user)
+    {
+        return _fallbackSelections.TryGetValue(user.Id, out var value)
+            ? value ?? string.Empty
+            : user.AdminDesktopFallbackTtsVoice ?? string.Empty;
+    }
+
+    private void OnFallbackVoiceChanged(int userId, ChangeEventArgs e)
+    {
+        _fallbackSelections[userId] = (e?.Value?.ToString() ?? string.Empty).Trim();
+        _fallbackMessages[userId] = string.Empty;
+    }
+
+    private async Task SaveFallbackVoiceAsync(int userId)
+    {
+        var selected = _fallbackSelections.TryGetValue(userId, out var value)
+            ? (value ?? string.Empty).Trim()
+            : string.Empty;
+
+        var selectedVoice = _desktopFallbackVoices.FirstOrDefault(x => string.Equals(GetFallbackVoiceKey(x), selected, StringComparison.OrdinalIgnoreCase));
+        var okVoice = await Auth.UpdateAdminDesktopFallbackTtsVoiceAsync(userId, selected);
+        var okLanguage = okVoice && await Auth.UpdateAdminDesktopFallbackTtsLanguageAsync(userId, selectedVoice?.VoiceLang);
+        var okRegion = okVoice && await Auth.UpdateAdminDesktopFallbackTtsRegionAsync(userId, GetRegion(selectedVoice?.VoiceLang));
+
+        var statusMessage = (okVoice && okLanguage && okRegion) ? "Saved." : "Save failed.";
+        _users = await Auth.ListUsersAsync();
+        SyncFallbackSelections();
+        _fallbackMessages[userId] = statusMessage;
+    }
+
+    private static string FormatFallbackVoiceLabel(UsableMsVoice voice)
+    {
+        var label = voice.VoiceName;
+        if (!string.IsNullOrWhiteSpace(voice.VoiceLang))
+        {
+            label += $" ({voice.VoiceLang})";
+        }
+        return label;
+    }
+
+    private static string GetFallbackVoiceKey(UsableMsVoice voice)
+    {
+        var uri = (voice.VoiceUri ?? string.Empty).Trim();
+        var name = (voice.VoiceName ?? string.Empty).Trim();
+        var lang = (voice.VoiceLang ?? string.Empty).Trim();
+
+        return !string.IsNullOrWhiteSpace(uri)
+            ? $"uri:{uri}"
+            : $"name:{name}|lang:{lang}";
+    }
+
+    private static string? GetRegion(string? lang)
+    {
+        if (string.IsNullOrWhiteSpace(lang)) return null;
+        var text = lang.Trim();
+        var sep = text.IndexOf('-');
+        if (sep < 0) sep = text.IndexOf('_');
+        if (sep < 0 || sep + 1 >= text.Length) return null;
+        return text.Substring(sep + 1).Trim().ToUpperInvariant();
+    }
+
+    private void SyncFallbackSelections()
+    {
+        _fallbackSelections.Clear();
+        if (_users is null) return;
+
+        foreach (var user in _users)
+        {
+            _fallbackSelections[user.Id] = user.AdminDesktopFallbackTtsVoice ?? string.Empty;
+        }
     }
 
     private int? GetCurrentUserId()

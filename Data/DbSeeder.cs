@@ -78,6 +78,21 @@ public static class DbSeeder
             await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX \"IX_UsableMsVoices_BrowserFamily_Token\" ON \"UsableMsVoices\" (\"BrowserFamily\", \"Token\")");
         }
 
+        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='AdminDesktopFallbackTtsVoice'").AnyAsync())
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsVoice\" TEXT NULL");
+        }
+
+        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='AdminDesktopFallbackTtsLanguage'").AnyAsync())
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsLanguage\" TEXT NULL");
+        }
+
+        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='AdminDesktopFallbackTtsRegion'").AnyAsync())
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsRegion\" TEXT NULL");
+        }
+
         await db.SaveChangesAsync();
 
         // Create groups and memberships from auth.json after users are saved

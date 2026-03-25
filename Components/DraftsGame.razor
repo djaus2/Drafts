@@ -1275,6 +1275,29 @@ else
                     voiceRegion = null;
                 }
 
+                if (!_isPhoneClient && string.IsNullOrWhiteSpace(voiceKey))
+                {
+                    try
+                    {
+                        var senderUser = await Auth.GetUserByIdAsync(m.SenderUserId);
+                        if (senderUser is not null)
+                        {
+                            voiceKey = string.IsNullOrWhiteSpace(senderUser.AdminDesktopFallbackTtsVoice)
+                                ? voiceKey
+                                : senderUser.AdminDesktopFallbackTtsVoice;
+                            voiceLanguage = string.IsNullOrWhiteSpace(senderUser.AdminDesktopFallbackTtsLanguage)
+                                ? voiceLanguage
+                                : senderUser.AdminDesktopFallbackTtsLanguage;
+                            voiceRegion = string.IsNullOrWhiteSpace(senderUser.AdminDesktopFallbackTtsRegion)
+                                ? voiceRegion
+                                : senderUser.AdminDesktopFallbackTtsRegion;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 if (!_talkEnabled) break;
 
                 _ttsDebug = $"msg#{i} len={payload?.Length}: {payload?.Substring(0, Math.Min(80, payload?.Length ?? 0))}";

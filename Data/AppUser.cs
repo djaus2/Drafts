@@ -28,4 +28,13 @@ public sealed class AppUser
 
     [MaxLength(16)]
     public string? PreferredTtsRegion { get; set; }
+
+    [MaxLength(1024)]
+    public string? AdminDesktopFallbackTtsVoice { get; set; }
+
+    [MaxLength(16)]
+    public string? AdminDesktopFallbackTtsLanguage { get; set; }
+
+    [MaxLength(16)]
+    public string? AdminDesktopFallbackTtsRegion { get; set; }
 }
