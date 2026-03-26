@@ -156,19 +156,29 @@ else
     <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
 </div>
 
-<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Change My PIN</h4>
+@if (_allowPlayerPinChange)
+{
+    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Change My PIN</h4>
 
-<div style="max-width:360px">
-    <div style="display:flex;flex-direction:column;gap:8px">
-        <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="6" />
-        <input @bind="_newPin" placeholder="New PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
-        <button @onclick="OnChangePin">Change PIN</button>
-        @if (!string.IsNullOrWhiteSpace(_pinMessage))
-        {
-            <div>@_pinMessage</div>
-        }
+    <div style="max-width:360px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+            <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="6" />
+            <input @bind="_newPin" placeholder="New PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
+            <button @onclick="OnChangePin">Change PIN</button>
+            @if (!string.IsNullOrWhiteSpace(_pinMessage))
+            {
+                <div>@_pinMessage</div>
+            }
+        </div>
     </div>
-</div>
+}
+else
+{
+    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">PIN Change</h4>
+    <div style="max-width:360px; color: #666; font-style: italic;">
+        PIN change is currently disabled. Please contact an administrator if you need to change your PIN.
+    </div>
+}
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Join Game</h4>
 
@@ -232,6 +242,7 @@ else
     private string _newPin = "";
     private string _pinMessage = "";
     private string _currentUserName = "";
+    private bool _allowPlayerPinChange = true;
     
     // Session timeout tracking
     private DateTimeOffset? _sessionExpiresAt = null;
@@ -332,6 +343,9 @@ else
 
             // Load game initiator setting
             _playFirst = await Settings.GetGameInitiatorGoesFirstAsync();
+
+            // Load PIN change permission setting
+            _allowPlayerPinChange = await Settings.GetAllowPlayerPinChangeAsync();
 
             await RefreshGames();
 

@@ -33,7 +33,8 @@ public static class DbSeeder
                     LastMoveHighlightColor = "rgba(255,0,0,0.85)",
                     EntrapmentMode = true,
                     MultiJumpGraceSeconds = 1.5,
-                    GameInitiatorGoesFirst = true
+                    GameInitiatorGoesFirst = true,
+                    AllowPlayerPinChange = true
                 });
             }
 

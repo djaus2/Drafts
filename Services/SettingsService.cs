@@ -16,6 +16,7 @@ public sealed class SettingsService
     private bool _entrapmentMode = true;
     private double _multiJumpGraceSeconds = 1.5;
     private bool _gameInitiatorGoesFirst = true;
+    private bool _allowPlayerPinChange = true;
     private bool _loaded;
 
     public SettingsService(IServiceScopeFactory scopeFactory)
@@ -122,6 +123,17 @@ public sealed class SettingsService
         }
     }
 
+    public bool AllowPlayerPinChange
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _allowPlayerPinChange;
+            }
+        }
+    }
+
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -143,6 +155,7 @@ public sealed class SettingsService
                 _entrapmentMode = s.EntrapmentMode;
                 _multiJumpGraceSeconds = s.MultiJumpGraceSeconds;
                 _gameInitiatorGoesFirst = s.GameInitiatorGoesFirst;
+                _allowPlayerPinChange = s.AllowPlayerPinChange;
                 _loaded = true;
             }
         }
@@ -159,6 +172,7 @@ public sealed class SettingsService
                 _entrapmentMode = true;
                 _multiJumpGraceSeconds = 1.5;
                 _gameInitiatorGoesFirst = true;
+                _allowPlayerPinChange = true;
                 _loaded = true;
             }
         }
@@ -332,6 +346,25 @@ public sealed class SettingsService
         lock (_lock)
         {
             return _gameInitiatorGoesFirst;
+        }
+    }
+
+    public async Task<bool> GetAllowPlayerPinChangeAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _allowPlayerPinChange;
         }
     }
 
@@ -640,6 +673,46 @@ public sealed class SettingsService
         lock (_lock)
         {
             _gameInitiatorGoesFirst = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateAllowPlayerPinChangeAsync(bool newValue, CancellationToken cancellationToken = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings
+            {
+                Id = 1,
+                MaxMoveTimeoutMins = 5,
+                MaxGameTimeMins = 30,
+                MaxGameStartWaitTimeMins = 30,
+                MaxLoginHrs = 4,
+                ReaperPeriodSeconds = 30,
+                LastMoveHighlightColor = "rgba(255,0,0,0.85)",
+                EntrapmentMode = true,
+                MultiJumpGraceSeconds = 1.5,
+                GameInitiatorGoesFirst = true,
+                AllowPlayerPinChange = newValue
+            };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.AllowPlayerPinChange = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _allowPlayerPinChange = newValue;
             _loaded = true;
         }
 

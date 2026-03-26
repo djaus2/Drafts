@@ -133,6 +133,12 @@
             Game Initiator goes first
             <br />
         </label>
+        <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" @bind="_allowPlayerPinChange" />
+            Allow players to change their PIN
+            <br />
+            <i><b>Note:</b> When disabled, only Admins can change PINs</i>
+        </label>
         <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
             <select @bind="_lastMoveHighlightColor">
@@ -290,6 +296,7 @@ else
     private bool _entrapmentMode = true;
     private double _multiJumpGraceSeconds = 1.5;
     private bool _gameInitiatorGoesFirst = true;
+    private bool _allowPlayerPinChange = true;
     private string _settingsMessage = "";
     private string _voiceCatalogMessage = "";
     private bool _checkingChromeVoices;
@@ -376,6 +383,7 @@ else
         _entrapmentMode = await Settings.GetEntrapmentModeAsync();
         _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
         _gameInitiatorGoesFirst = await Settings.GetGameInitiatorGoesFirstAsync();
+        _allowPlayerPinChange = await Settings.GetAllowPlayerPinChangeAsync();
         _chromeUsableVoices = UsableMsVoices.GetVoices("chrome").ToList();
         _adminSelectedVoiceTokens = _chromeUsableVoices
             .Select(x => x.Token)
@@ -419,7 +427,8 @@ else
         var ok7 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
         var ok8 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
         var ok9 = await Settings.UpdateGameInitiatorGoesFirstAsync(_gameInitiatorGoesFirst);
-        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9) ? "Saved." : "Invalid value.";
+        var ok10 = await Settings.UpdateAllowPlayerPinChangeAsync(_allowPlayerPinChange);
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10) ? "Saved." : "Invalid value.";
     }
 
     private async Task LoadAdminVoicesFromUserGesture()

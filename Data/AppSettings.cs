@@ -32,4 +32,7 @@ public sealed class AppSettings
 
     [Required]
     public bool GameInitiatorGoesFirst { get; set; } = true;
+
+    [Required]
+    public bool AllowPlayerPinChange { get; set; } = true;
 }
