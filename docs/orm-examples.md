@@ -310,7 +310,7 @@ public async Task<bool> UpdateSettingsAsync(AppSettings settings)
     }
     else
     {
-        existing.MaxTimeoutMins = settings.MaxTimeoutMins;
+        existing.MaxMoveTimeoutMins = settings.MaxTimeoutMins;
         existing.ReaperPeriodSeconds = settings.ReaperPeriodSeconds;
         existing.LastMoveHighlightColor = settings.LastMoveHighlightColor;
         existing.EntrapmentMode = settings.EntrapmentMode;

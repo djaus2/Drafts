@@ -981,7 +981,7 @@ namespace Drafts.Services
                                 now,
                                 0,
                                 "System",
-                                "Game timed out due to inactivity and will soon close."));
+                                "Game closed: Maximum move timeout - too much inactivity."));
                         }
                     }
                     else if (idle >= warnAt && !game.IdleWarningSent)
@@ -1021,6 +1021,156 @@ namespace Drafts.Services
             }
 
             return (removed, warningsSent);
+        }
+
+        public int ProcessGameTimeTimeouts(TimeSpan maxGameTime)
+        {
+            if (maxGameTime <= TimeSpan.Zero) return 0;
+
+            var now = DateTime.UtcNow;
+            var removed = 0;
+            var warnAt = TimeSpan.FromTicks((long)(maxGameTime.Ticks * 0.8)); // Warn at 80%
+
+            foreach (var kvp in _games)
+            {
+                var gameId = kvp.Key;
+                var game = kvp.Value;
+
+                var shouldRemove = false;
+                var shouldWarn = false;
+
+                lock (game)
+                {
+                    // Only check games that have actually started (second player connected)
+                    if (!game.HadSecondPlayerConnected)
+                    {
+                        continue;
+                    }
+
+                    // Check if game has exceeded maximum total game time
+                    var gameRunTime = now - game.StartTimeUtc;
+                    if (gameRunTime >= maxGameTime)
+                    {
+                        shouldRemove = true;
+                        
+                        // Add a system message before removing
+                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                            now,
+                            0,
+                            "System",
+                            $"Game closed: Maximum game time ({(int)maxGameTime.TotalMinutes} minutes) exceeded."));
+                    }
+                    else if (gameRunTime >= warnAt && !game.GameTimeWarningSent)
+                    {
+                        shouldWarn = true;
+                        game.GameTimeWarningSent = true;
+                        
+                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                            now,
+                            0,
+                            "System",
+                            $"Warning: this game will close after {(int)maxGameTime.TotalMinutes} minutes of total game time."));
+                    }
+                }
+
+                if (shouldWarn)
+                {
+                    OnGameUpdated(gameId);
+                }
+
+                if (shouldRemove)
+                {
+                    // Notify UI BEFORE removing so it can capture the closure message
+                    OnGameUpdated(gameId);
+                    
+                    if (_games.TryRemove(gameId, out _))
+                    {
+                        removed++;
+                        _logger.LogInformation("ProcessGameTimeTimeouts: removed {GameId} after {MaxTime} total game time", gameId, maxGameTime);
+                        // Notify again after removal so UI knows game is gone
+                        OnGameUpdated(gameId);
+                    }
+                }
+            }
+
+            return removed;
+        }
+
+        public int ProcessGameStartWaitTimeouts(TimeSpan maxWaitTime)
+        {
+            if (maxWaitTime <= TimeSpan.Zero) return 0;
+
+            var now = DateTime.UtcNow;
+            var removed = 0;
+            var warnAt = TimeSpan.FromTicks((long)(maxWaitTime.Ticks * 0.8)); // Warn at 80%
+
+            foreach (var kvp in _games)
+            {
+                var gameId = kvp.Key;
+                var game = kvp.Value;
+
+                var shouldRemove = false;
+                var shouldWarn = false;
+
+                lock (game)
+                {
+                    // Only check games that haven't started yet (waiting for second player)
+                    if (game.HadSecondPlayerConnected)
+                    {
+                        continue;
+                    }
+
+                    // Check if game has been waiting too long for players to join
+                    var waitTime = now - game.CreatedUtc;
+                    if (waitTime >= maxWaitTime)
+                    {
+                        shouldRemove = true;
+                        
+                        // Add a system message before removing
+                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                            now,
+                            0,
+                            "System",
+                            $"Game closed: Maximum start wait time ({(int)maxWaitTime.TotalMinutes} minutes) exceeded - no second player joined."));
+                    }
+                    else if (waitTime >= warnAt && !game.StartWaitWarningSent)
+                    {
+                        shouldWarn = true;
+                        game.StartWaitWarningSent = true;
+                        
+                        var remaining = maxWaitTime - waitTime;
+                        var remainingMins = Math.Max(0, (int)remaining.TotalMinutes);
+                        var remainingSecs = Math.Max(0, remaining.Seconds);
+                        
+                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                            now,
+                            0,
+                            "System",
+                            $"Warning: waiting for second player. Game will close in {remainingMins}:{remainingSecs:00}."));
+                    }
+                }
+
+                if (shouldWarn)
+                {
+                    OnGameUpdated(gameId);
+                }
+
+                if (shouldRemove)
+                {
+                    // Notify UI BEFORE removing so it can capture the closure message
+                    OnGameUpdated(gameId);
+                    
+                    if (_games.TryRemove(gameId, out _))
+                    {
+                        removed++;
+                        _logger.LogInformation("ProcessGameStartWaitTimeouts: removed {GameId} after {MaxWait} waiting for players", gameId, maxWaitTime);
+                        // Notify again after removal so UI knows game is gone
+                        OnGameUpdated(gameId);
+                    }
+                }
+            }
+
+            return removed;
         }
 
         public bool TryAcquireVoiceFloor(string gameId, int userId, string userName, int holdSeconds = 15)
@@ -1274,6 +1424,10 @@ namespace Drafts.Services
         public bool IdleWarningSent { get; set; }
 
         public bool IdleKillMessageSent { get; set; }
+
+        public bool GameTimeWarningSent { get; set; }
+
+        public bool StartWaitWarningSent { get; set; }
 
         public DateTime? KillAfterUtc { get; set; }
 

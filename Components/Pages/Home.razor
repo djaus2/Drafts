@@ -2,7 +2,9 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @* @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
  *@
+@using Drafts.Services
 @inject NavigationManager Nav
+@inject SettingsService Settings
 
 <PageTitleHeading Title="@($"Checkers online V{Version}")" HeadingLevel="2" />
 
@@ -16,7 +18,33 @@
 
 <img src="Images/TheBoard.png" width="250"/>
 
+<br />
+<br />
+
+<div style="max-width:400px;padding:12px;border:1px solid #ccc;background-color:#f9f9f9;">
+    <h4 style="margin-top:0;">Game Timeout Settings</h4>
+    <div style="font-size:14px;line-height:1.6;">
+        <div><strong>Move timeout:</strong> @_maxMoveTimeoutMins minutes</div>
+        <div><strong>Max game time:</strong> @_maxGameTimeMins minutes</div>
+        <div><strong>Max game start wait:</strong> @_maxGameStartWaitTimeMins minutes</div>
+        <div><strong>Max login session:</strong> @_maxLoginHrs hours</div>
+    </div>
+</div>
+
 @code{
+    private int _maxMoveTimeoutMins = 5;
+    private int _maxGameTimeMins = 30;
+    private int _maxGameStartWaitTimeMins = 30;
+    private int _maxLoginHrs = 4;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _maxMoveTimeoutMins = await Settings.GetMaxMoveTimeoutMinsAsync();
+        _maxGameTimeMins = await Settings.GetMaxGameTimeMinsAsync();
+        _maxGameStartWaitTimeMins = await Settings.GetMaxGameStartWaitTimeMinsAsync();
+        _maxLoginHrs = await Settings.GetMaxLoginHrsAsync();
+    }
+
     private string Version 
     {
         get

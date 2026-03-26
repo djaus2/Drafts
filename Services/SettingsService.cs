@@ -7,7 +7,10 @@ public sealed class SettingsService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly object _lock = new();
-    private int _maxTimeoutMins = 30;
+    private int _maxMoveTimeoutMins = 5;
+    private int _maxGameTimeMins = 30;
+    private int _maxGameStartWaitTimeMins = 30;
+    private int _maxLoginHrs = 4;
     private int _reaperPeriodSeconds = 30;
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
@@ -20,13 +23,46 @@ public sealed class SettingsService
         _scopeFactory = scopeFactory;
     }
 
-    public int MaxTimeoutMins
+    public int MaxMoveTimeout
     {
         get
         {
             lock (_lock)
             {
-                return _maxTimeoutMins;
+                return _maxMoveTimeoutMins;
+            }
+        }
+    }
+
+    public int MaxGameTimeMins
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _maxGameTimeMins;
+            }
+        }
+    }
+
+    public int MaxGameStartWaitTimeMins
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _maxGameStartWaitTimeMins;
+            }
+        }
+    }
+
+    public int MaxLoginHrs
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _maxLoginHrs;
             }
         }
     }
@@ -96,7 +132,10 @@ public sealed class SettingsService
         {
             lock (_lock)
             {
-                _maxTimeoutMins = s.MaxTimeoutMins;
+                _maxMoveTimeoutMins = s.MaxMoveTimeoutMins;
+                _maxGameTimeMins = s.MaxGameTimeMins;
+                _maxGameStartWaitTimeMins = s.MaxGameStartWaitTimeMins;
+                _maxLoginHrs = s.MaxLoginHrs;
                 _reaperPeriodSeconds = s.ReaperPeriodSeconds;
                 _lastMoveHighlightColor = string.IsNullOrWhiteSpace(s.LastMoveHighlightColor)
                     ? "rgba(255,0,0,0.85)"
@@ -111,7 +150,10 @@ public sealed class SettingsService
         {
             lock (_lock)
             {
-                _maxTimeoutMins = 30;
+                _maxMoveTimeoutMins = 5;
+                _maxGameTimeMins = 30;
+                _maxGameStartWaitTimeMins = 30;
+                _maxLoginHrs = 4;
                 _reaperPeriodSeconds = 30;
                 _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
                 _entrapmentMode = true;
@@ -122,7 +164,7 @@ public sealed class SettingsService
         }
     }
 
-    public async Task<int> GetMaxTimeoutMinsAsync(CancellationToken cancellationToken = default)
+    public async Task<int> GetMaxMoveTimeoutMinsAsync(CancellationToken cancellationToken = default)
     {
         var needLoad = false;
         lock (_lock)
@@ -137,7 +179,64 @@ public sealed class SettingsService
 
         lock (_lock)
         {
-            return _maxTimeoutMins;
+            return _maxMoveTimeoutMins;
+        }
+    }
+
+    public async Task<int> GetMaxGameTimeMinsAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _maxGameTimeMins;
+        }
+    }
+
+    public async Task<int> GetMaxGameStartWaitTimeMinsAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _maxGameStartWaitTimeMins;
+        }
+    }
+
+    public async Task<int> GetMaxLoginHrsAsync(CancellationToken cancellationToken = default)
+    {
+        var needLoad = false;
+        lock (_lock)
+        {
+            needLoad = !_loaded;
+        }
+
+        if (needLoad)
+        {
+            await LoadAsync(cancellationToken);
+        }
+
+        lock (_lock)
+        {
+            return _maxLoginHrs;
         }
     }
 
@@ -236,7 +335,7 @@ public sealed class SettingsService
         }
     }
 
-    public async Task<bool> UpdateMaxTimeoutMinsAsync(int newValue, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateMaxMoveTimeoutMinsAsync(int newValue, CancellationToken cancellationToken = default)
     {
         if (newValue <= 0) return false;
         if (newValue > 24 * 60) return false;
@@ -247,19 +346,109 @@ public sealed class SettingsService
         var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
         if (s is null)
         {
-            s = new AppSettings { Id = 1, MaxTimeoutMins = newValue };
+            s = new AppSettings { Id = 1, MaxMoveTimeoutMins = newValue };
             db.Settings.Add(s);
         }
         else
         {
-            s.MaxTimeoutMins = newValue;
+            s.MaxMoveTimeoutMins = newValue;
         }
 
         await db.SaveChangesAsync(cancellationToken);
 
         lock (_lock)
         {
-            _maxTimeoutMins = newValue;
+            _maxMoveTimeoutMins = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateMaxGameTimeMinsAsync(int newValue, CancellationToken cancellationToken = default)
+    {
+        if (newValue <= 0) return false;
+        if (newValue > 24 * 60) return false;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings { Id = 1, MaxGameTimeMins = newValue };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.MaxGameTimeMins = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _maxGameTimeMins = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateMaxGameStartWaitTimeMinsAsync(int newValue, CancellationToken cancellationToken = default)
+    {
+        if (newValue <= 0) return false;
+        if (newValue > 24 * 60) return false;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings { Id = 1, MaxGameStartWaitTimeMins = newValue };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.MaxGameStartWaitTimeMins = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _maxGameStartWaitTimeMins = newValue;
+            _loaded = true;
+        }
+
+        return true;
+    }
+
+    public async Task<bool> UpdateMaxLoginHrsAsync(int newValue, CancellationToken cancellationToken = default)
+    {
+        if (newValue <= 0) return false;
+        if (newValue > 24 * 7) return false; // Max 1 week
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
+        if (s is null)
+        {
+            s = new AppSettings { Id = 1, MaxLoginHrs = newValue };
+            db.Settings.Add(s);
+        }
+        else
+        {
+            s.MaxLoginHrs = newValue;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        lock (_lock)
+        {
+            _maxLoginHrs = newValue;
             _loaded = true;
         }
 
@@ -277,7 +466,7 @@ public sealed class SettingsService
         var s = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1, cancellationToken);
         if (s is null)
         {
-            s = new AppSettings { Id = 1, MaxTimeoutMins = 30, ReaperPeriodSeconds = newValue };
+            s = new AppSettings { Id = 1, MaxMoveTimeoutMins = 30, MaxGameTimeMins = 30, MaxGameStartWaitTimeMins = 30, MaxLoginHrs = 4, ReaperPeriodSeconds = newValue };
             db.Settings.Add(s);
         }
         else
@@ -311,7 +500,10 @@ public sealed class SettingsService
             s = new AppSettings
             {
                 Id = 1,
-                MaxTimeoutMins = 30,
+                MaxMoveTimeoutMins = 5,
+                MaxGameTimeMins = 30,
+                MaxGameStartWaitTimeMins = 30,
+                MaxLoginHrs = 4,
                 ReaperPeriodSeconds = 30,
                 LastMoveHighlightColor = newValue
             };
@@ -344,7 +536,10 @@ public sealed class SettingsService
             s = new AppSettings
             {
                 Id = 1,
-                MaxTimeoutMins = 30,
+                MaxMoveTimeoutMins = 5,
+                MaxGameTimeMins = 30,
+                MaxGameStartWaitTimeMins = 30,
+                MaxLoginHrs = 4,
                 ReaperPeriodSeconds = 30,
                 LastMoveHighlightColor = "rgba(255,0,0,0.85)",
                 EntrapmentMode = newValue
@@ -385,7 +580,10 @@ public sealed class SettingsService
             s = new AppSettings
             {
                 Id = 1,
-                MaxTimeoutMins = 30,
+                MaxMoveTimeoutMins = 5,
+                MaxGameTimeMins = 30,
+                MaxGameStartWaitTimeMins = 30,
+                MaxLoginHrs = 4,
                 ReaperPeriodSeconds = 30,
                 LastMoveHighlightColor = "rgba(255,0,0,0.85)",
                 EntrapmentMode = true,
@@ -420,7 +618,10 @@ public sealed class SettingsService
             s = new AppSettings
             {
                 Id = 1,
-                MaxTimeoutMins = 30,
+                MaxMoveTimeoutMins = 5,
+                MaxGameTimeMins = 30,
+                MaxGameStartWaitTimeMins = 30,
+                MaxLoginHrs = 4,
                 ReaperPeriodSeconds = 30,
                 LastMoveHighlightColor = "rgba(255,0,0,0.85)",
                 EntrapmentMode = true,

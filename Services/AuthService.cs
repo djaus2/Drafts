@@ -18,15 +18,38 @@ public sealed class AuthService
         name = (name ?? string.Empty).Trim();
         var lookup = name.ToUpperInvariant();
 
-        var user = await _db.Users.SingleOrDefaultAsync(x => x.Name.ToUpper() == lookup);
-        if (user is null) return null;
+        System.Diagnostics.Debug.WriteLine($"Login attempt: Name='{name}', PIN='{pin}'");
 
-        if (!PinHasher.VerifyPin(pin, user.PinSalt, user.PinHash)) return null;
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Name.ToUpper() == lookup);
+        if (user is null) 
+        {
+            System.Diagnostics.Debug.WriteLine($"Login debug: User '{name}' not found");
+            return null;
+        }
+
+        var pinValid = PinHasher.VerifyPin(pin, user.PinSalt, user.PinHash);
+        System.Diagnostics.Debug.WriteLine($"Login debug: User '{name}' (ID: {user.Id}) found, PIN valid: {pinValid}");
+        
+        if (!pinValid) 
+        {
+            // Debug: Test if PIN format is valid
+            var pinFormatValid = IsValidPin(pin);
+            System.Diagnostics.Debug.WriteLine($"Login debug: PIN format valid: {pinFormatValid} (length: {pin?.Length})");
+            return null;
+        }
         return user;
     }
 
     public Task<List<AppUser>> ListUsersAsync()
         => _db.Users.OrderBy(x => x.Name).ToListAsync();
+
+    public async Task<List<AppUser>> ListAdminUsersAsync()
+    {
+        return await _db.Users
+            .Where(x => x.Roles != null && x.Roles.Split(',').Contains("Admin"))
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+    }
 
     public Task<AppUser?> GetUserByIdAsync(int userId)
         => _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
@@ -246,18 +269,71 @@ public sealed class AuthService
         currentPin = (currentPin ?? string.Empty).Trim();
         newPin = (newPin ?? string.Empty).Trim();
 
-        if (!IsValidPin(newPin)) return false;
+        if (!IsValidPin(newPin)) 
+        {
+            System.Diagnostics.Debug.WriteLine($"PIN change debug: Invalid new PIN format: '{newPin}'");
+            return false;
+        }
 
         var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
-        if (user is null) return false;
+        if (user is null) 
+        {
+            System.Diagnostics.Debug.WriteLine($"PIN change debug: User {userId} not found");
+            return false;
+        }
 
-        if (!PinHasher.VerifyPin(currentPin, user.PinSalt, user.PinHash)) return false;
+        System.Diagnostics.Debug.WriteLine($"PIN change debug: Changing PIN for user '{user.Name}' (ID: {user.Id})");
 
+        // Debug: Verify current PIN
+        var currentPinValid = PinHasher.VerifyPin(currentPin, user.PinSalt, user.PinHash);
+        if (!currentPinValid) 
+        {
+            System.Diagnostics.Debug.WriteLine($"PIN change debug: Current PIN verification failed for user '{user.Name}'");
+            return false;
+        }
+
+        // Debug: Hash new PIN
         var (salt, hash) = PinHasher.HashPin(newPin);
-        user.PinSalt = salt;
-        user.PinHash = hash;
-        await _db.SaveChangesAsync();
-        return true;
+        
+        // Debug: Verify new PIN hash immediately
+        var newPinValidAfterHash = PinHasher.VerifyPin(newPin, salt, hash);
+        if (!newPinValidAfterHash)
+        {
+            // This should never happen, but let's catch it
+            System.Diagnostics.Debug.WriteLine("ERROR: New PIN hash verification failed immediately after hashing!");
+            return false;
+        }
+
+        try
+        {
+            user.PinSalt = salt;
+            user.PinHash = hash;
+            var changes = await _db.SaveChangesAsync();
+            
+            System.Diagnostics.Debug.WriteLine($"PIN change debug: Database save completed. Changes saved: {changes}");
+            
+            // Debug: Verify saved PIN can be validated
+            var savedUser = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+            if (savedUser != null)
+            {
+                var savedPinValid = PinHasher.VerifyPin(newPin, savedUser.PinSalt, savedUser.PinHash);
+                System.Diagnostics.Debug.WriteLine($"PIN change debug: Current PIN valid: {currentPinValid}, New PIN valid after save: {savedPinValid}");
+                
+                if (!savedPinValid)
+                {
+                    System.Diagnostics.Debug.WriteLine("ERROR: PIN verification failed after database save - this indicates a database issue");
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"PIN change debug: Database save failed: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"PIN change error for user '{user.Name}': {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
     }
 
     public async Task<bool> ResetUserPinTo9999Async(int targetUserId, int adminUserId, string adminPin)
@@ -322,7 +398,20 @@ public sealed class AuthService
         }
 
         var identity = new ClaimsIdentity(claims, "Cookies");
-        return new ClaimsPrincipal(identity);
+        var principal = new ClaimsPrincipal(identity);
+        
+        // Debug logging for Azure
+        Console.WriteLine($"BuildPrincipal debug: Building principal for user '{user.Name}' (ID: {user.Id})");
+        Console.WriteLine($"BuildPrincipal debug: Claims created:");
+        foreach (var claim in claims)
+        {
+            Console.WriteLine($"  - {claim.Type}: {claim.Value}");
+        }
+        Console.WriteLine($"BuildPrincipal debug: Authentication type: {identity.AuthenticationType}");
+        Console.WriteLine($"BuildPrincipal debug: IsAuthenticated: {principal.Identity?.IsAuthenticated}");
+        Console.WriteLine($"BuildPrincipal debug: Principal name: {principal.Identity?.Name}");
+        
+        return principal;
     }
 
     public async Task<AppUser?> CreateUserAsync(string name, string pin, bool isAdmin, bool isPlayer)

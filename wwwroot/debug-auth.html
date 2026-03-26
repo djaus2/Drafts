@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Azure Authentication Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; white-space: pre-wrap; font-family: monospace; }
+        .error { background: #ffe6e6; }
+        .success { background: #e6ffe6; }
+        button { padding: 10px 15px; margin: 5px; }
+        input { padding: 5px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Azure Authentication Debug Tools</h1>
+    
+    <div class="section">
+        <h3>1. Test Authentication State</h3>
+        <button onclick="testAuthState()">Check Current Authentication</button>
+        <button onclick="relogin()">Re-login as Admin</button>
+        <div id="auth-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>2. Test User ID Retrieval</h3>
+        <button onclick="testUserId()">Test User ID Detection</button>
+        <div id="userid-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>3. Test Principal Creation</h3>
+        <button onclick="testPrincipal()">Test Principal Creation</button>
+        <div id="principal-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>4. Simple PIN Change Test</h3>
+        <p>This test tries to change the Admin PIN from 1371 to 123456 automatically</p>
+        <button onclick="testSimplePinChange()">Test Simple PIN Change</button>
+        <div id="simple-pin-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>5. UI Logic PIN Test</h3>
+        <p>This test replicates the exact UI component logic (123456 → 9999)</p>
+        <button onclick="testUiPinChange()">Test UI PIN Change Logic</button>
+        <div id="ui-pin-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>6. Admin Component Test</h3>
+        <p>This test replicates the exact Admin.razor logic (9999 → 1234)</p>
+        <button onclick="testAdminPinChange()">Test Admin Component Logic</button>
+        <div id="admin-pin-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>7. Test PIN Change (Manual)</h3>
+        <input type="text" id="currentPin" placeholder="Current PIN (e.g., 1371)">
+        <input type="text" id="newPin" placeholder="New PIN (e.g., 1234)">
+        <button onclick="testPinChange()">Test PIN Change</button>
+        <div id="pinchange-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>8. Database Health Check</h3>
+        <button onclick="testDatabase()">Check Database</button>
+        <div id="db-result" class="result"></div>
+    </div>
+
+    <script>
+        function relogin() {
+            // Create a form and submit it to login
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/auth/login';
+            
+            const nameInput = document.createElement('input');
+            nameInput.type = 'hidden';
+            nameInput.name = 'name';
+            nameInput.value = 'Admin';
+            
+            const pinInput = document.createElement('input');
+            pinInput.type = 'hidden';
+            pinInput.name = 'pin';
+            pinInput.value = '9999'; // Try 9999 first since that might be the current PIN
+            
+            form.appendChild(nameInput);
+            form.appendChild(pinInput);
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        async function testAuthState() {
+            try {
+                const response = await fetch('/debug/auth-info');
+                const data = await response.json();
+                document.getElementById('auth-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('auth-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('auth-result').className = 'result error';
+                document.getElementById('auth-result').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function testUserId() {
+            try {
+                const response = await fetch('/debug/user-id-test');
+                const data = await response.json();
+                document.getElementById('userid-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('userid-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('userid-result').className = 'result error';
+                document.getElementById('userid-result').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function testPrincipal() {
+            try {
+                const response = await fetch('/debug/test-auth');
+                const data = await response.json();
+                document.getElementById('principal-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('principal-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('principal-result').className = 'result error';
+                document.getElementById('principal-result').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function testSimplePinChange() {
+            try {
+                const response = await fetch('/debug/simple-pin-test');
+                const data = await response.json();
+                document.getElementById('simple-pin-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('simple-pin-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('simple-pin-result').className = 'result error';
+                document.getElementById('simple-pin-result').textContent = 'Error: ' + error.message;
+                console.error('Simple PIN change test error:', error);
+            }
+        }
+
+        async function testUiPinChange() {
+            try {
+                const response = await fetch('/debug/ui-pin-test', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                document.getElementById('ui-pin-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('ui-pin-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('ui-pin-result').className = 'result error';
+                document.getElementById('ui-pin-result').textContent = 'Error: ' + error.message;
+                console.error('UI PIN change test error:', error);
+            }
+        }
+
+        async function testAdminPinChange() {
+            try {
+                const response = await fetch('/debug/admin-pin-test');
+                const text = await response.text();
+                document.getElementById('admin-pin-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('admin-pin-result').textContent = text;
+            } catch (error) {
+                document.getElementById('admin-pin-result').className = 'result error';
+                document.getElementById('admin-pin-result').textContent = 'Error: ' + error.message;
+                console.error('Admin PIN change test error:', error);
+            }
+        }
+
+        async function testPinChange() {
+            const currentPin = document.getElementById('currentPin').value;
+            const newPin = document.getElementById('newPin').value;
+            
+            if (!currentPin || !newPin) {
+                alert('Please enter both current and new PIN');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('currentPin', currentPin);
+                formData.append('newPin', newPin);
+
+                const response = await fetch('/debug/test-pin-change', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                let data;
+                const responseText = await response.text();
+                console.log('Raw response:', responseText);
+                
+                try {
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    throw new Error(`JSON parse failed: ${parseError.message}. Raw response: ${responseText}`);
+                }
+                
+                document.getElementById('pinchange-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('pinchange-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('pinchange-result').className = 'result error';
+                document.getElementById('pinchange-result').textContent = 'Error: ' + error.message;
+                console.error('PIN change test error:', error);
+            }
+        }
+
+        async function testDatabase() {
+            try {
+                const response = await fetch('/health/db');
+                const data = await response.json();
+                document.getElementById('db-result').className = `result ${response.ok ? 'success' : 'error'}`;
+                document.getElementById('db-result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('db-result').className = 'result error';
+                document.getElementById('db-result').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // Auto-run auth state check on page load
+        window.onload = function() {
+            testAuthState();
+        };
+    </script>
+</body>
+</html>

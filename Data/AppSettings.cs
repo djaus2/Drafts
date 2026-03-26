@@ -7,7 +7,16 @@ public sealed class AppSettings
     public int Id { get; set; } = 1;
 
     [Required]
-    public int MaxTimeoutMins { get; set; } = 30;
+    public int MaxMoveTimeoutMins { get; set; } = 5;
+
+    [Required]
+    public int MaxGameTimeMins { get; set; } = 30;
+
+    [Required]
+    public int MaxGameStartWaitTimeMins { get; set; } = 30;
+
+    [Required]
+    public int MaxLoginHrs { get; set; } = 4;
 
     [Required]
     public int ReaperPeriodSeconds { get; set; } = 30;

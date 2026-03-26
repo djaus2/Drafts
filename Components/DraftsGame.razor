@@ -464,6 +464,7 @@ else
     private bool _chatWired;
 
     private bool _gameClosedNotified;
+    private string? _gameClosedReason;
     private bool _showCancelConfirm = false;
     private bool _showConcedeConfirm = false;
     private int? _groupId;
@@ -702,7 +703,7 @@ else
             _preferredTtsRegion = "";
         }
 
-        _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
+        _maxTimeoutMins = await Settings.GetMaxMoveTimeoutMinsAsync();
 
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
@@ -930,6 +931,22 @@ else
             {
                 QueueSpeakNewVoiceMessages(priorChatCount);
             }
+            
+            // Capture the last system message as potential game closure reason
+            if (_game?.ChatMessages?.Count > 0)
+            {
+                var lastMsg = _game.ChatMessages[_game.ChatMessages.Count - 1];
+                if (lastMsg.SenderUserId == 0 && lastMsg.SenderName == "System")
+                {
+                    // Capture any system message that indicates game closure or timeout
+                    if (lastMsg.Text.StartsWith("Game closed:", StringComparison.OrdinalIgnoreCase) ||
+                        lastMsg.Text.Contains("exceeded", StringComparison.OrdinalIgnoreCase) ||
+                        lastMsg.Text.Contains("no second player joined", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _gameClosedReason = lastMsg.Text;
+                    }
+                }
+            }
         }
 
         if (_game is null)
@@ -946,7 +963,10 @@ else
 
                 try
                 {
-                    await JS.InvokeVoidAsync("alert", "Game was closed.");
+                    var message = string.IsNullOrWhiteSpace(_gameClosedReason) 
+                        ? "Game was closed." 
+                        : _gameClosedReason;
+                    await JS.InvokeVoidAsync("alert", message);
                 }
                 catch (TaskCanceledException)
                 {

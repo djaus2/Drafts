@@ -98,7 +98,19 @@
     <div style="display:flex;flex-direction:column;gap:8px">
         <label style="display:flex;flex-direction:column;gap:4px">
             Max timeout (mins)
-            <input @bind="_maxTimeoutMins" inputmode="numeric" />
+            <input @bind="_maxMoveTimeoutMins" inputmode="numeric" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px">
+            Max game time (mins)
+            <input @bind="_maxGameTimeMins" inputmode="numeric" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px">
+            Max game start wait time (mins)
+            <input @bind="_maxGameStartWaitTimeMins" inputmode="numeric" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px">
+            Max login hours
+            <input @bind="_maxLoginHrs" inputmode="numeric" />
         </label>
         <label style="display:flex;flex-direction:column;gap:4px">
             Reaper period (seconds)
@@ -175,32 +187,38 @@ else
     </table>
 }
 
-<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Change PIN</h4>
+ <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Change Admin PIN</h4>
 
 <div style="max-width:360px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="6" />
+        To change Admin Pin: <a href="/player">Reset your password</a> page and follow instructions there.
+@*         <input @bind="_currentPin" placeholder="Current PIN" inputmode="numeric" maxlength="6" />
         <input @bind="_newPin" placeholder="New PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
         <button @onclick="OnChangePin">Change PIN</button>
         @if (!string.IsNullOrWhiteSpace(_pinMessage))
         {
             <div>@_pinMessage</div>
-        }
+        } *@
     </div>
-</div>
+</div> 
 
 <LobbyChat />
 
 @code {
     private int _creatorPlayerNumber = 1;
-    private string _currentPin = "";
-    private string _newPin = "";
-    private string _pinMessage = "";
+    // private string _currentPin = "";
+    // private string _newPin = "";
+    // private string _pinMessage = "";
 
     private Dictionary<int, string> _userNames = new();
 
-    private int _maxTimeoutMins = 30;
-    private int _reaperPeriodSeconds = 30;
+    // Timeouts, after which the game is cancelled //////////////////////////
+    private int _maxMoveTimeoutMins = 5;         //Time a player gets to move after other player moves
+    private int _maxGameTimeMins = 30;           // Max time a game can run after it starts
+    private int _maxGameStartWaitTimeMins = 30;  // Max time an initiated (waiting) game can wait to start
+    private int _reaperPeriodSeconds = 30;       // Time between game garabage collections
+    private int _maxLoginHrs = 4;                // Max time a login session is valid before requiring re-login so can't hog a game indefinitely
+    /////////////////////////////////////////////////////////////////////////
     private string _lastMoveHighlightColor = "rgba(255,0,0,0.85)";
     private bool _entrapmentMode = true;
     private double _multiJumpGraceSeconds = 1.5;
@@ -282,7 +300,10 @@ else
     {
         var users = await Auth.ListUsersAsync();
         _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
-        _maxTimeoutMins = await Settings.GetMaxTimeoutMinsAsync();
+        _maxMoveTimeoutMins = await Settings.GetMaxMoveTimeoutMinsAsync();
+        _maxGameTimeMins = await Settings.GetMaxGameTimeMinsAsync();
+        _maxGameStartWaitTimeMins = await Settings.GetMaxGameStartWaitTimeMinsAsync();
+        _maxLoginHrs = await Settings.GetMaxLoginHrsAsync();
         _reaperPeriodSeconds = await Settings.GetReaperPeriodSecondsAsync();
         _lastMoveHighlightColor = await Settings.GetLastMoveHighlightColorAsync();
         _entrapmentMode = await Settings.GetEntrapmentModeAsync();
@@ -322,13 +343,16 @@ else
     private async Task SaveSettings()
     {
         _settingsMessage = "";
-        var ok1 = await Settings.UpdateMaxTimeoutMinsAsync(_maxTimeoutMins);
-        var ok2 = await Settings.UpdateReaperPeriodSecondsAsync(_reaperPeriodSeconds);
-        var ok3 = await Settings.UpdateLastMoveHighlightColorAsync(_lastMoveHighlightColor);
-        var ok4 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
-        var ok5 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
-        var ok6 = await Settings.UpdateGameInitiatorGoesFirstAsync(_gameInitiatorGoesFirst);
-        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6) ? "Saved." : "Invalid value.";
+        var ok1 = await Settings.UpdateMaxMoveTimeoutMinsAsync(_maxMoveTimeoutMins);
+        var ok2 = await Settings.UpdateMaxGameTimeMinsAsync(_maxGameTimeMins);
+        var ok3 = await Settings.UpdateMaxGameStartWaitTimeMinsAsync(_maxGameStartWaitTimeMins);
+        var ok4 = await Settings.UpdateMaxLoginHrsAsync(_maxLoginHrs);
+        var ok5 = await Settings.UpdateReaperPeriodSecondsAsync(_reaperPeriodSeconds);
+        var ok6 = await Settings.UpdateLastMoveHighlightColorAsync(_lastMoveHighlightColor);
+        var ok7 = await Settings.UpdateEntrapmentModeAsync(_entrapmentMode);
+        var ok8 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
+        var ok9 = await Settings.UpdateGameInitiatorGoesFirstAsync(_gameInitiatorGoesFirst);
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9) ? "Saved." : "Invalid value.";
     }
 
     private async Task LoadAdminVoicesFromUserGesture()
@@ -698,25 +722,25 @@ else
         Nav.NavigateTo($"/drafts?creator={_creatorPlayerNumber}&admin=1");
     }
 
-    private async Task OnChangePin()
-    {
-        _pinMessage = "";
+    // private async Task OnChangePin()
+    // {
+    //     _pinMessage = "";
 
-        var userId = GetCurrentUserId();
-        if (!userId.HasValue)
-        {
-            _pinMessage = "No player id.";
-            return;
-        }
+    //     var userId = GetCurrentUserId();
+    //     if (!userId.HasValue)
+    //     {
+    //         _pinMessage = "No player id.";
+    //         return;
+    //     }
 
-        var ok = await Auth.ChangePinAsync(userId.Value, (_currentPin ?? "").Trim(), (_newPin ?? "").Trim());
-        _pinMessage = ok ? "PIN changed." : "Failed (check current PIN and new PIN format).";
-        if (ok)
-        {
-            _currentPin = "";
-            _newPin = "";
-        }
-    }
+    //     var ok = await Auth.ChangePinAsync(userId.Value, (_currentPin ?? "").Trim(), (_newPin ?? "").Trim());
+    //     _pinMessage = ok ? "PIN changed." : "Failed (check current PIN and new PIN format).";
+    //     if (ok)
+    //     {
+    //         _currentPin = "";
+    //         _newPin = "";
+    //     }
+    // }
 
     
     private int? GetCurrentUserId()

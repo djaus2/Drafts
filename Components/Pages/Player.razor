@@ -994,24 +994,59 @@ else
     private int? GetCurrentUserId()
     {
         if (_cachedUserId.HasValue) return _cachedUserId;
-        var user = HttpContextAccessor.HttpContext?.User;
+        
+        var httpContext = HttpContextAccessor.HttpContext;
+        var user = httpContext?.User;
+        
+        // Debug logging for Azure
+        System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: HttpContext null? {httpContext == null}");
+        System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: User null? {user == null}");
+        System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: IsAuthenticated? {user?.Identity?.IsAuthenticated}");
+        System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: Name? {user?.Identity?.Name}");
+        
+        if (user == null || !user.Identity?.IsAuthenticated == true)
+        {
+            System.Diagnostics.Debug.WriteLine("GetCurrentUserId debug: User not authenticated");
+            return null;
+        }
+
         var raw = user?.FindFirst("uid")?.Value;
+        System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: UID claim value: '{raw}'");
+        
         if (int.TryParse(raw, out var id))
         {
             _cachedUserId = id;
+            System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: Successfully parsed UID: {id}");
             return id;
         }
+        
         // Fallback: lookup by username if uid claim not found
         var name = user?.Identity?.Name;
+        System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: Attempting username fallback: '{name}'");
+        
         if (!string.IsNullOrWhiteSpace(name))
         {
-            var appUser = Auth.GetUserByNameAsync(name).GetAwaiter().GetResult();
-            if (appUser != null)
+            try
             {
-                _cachedUserId = appUser.Id;
-                return appUser.Id;
+                var appUser = Auth.GetUserByNameAsync(name).GetAwaiter().GetResult();
+                if (appUser != null)
+                {
+                    _cachedUserId = appUser.Id;
+                    System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: Username fallback successful, ID: {appUser.Id}");
+                    return appUser.Id;
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: Username lookup failed - user '{name}' not found");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GetCurrentUserId debug: Username lookup error: {ex.Message}");
             }
         }
+        
+        System.Diagnostics.Debug.WriteLine("GetCurrentUserId debug: All methods failed, returning null");
         return null;
     }
 

@@ -104,7 +104,7 @@ await _db.SaveChangesAsync();
 var settings = await _db.Settings.FirstOrDefaultAsync();
 
 // Update Settings
-settings.MaxTimeoutMins = 45;
+settings.MaxMoveTimeoutMins = 45;
 settings.EntrapmentMode = false;
 await _db.SaveChangesAsync();
 
@@ -112,7 +112,7 @@ await _db.SaveChangesAsync();
 var newSettings = new AppSettings 
 { 
     Id = 1,
-    MaxTimeoutMins = 30,
+    MaxMoveTimeoutMins = 30,
     ReaperPeriodSeconds = 30,
     LastMoveHighlightColor = "rgba(255,0,0,0.85)",
     EntrapmentMode = true,
@@ -295,7 +295,7 @@ var users = await _db.Users
 
 // Execute Raw SQL Command
 var rowsAffected = await _db.Database
-    .ExecuteSqlRawAsync("UPDATE Settings SET MaxTimeoutMins = 45");
+    .ExecuteSqlRawAsync("UPDATE Settings SET MaxMoveTimeoutMins = 45");
 
 // Scalar Query
 var count = await _db.Database

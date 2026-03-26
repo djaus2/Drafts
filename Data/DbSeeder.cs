@@ -20,7 +20,10 @@ public static class DbSeeder
                 db.Settings.Add(new AppSettings
                 {
                     Id = 1,
-                    MaxTimeoutMins = 30,
+                    MaxMoveTimeoutMins = 5,
+                    MaxGameTimeMins = 30,
+                    MaxGameStartWaitTimeMins = 30,
+                    MaxLoginHrs = 4,
                     ReaperPeriodSeconds = 30,
                     LastMoveHighlightColor = "rgba(255,0,0,0.85)",
                     EntrapmentMode = true,

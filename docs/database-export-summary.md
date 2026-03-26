@@ -60,7 +60,7 @@
 | Property | Value |
 |----------|-------|
 | Id | 1 |
-| MaxTimeoutMins | 30 |
+| MaxTimeoutMins | 5 |
 | ReaperPeriodSeconds | 30 |
 | LastMoveHighlightColor | rgba(255,0,0,0.85) |
 | EntrapmentMode | 1 (true) |
