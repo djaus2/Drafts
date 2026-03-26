@@ -17,6 +17,23 @@
 
 <p>You are logged in as <b>@_currentUserName</b>.</p>
 
+@if (_sessionExpiresAt.HasValue)
+{
+    <div style="margin-top:8px;padding:8px 12px;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;max-width:360px;">
+        <div style="font-size:13px;font-weight:bold;margin-bottom:4px;">Session Timeout</div>
+        <div style="font-size:14px;">
+            @if (_sessionTimeRemaining.TotalSeconds > 0)
+            {
+                <span>Time remaining: <b>@FormatTimeRemaining(_sessionTimeRemaining)</b></span>
+            }
+            else
+            {
+                <span style="color:#d32f2f;font-weight:bold;">Session expired - logging out...</span>
+            }
+        </div>
+    </div>
+}
+
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Member of Groups:</h4>
 
 @if (_userGroups?.Any() == true)
@@ -215,6 +232,11 @@ else
     private string _newPin = "";
     private string _pinMessage = "";
     private string _currentUserName = "";
+    
+    // Session timeout tracking
+    private DateTimeOffset? _sessionExpiresAt = null;
+    private TimeSpan _sessionTimeRemaining = TimeSpan.Zero;
+    private System.Threading.Timer? _sessionTimer;
 
     private sealed class VoiceOption
     {
@@ -329,6 +351,21 @@ else
             {
             }
         }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        
+        // Initialize session expiration tracking
+        await InitializeSessionTimeout();
+        
+        // Start session countdown timer (update every second)
+        _sessionTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await UpdateSessionCountdown();
+            }
+            catch
+            {
+            }
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -966,6 +1003,90 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
+    private async Task InitializeSessionTimeout()
+    {
+        try
+        {
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext != null)
+            {
+                // Try to get the authentication properties from the cookie
+                var authenticateResult = await httpContext.AuthenticateAsync(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme);
+                if (authenticateResult?.Succeeded == true && authenticateResult.Properties?.ExpiresUtc.HasValue == true)
+                {
+                    _sessionExpiresAt = authenticateResult.Properties.ExpiresUtc.Value;
+                }
+                else
+                {
+                    // Fallback: calculate based on MaxLoginHrs setting
+                    var maxLoginHrs = await Settings.GetMaxLoginHrsAsync();
+                    _sessionExpiresAt = DateTimeOffset.UtcNow.AddHours(maxLoginHrs);
+                }
+            }
+            else
+            {
+                // No HttpContext available, use fallback
+                var maxLoginHrs = await Settings.GetMaxLoginHrsAsync();
+                _sessionExpiresAt = DateTimeOffset.UtcNow.AddHours(maxLoginHrs);
+            }
+            
+            await UpdateSessionCountdown();
+        }
+        catch
+        {
+            _sessionExpiresAt = null;
+        }
+    }
+
+    private async Task UpdateSessionCountdown()
+    {
+        if (!_sessionExpiresAt.HasValue)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        _sessionTimeRemaining = _sessionExpiresAt.Value - now;
+
+        if (_sessionTimeRemaining.TotalSeconds <= 0)
+        {
+            _sessionTimeRemaining = TimeSpan.Zero;
+            // Session expired - redirect to logout
+            await InvokeAsync(async () =>
+            {
+                try
+                {
+                    Nav.NavigateTo("/logout", forceLoad: true);
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatTimeRemaining(TimeSpan time)
+    {
+        if (time.TotalSeconds <= 0)
+        {
+            return "Expired";
+        }
+        else if (time.TotalHours >= 1)
+        {
+            return $"{(int)time.TotalHours}h {time.Minutes}m {time.Seconds}s";
+        }
+        else if (time.TotalMinutes >= 1)
+        {
+            return $"{time.Minutes}m {time.Seconds}s";
+        }
+        else
+        {
+            return $"{time.Seconds}s";
+        }
+    }
+
     public void Dispose()
     {
         GameService.GameUpdated -= OnGameUpdated;
@@ -973,6 +1094,14 @@ else
         try
         {
             _gamesRefreshTimer?.Dispose();
+        }
+        catch
+        {
+        }
+        
+        try
+        {
+            _sessionTimer?.Dispose();
         }
         catch
         {

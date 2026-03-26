@@ -10,13 +10,18 @@ public static class DbSeeder
 {
     public static async Task EnsureSeededAsync(AppDbContext db)
     {
+        Console.WriteLine("DbSeeder: Starting database seeding...");
         var created = await db.Database.EnsureCreatedAsync();
+        Console.WriteLine($"DbSeeder: EnsureCreatedAsync returned: {created}");
+        Console.WriteLine($"DbSeeder: Database connection: {db.Database.GetDbConnection().ConnectionString}");
 
         if (created)
         {
+            Console.WriteLine("DbSeeder: Database was newly created, seeding initial data...");
             var settings = await db.Settings.SingleOrDefaultAsync(x => x.Id == 1);
             if (settings is null)
             {
+                Console.WriteLine("DbSeeder: Creating default settings...");
                 db.Settings.Add(new AppSettings
                 {
                     Id = 1,
@@ -32,7 +37,13 @@ public static class DbSeeder
                 });
             }
 
+            Console.WriteLine("DbSeeder: Creating users from auth.json...");
             await CreateUsersFromAuthJson(db);
+            Console.WriteLine("DbSeeder: User creation completed");
+        }
+        else
+        {
+            Console.WriteLine("DbSeeder: Database already existed, checking for new tables...");
         }
 
         // Create Groups table if it doesn't exist
@@ -81,6 +92,33 @@ public static class DbSeeder
             await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX \"IX_UsableMsVoices_BrowserFamily_Token\" ON \"UsableMsVoices\" (\"BrowserFamily\", \"Token\")");
         }
 
+        // Create GameLogs table if it doesn't exist
+        try
+        {
+            // Try to query the table - if it fails, it doesn't exist
+            await db.Database.ExecuteSqlRawAsync("SELECT 1 FROM [GameLogs] LIMIT 1");
+            Console.WriteLine("GameLogs table already exists");
+        }
+        catch
+        {
+            // Table doesn't exist, create it
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE [GameLogs] (
+                        [Id] INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        [Timestamp] TEXT NOT NULL,
+                        [Message] TEXT NOT NULL
+                    )");
+                await db.Database.ExecuteSqlRawAsync("CREATE INDEX [IX_GameLogs_Timestamp] ON [GameLogs] ([Timestamp] ASC)");
+                Console.WriteLine("GameLogs table created successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating GameLogs table: {ex.Message}");
+            }
+        }
+
         if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='AdminDesktopFallbackTtsVoice'").AnyAsync())
         {
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsVoice\" TEXT NULL");
@@ -110,6 +148,8 @@ public static class DbSeeder
     private static async Task CreateUsersFromAuthJson(AppDbContext db)
     {
         var authJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "auth.json");
+        Console.WriteLine($"DbSeeder: Looking for auth.json at: {authJsonPath}");
+        Console.WriteLine($"DbSeeder: auth.json exists: {File.Exists(authJsonPath)}");
         
         if (!File.Exists(authJsonPath))
         {
@@ -118,6 +158,7 @@ public static class DbSeeder
         }
 
         var json = await File.ReadAllTextAsync(authJsonPath);
+        Console.WriteLine($"DbSeeder: auth.json loaded successfully, length: {json.Length}");
         var authExport = JsonSerializer.Deserialize<AuthExport>(json);
         
         if (authExport?.Users == null)
@@ -126,11 +167,15 @@ public static class DbSeeder
             return;
         }
 
+        Console.WriteLine($"DbSeeder: Found {authExport.Users.Count} users in auth.json");
+        var usersCreated = 0;
+        
         foreach (var authUser in authExport.Users)
         {
             var existingUser = await db.Users.SingleOrDefaultAsync(x => x.Name == authUser.Name);
             if (existingUser is null)
             {
+                Console.WriteLine($"DbSeeder: Creating user: {authUser.Name}");
                 var (salt, hash) = PinHasher.HashPin(authUser.Pin);
                 db.Users.Add(new AppUser
                 {
@@ -139,8 +184,15 @@ public static class DbSeeder
                     PinSalt = salt,
                     PinHash = hash
                 });
+                usersCreated++;
+            }
+            else
+            {
+                Console.WriteLine($"DbSeeder: User {authUser.Name} already exists");
             }
         }
+        
+        Console.WriteLine($"DbSeeder: Created {usersCreated} new users");
     }
 
     private static async Task CreateGroupsAndMembershipsFromAuthJson(AppDbContext db)

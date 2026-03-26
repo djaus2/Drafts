@@ -13,6 +13,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<UsableMsVoice> UsableMsVoices => Set<UsableMsVoice>();
+    public DbSet<GameLog> GameLogs => Set<GameLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

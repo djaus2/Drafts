@@ -10,6 +10,7 @@
 @inject DraftsService GameService
 @inject SettingsService Settings
 @inject UsableMsVoiceService UsableMsVoices
+@inject GameLogService GameLog
 
 <PageTitleHeading Title="Admin" HeadingLevel="2" />
 
@@ -19,6 +20,7 @@
     <a href="/admin/users">Manage players</a>
     <a href="/admin/groups">Manage groups</a>
     <a href="/player">Reset your password</a>
+    <button type="button" @onclick="OpenLogViewer" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">View game logs</button>
     <form method="get" action="/api/admin/download-database" style="display:inline;">
     <button type="submit" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
 </form>
@@ -204,6 +206,66 @@ else
 
 <LobbyChat />
 
+@if (_showLogViewer)
+{
+    <div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;" @onclick="CloseLogViewer">
+        <div style="background:white;padding:20px;border-radius:8px;max-width:90%;max-height:90%;overflow:auto;box-shadow:0 4px 6px rgba(0,0,0,0.1);" @onclick:stopPropagation="true">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="margin:0;">Game Activity Logs</h3>
+                <button @onclick="CloseLogViewer" style="padding:4px 12px;">Close</button>
+            </div>
+            
+            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:4px;">
+                    Show last:
+                    <select @bind="_logCount" @bind:after="LoadLogs">
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                    entries
+                </label>
+                <button @onclick="LoadLogs">Refresh</button>
+            </div>
+            
+            @if (_logs == null)
+            {
+                <p>Loading logs...</p>
+            }
+            else if (_logs.Count == 0)
+            {
+                <p>No log entries found.</p>
+            }
+            else
+            {
+                <div style="overflow:auto;max-height:60vh;">
+                    <table style="border-collapse:collapse;width:100%;font-size:13px;">
+                        <thead style="position:sticky;top:0;background:white;">
+                            <tr style="border-bottom:2px solid #ccc;">
+                                <th style="text-align:left;padding:8px;white-space:nowrap;">Timestamp</th>
+                                <th style="text-align:left;padding:8px;">Event</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in _logs)
+                            {
+                                <tr style="border-bottom:1px solid #eee;">
+                                    <td style="padding:8px;white-space:nowrap;vertical-align:top;">@log.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td style="padding:8px;">@log.Message</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top:12px;font-size:12px;color:#666;">
+                    Showing @_logs.Count log entries
+                </div>
+            }
+        </div>
+    </div>
+}
+
 @code {
     private int _creatorPlayerNumber = 1;
     // private string _currentPin = "";
@@ -211,6 +273,11 @@ else
     // private string _pinMessage = "";
 
     private Dictionary<int, string> _userNames = new();
+    
+    // Log viewer state
+    private bool _showLogViewer = false;
+    private List<Drafts.Data.GameLog>? _logs = null;
+    private int _logCount = 100;
 
     // Timeouts, after which the game is cancelled //////////////////////////
     private int _maxMoveTimeoutMins = 5;         //Time a player gets to move after other player moves
@@ -720,6 +787,32 @@ else
     private void StartNewGame()
     {
         Nav.NavigateTo($"/drafts?creator={_creatorPlayerNumber}&admin=1");
+    }
+
+    private async Task OpenLogViewer()
+    {
+        _showLogViewer = true;
+        await LoadLogs();
+    }
+
+    private void CloseLogViewer()
+    {
+        _showLogViewer = false;
+        _logs = null;
+    }
+
+    private async Task LoadLogs()
+    {
+        try
+        {
+            _logs = await GameLog.GetRecentLogsAsync(_logCount);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading logs: {ex.Message}");
+            _logs = new List<Drafts.Data.GameLog>();
+        }
     }
 
     // private async Task OnChangePin()

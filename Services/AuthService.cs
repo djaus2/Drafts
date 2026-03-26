@@ -7,10 +7,12 @@ namespace Drafts.Services;
 public sealed class AuthService
 {
     private readonly AppDbContext _db;
+    private readonly GameLogService _gameLog;
 
-    public AuthService(AppDbContext db)
+    public AuthService(AppDbContext db, GameLogService gameLog)
     {
         _db = db;
+        _gameLog = gameLog;
     }
 
     public async Task<AppUser?> ValidateLoginAsync(string name, string pin)
@@ -37,6 +39,10 @@ public sealed class AuthService
             System.Diagnostics.Debug.WriteLine($"Login debug: PIN format valid: {pinFormatValid} (length: {pin?.Length})");
             return null;
         }
+        
+        // Log successful login
+        _ = _gameLog.LogAsync($"Player login: {user.Name} (ID: {user.Id})");
+        
         return user;
     }
 

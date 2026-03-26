@@ -27,36 +27,43 @@ namespace Drafts
 
             builder.Services.AddHttpContextAccessor();
 
-            builder.Services.AddDbContext<AppDbContext>(options =>
+            // Get connection string
+            var cs = builder.Configuration.GetConnectionString("AuthDb") ?? "Data Source=auth.db";
+
+            // SQLite relative paths are relative to the *process working directory*, which can vary
+            // depending on how the app is launched. Resolve to the content root for stability.
+            const string dataSourcePrefix = "Data Source=";
+            if (cs.StartsWith(dataSourcePrefix, StringComparison.OrdinalIgnoreCase))
             {
-                var cs = builder.Configuration.GetConnectionString("AuthDb") ?? "Data Source=auth.db";
-
-                // SQLite relative paths are relative to the *process working directory*, which can vary
-                // depending on how the app is launched. Resolve to the content root for stability.
-                const string dataSourcePrefix = "Data Source=";
-                if (cs.StartsWith(dataSourcePrefix, StringComparison.OrdinalIgnoreCase))
+                var src = cs.Substring(dataSourcePrefix.Length).Trim().Trim('"');
+                if (!string.IsNullOrWhiteSpace(src)
+                    && !Path.IsPathRooted(src)
+                    && !src.Contains(";")
+                    && !src.Contains("://", StringComparison.OrdinalIgnoreCase))
                 {
-                    var src = cs.Substring(dataSourcePrefix.Length).Trim().Trim('"');
-                    if (!string.IsNullOrWhiteSpace(src)
-                        && !Path.IsPathRooted(src)
-                        && !src.Contains(";")
-                        && !src.Contains("://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // For Azure App Service, use the temporary directory for better reliability
-                        var basePath = builder.Environment.IsProduction() 
-                            ? Path.GetTempPath() 
-                            : builder.Environment.ContentRootPath;
-                        
-                        var abs = Path.Combine(basePath, src);
-                        cs = dataSourcePrefix + abs;
-                        
-                        // Log the database path for debugging
-                        Console.WriteLine($"Database path: {abs} (Environment: {builder.Environment.EnvironmentName})");
-                    }
+                    // For Azure App Service, use the temporary directory for better reliability
+                    var basePath = builder.Environment.IsProduction() 
+                        ? Path.GetTempPath() 
+                        : builder.Environment.ContentRootPath;
+                    
+                    var abs = Path.Combine(basePath, src);
+                    cs = dataSourcePrefix + abs;
+                    
+                    // Log the database path for debugging
+                    Console.WriteLine($"Database path: {abs} (Environment: {builder.Environment.EnvironmentName})");
                 }
+            }
 
-                options.UseSqlite(cs);
-            });
+            // Register DbContextFactory for both singleton and scoped services
+            // Use pooled factory which handles both scenarios correctly
+            builder.Services.AddPooledDbContextFactory<AppDbContext>(
+                options => options.UseSqlite(cs),
+                poolSize: 128);
+            
+            // Register scoped DbContext for services that need direct context injection
+            // This uses the factory internally
+            builder.Services.AddScoped(sp => 
+                sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
             builder.Services.AddServerSideBlazor()
         .AddHubOptions(options =>
@@ -84,9 +91,9 @@ namespace Drafts
                         options.Cookie.HttpOnly = true;
                     }
                     
-                    // Add sliding expiration for better reliability
-                    options.ExpireTimeSpan = TimeSpan.FromHours(8);
-                    options.SlidingExpiration = true;
+                    // Expiration is set per-login based on MaxLoginHrs setting
+                    // No sliding expiration - session expires at exact time
+                    options.SlidingExpiration = false;
                     
                     // Add logging for debugging
                     options.Events = new CookieAuthenticationEvents
@@ -118,6 +125,7 @@ namespace Drafts
 
             builder.Services.AddSingleton<SettingsService>();
             builder.Services.AddSingleton<UsableMsVoiceService>();
+            builder.Services.AddSingleton<GameLogService>();
             builder.Services.AddHostedService<GameTimeoutReaper>();
 
             var app = builder.Build();
@@ -249,12 +257,15 @@ namespace Drafts
                 });
             });
 
-            app.MapGet("/logout", async (HttpContext ctx, DraftsService drafts) =>
+            app.MapGet("/logout", async (HttpContext ctx, DraftsService drafts, GameLogService gameLog) =>
             {
                 var raw = ctx.User?.FindFirst("uid")?.Value;
+                var userName = ctx.User?.Identity?.Name ?? "Unknown";
+                
                 if (int.TryParse(raw, out var uid) && uid > 0)
                 {
                     drafts.RemoveGamesForUser(uid);
+                    _ = gameLog.LogAsync($"Player logout: {userName} (ID: {uid})");
                 }
                 await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 return Results.Redirect("/login", permanent: false);
@@ -899,7 +910,7 @@ namespace Drafts
                 }
             });
 
-            app.MapGet("/debug/auth-test", async (AuthService auth, HttpContext ctx) =>
+            app.MapGet("/debug/auth-test", async (AuthService auth, SettingsService settings, HttpContext ctx) =>
             {
                 try
                 {
@@ -910,7 +921,16 @@ namespace Drafts
                     }
 
                     var principal = AuthService.BuildPrincipal(user);
-                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                    
+                    // Get the MaxLoginHrs setting and use it for cookie expiration
+                    var maxLoginHrs = await settings.GetMaxLoginHrsAsync();
+                    var authProperties = new AuthenticationProperties
+                    {
+                        IsPersistent = true,
+                        ExpiresUtc = DateTimeOffset.UtcNow.AddHours(maxLoginHrs)
+                    };
+                    
+                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, authProperties);
 
                     return Results.Json(new { 
                         success = true, 
@@ -929,6 +949,7 @@ namespace Drafts
             app.MapPost("/auth/login", async (
                 HttpContext ctx,
                 AuthService auth,
+                SettingsService settings,
                 [FromForm] string name,
                 [FromForm] string pin,
                 [FromForm] string? returnUrl) =>
@@ -955,9 +976,17 @@ namespace Drafts
                     var principal = AuthService.BuildPrincipal(user);
                     Console.WriteLine($"Login debug: About to sign in principal");
                     
-                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                    // Get the MaxLoginHrs setting and use it for cookie expiration
+                    var maxLoginHrs = await settings.GetMaxLoginHrsAsync();
+                    var authProperties = new AuthenticationProperties
+                    {
+                        IsPersistent = true,
+                        ExpiresUtc = DateTimeOffset.UtcNow.AddHours(maxLoginHrs)
+                    };
                     
-                    Console.WriteLine($"Login debug: Sign-in completed for user '{user.Name}'");
+                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, authProperties);
+                    
+                    Console.WriteLine($"Login debug: Sign-in completed for user '{user.Name}' with {maxLoginHrs}hr expiration");
 
                     if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
                     {

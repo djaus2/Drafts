@@ -12,6 +12,7 @@ namespace Drafts.Services
         private readonly ILogger<DraftsService> _logger;
         private readonly LobbyChatService _lobbyChat;
         private readonly SettingsService _settings;
+        private readonly GameLogService _gameLog;
 
         // Event raised when a game changes. Subscribers can call StateHasChanged.
         public event Action<string>? GameUpdated;
@@ -39,11 +40,12 @@ namespace Drafts.Services
             return FindActiveGameIdForUser(userId);
         }
 
-        public DraftsService(ILogger<DraftsService> logger, LobbyChatService lobbyChat, SettingsService settings)
+        public DraftsService(ILogger<DraftsService> logger, LobbyChatService lobbyChat, SettingsService settings, GameLogService gameLog)
         {
             _logger = logger;
             _lobbyChat = lobbyChat;
             _settings = settings;
+            _gameLog = gameLog;
         }
 
         public enum GameState
@@ -144,6 +146,9 @@ namespace Drafts.Services
             var displayName = string.IsNullOrWhiteSpace(creatorName) ? $"User {userId}" : creatorName;
             _lobbyChat.AddSystemMessage($"New game started by {displayName}: {id}", groupId);
 
+            // Log game creation
+            _ = _gameLog.LogAsync($"Game created: {id} by {displayName} (ID: {userId})");
+
             OnGameUpdated(id);
             return id;
         }
@@ -201,9 +206,11 @@ namespace Drafts.Services
                     game.Player1Connected = true;
                     game.Player1UserId = userId;
                     game.Player1Name = userName ?? string.Empty;
+                    var wasSecondPlayer = false;
                     if (game.Player2Connected)
                     {
                         game.HadSecondPlayerConnected = true;
+                        wasSecondPlayer = true;
                         if (game.State == GameState.New)
                         {
                             game.State = GameState.Connected;
@@ -217,6 +224,16 @@ namespace Drafts.Services
 
                     game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player1", id);
+                    
+                    if (wasSecondPlayer)
+                    {
+                        _ = _gameLog.LogAsync($"Game started: {id} - {userName ?? $"User {userId}"} joined as Player1, game now has both players");
+                    }
+                    else
+                    {
+                        _ = _gameLog.LogAsync($"Player joined: {userName ?? $"User {userId}"} (ID: {userId}) joined game {id} as Player1");
+                    }
+                    
                     OnGameUpdated(id);
                     return 1;
                 }
@@ -225,9 +242,11 @@ namespace Drafts.Services
                     game.Player2Connected = true;
                     game.Player2UserId = userId;
                     game.Player2Name = userName ?? string.Empty;
+                    var wasSecondPlayer = false;
                     if (game.Player1Connected)
                     {
                         game.HadSecondPlayerConnected = true;
+                        wasSecondPlayer = true;
                         if (game.State == GameState.New)
                         {
                             game.State = GameState.Connected;
@@ -241,6 +260,17 @@ namespace Drafts.Services
 
                     game.Touch();
                     _logger.LogInformation("TryJoinGame: {GameId} assigned Player2", id);
+                    _logger.LogInformation("Player2 joined game {GameId}", id);
+                    
+                    if (wasSecondPlayer)
+                    {
+                        _ = _gameLog.LogAsync($"Game started: {id} - {userName ?? $"User {userId}"} joined as Player2, game now has both players");
+                    }
+                    else
+                    {
+                        _ = _gameLog.LogAsync($"Player joined: {userName ?? $"User {userId}"} (ID: {userId}) joined game {id} as Player2");
+                    }
+                    
                     OnGameUpdated(id);
                     return 2;
                 }
@@ -780,7 +810,7 @@ namespace Drafts.Services
             }
         }
 
-        private static void MarkFinishedWithWinner(DraftsGame game, int winner)
+        private void MarkFinishedWithWinner(DraftsGame game, int winner)
         {
             if (game.State == GameState.Finished)
             {
@@ -798,6 +828,23 @@ namespace Drafts.Services
                 game.GameOverMessageSent = true;
                 var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
                 game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
+                
+                // Log game end with winner and loser
+                var loser = winner == 1 ? 2 : (winner == 2 ? 1 : 0);
+                var winnerName = winner == 1 ? game.Player1Name : (winner == 2 ? game.Player2Name : "None");
+                var loserName = loser == 1 ? game.Player1Name : (loser == 2 ? game.Player2Name : "None");
+                
+                if (string.IsNullOrWhiteSpace(winnerName)) winnerName = $"Player{winner}";
+                if (string.IsNullOrWhiteSpace(loserName)) loserName = $"Player{loser}";
+                
+                if (winner == 0)
+                {
+                    _ = _gameLog.LogAsync($"Game ended: {game.Id} - Draw/No winner");
+                }
+                else
+                {
+                    _ = _gameLog.LogAsync($"Game ended: {game.Id} - Winner: {winnerName} (Player{winner}), Loser: {loserName} (Player{loser})");
+                }
             }
         }
 
@@ -845,7 +892,7 @@ namespace Drafts.Services
             return false;
         }
 
-        private static void TryFinishByEntrapment(DraftsGame game)
+        private void TryFinishByEntrapment(DraftsGame game)
         {
             if (game.State == GameState.Finished || game.State == GameState.Abandoned)
             {
@@ -1011,10 +1058,14 @@ namespace Drafts.Services
 
                 if (remove)
                 {
-                    if (_games.TryRemove(gameId, out _))
+                    if (_games.TryRemove(gameId, out var removedGame))
                     {
                         removed++;
                         _logger.LogInformation("ProcessIdleTimeouts: removed {GameId} idle>={MaxIdle}", gameId, maxIdle);
+                        
+                        // Log timeout with Admin ID (0) for system action
+                        _ = _gameLog.LogAsync($"Game timeout: {gameId} - Maximum move timeout (idle/inactivity) - System closed game");
+                        
                         OnGameUpdated(gameId);
                     }
                 }
@@ -1087,6 +1138,10 @@ namespace Drafts.Services
                     {
                         removed++;
                         _logger.LogInformation("ProcessGameTimeTimeouts: removed {GameId} after {MaxTime} total game time", gameId, maxGameTime);
+                        
+                        // Log timeout with Admin ID (0) for system action
+                        _ = _gameLog.LogAsync($"Game timeout: {gameId} - Maximum game time exceeded - System closed game");
+                        
                         // Notify again after removal so UI knows game is gone
                         OnGameUpdated(gameId);
                     }
@@ -1164,6 +1219,10 @@ namespace Drafts.Services
                     {
                         removed++;
                         _logger.LogInformation("ProcessGameStartWaitTimeouts: removed {GameId} after {MaxWait} waiting for players", gameId, maxWaitTime);
+                        
+                        // Log timeout with Admin ID (0) for system action
+                        _ = _gameLog.LogAsync($"Game timeout: {gameId} - Maximum start wait time exceeded (no second player) - System closed game");
+                        
                         // Notify again after removal so UI knows game is gone
                         OnGameUpdated(gameId);
                     }
