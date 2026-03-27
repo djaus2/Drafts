@@ -371,3 +371,4 @@ FodyWeavers.xsd
 /Properties/PublishProfiles/DjsCheckersAppSvc - FTP.pubxml
 /Properties/PublishProfiles/DjsCheckersAppSvc - Web Deploy1.pubxml
 /auth - Copy.json
+/Properties/PublishProfiles/DjsCheckersAppSvc - Web Deploy.pubxml
