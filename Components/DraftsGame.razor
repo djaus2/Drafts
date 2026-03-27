@@ -208,14 +208,13 @@ else
             }
         </div>
 
-        @if (_game is not null && _game.CreatedByUserId == _currentUserId)
+        @if (_game is not null && _game.CreatedByUserId == _currentUserId && !_game.HadSecondPlayerConnected)
         {
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
                 <button class="game-btn" @onclick="CancelOrExitGame">@CancelOrExitButtonText</button>
-                <button class="game-btn" @onclick="ShowConcedeConfirm" style="background:#ff6b6b;color:white;">Concede</button>
             </div>
         }
-        @if (_game is not null && _game.HadSecondPlayerConnected && _game.CreatedByUserId != _currentUserId)
+        @if (_game is not null && _game.HadSecondPlayerConnected)
         {
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
                 <button class="game-btn" @onclick="ShowConcedeConfirm" style="background:#ff6b6b;color:white;">Concede</button>
@@ -369,7 +368,7 @@ else
             <div class="gameover-title">@GameOverTitle</div>
             <div class="gameover-sub">@GameOverSubtitle</div>
             <div class="gameover-actions">
-                <button @onclick="DismissGameOverOverlay">Close</button>
+                <button @onclick="DismissGameOverOverlay">@GameOverButtonText</button>
             </div>
         </div>
     </div>
@@ -465,6 +464,7 @@ else
 
     private bool _gameClosedNotified;
     private string? _gameClosedReason;
+    private bool _gameEndedWithWinLoss = false; // Track if game ended with proper win/loss
     private bool _showCancelConfirm = false;
     private bool _showConcedeConfirm = false;
     private int? _groupId;
@@ -513,6 +513,17 @@ else
             if (_game is null || _game.State != DraftsService.GameState.Finished) return "";
             if (!_game.WinnerPlayer.HasValue) return "gameover-loser";
             return _game.WinnerPlayer.Value == _playerNumber ? "gameover-winner" : "gameover-loser";
+        }
+    }
+
+    private string GameOverButtonText
+    {
+        get
+        {
+            if (_game is null || _game.State != DraftsService.GameState.Finished) return "Close";
+            if (!_game.WinnerPlayer.HasValue) return "Close";
+            // For actual win/loss conclusions, use more celebratory/acknowledging text
+            return _game.WinnerPlayer.Value == _playerNumber ? "Victory!" : "Well Played!";
         }
     }
 
@@ -880,7 +891,21 @@ else
     private void OnGameUpdated(string id)
     {
         if (id != _gameId) return;
+
+        var previousGame = _game;
         _game = GameService.GetGame(id);
+
+        // Check if game was removed (became null)
+        if (previousGame != null && _game == null)
+        {
+            // Skip the "game closed" alert if the game ended with a proper win/loss
+            if (_gameEndedWithWinLoss)
+            {
+                // Game ended properly - no need for additional alert
+                _gameEndedWithWinLoss = false; // Reset for next game
+                return;
+            }
+        }
 
         UpdateVoiceStatusFromGame();
 
@@ -902,10 +927,28 @@ else
                 {
                     _showGameOverOverlay = true;
                     _message = GameResultText;
+                    // Mark that the game ended with a proper win/loss (not timeout/abandonment)
+                    _gameEndedWithWinLoss = _game.WinnerPlayer.HasValue;
                 }
 
                 _lastGameState = _game.State;
                 _lastWinnerPlayer = _game.WinnerPlayer;
+            }
+            
+            // Additional check: If game is finished and overlay not shown, show it
+            if (_game.State == DraftsService.GameState.Finished && !_showGameOverOverlay)
+            {
+                _showGameOverOverlay = true;
+                _message = GameResultText;
+                _gameEndedWithWinLoss = _game.WinnerPlayer.HasValue;
+            }
+            
+            // Debug: Force overlay for finished games
+            if (_game.State == DraftsService.GameState.Finished && !_showGameOverOverlay)
+            {
+                _showGameOverOverlay = true;
+                _message = $"DEBUG: Game finished - Winner: {_game.WinnerPlayer}, You are: {_playerNumber}, Result: {GameResultText}";
+                _gameEndedWithWinLoss = _game.WinnerPlayer.HasValue;
             }
         }
 
@@ -947,46 +990,6 @@ else
                     }
                 }
             }
-        }
-
-        if (_game is null)
-        {
-            _ = InvokeAsync(async () =>
-            {
-                if (_gameClosedNotified) return;
-                _gameClosedNotified = true;
-
-                GameService.GameUpdated -= OnGameUpdated;
-                _connected = false;
-                _joined = false;
-                _gameId = null;
-
-                try
-                {
-                    var message = string.IsNullOrWhiteSpace(_gameClosedReason) 
-                        ? "Game was closed." 
-                        : _gameClosedReason;
-                    await JS.InvokeVoidAsync("alert", message);
-                }
-                catch (TaskCanceledException)
-                {
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-                catch (Microsoft.JSInterop.JSDisconnectedException)
-                {
-                }
-
-                try
-                {
-                    Nav.NavigateTo("/player", forceLoad: true);
-                }
-                catch
-                {
-                }
-            });
-            return;
         }
 
         InvokeAsync(StateHasChanged);
@@ -1095,10 +1098,10 @@ else
 
         if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned)
         {
-            if (!string.IsNullOrWhiteSpace(_gameId))
-            {
-                GameService.RemoveGame(_gameId);
-            }
+            // Don't remove the game immediately after concession
+            // Let the other player see the win/loss dialog first
+            // The game will be cleaned up by the timeout reaper or when both players exit
+            
             Nav.NavigateTo(_isAdmin ? "/admin" : "/player", forceLoad: true);
             await Task.CompletedTask;
             return;
@@ -1825,6 +1828,12 @@ else
     private void DismissGameOverOverlay()
     {
         _showGameOverOverlay = false;
+        
+        // Auto-exit the game when win/loss dialog is closed
+        if (_game?.State == DraftsService.GameState.Finished)
+        {
+            _ = CancelOrExitGame();
+        }
     }
 
     private void OnCellRightClick(MouseEventArgs e, int r, int c)

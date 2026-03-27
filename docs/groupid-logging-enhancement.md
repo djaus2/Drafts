@@ -1,7 +1,7 @@
 # GroupId Logging Enhancement
 
 ## Overview
-Version 6.5.1 introduces GroupId tracking to the structured logging system, providing enhanced context for game events by associating them with specific groups. This enhancement enables administrators to analyze game activity within specific groups and understand group-based user behavior patterns.
+Version 6.5.0 introduces GroupId tracking to the structured logging system, providing enhanced context for game events by associating them with specific groups. This enhancement enables administrators to analyze game activity within specific groups and understand group-based user behavior patterns.
 
 ## **🎯 New Features**
 

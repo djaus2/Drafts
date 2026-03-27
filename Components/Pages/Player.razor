@@ -127,9 +127,21 @@ else if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
                     <option value="@g.Id">@g.Name</option>
                 }
             </select>
-            <div style="font-size:12px;opacity:0.85;">
-                Selected group will be assigned to new games you create
-            </div>
+            @if (_selectedGroupId == 0 && _userGroups.Count > 1)
+            {
+                <div style="font-size:12px;color:#dc3545;">
+                    Select a group to start a game, or choose "No group" for a public game
+                </div>
+            }
+            @if (_selectedGroupId == 0 && _userGroups.Count == 1)
+            {
+                <div style="font-size:12px;color:#6c757d;">
+                    Only one group available - it will be auto-selected for you
+                </div>
+            }
+        </div>
+        <div style="font-size:12px;opacity:0.85;">
+            Selected group will be assigned to new games you create
         </div>
     </div>
 }
@@ -154,7 +166,13 @@ else
 </div>
 
 <div style="max-width:360px;margin-top:12px;">
-    <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
+    <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame" disabled="@(!CanCreateGame())">Start a new game</button>
+    @if (!CanCreateGame() && _userGroups?.Any() == true)
+    {
+        <div style="margin-top:8px;font-size:12px;color:#dc3545;">
+            Please select a group before starting a game
+        </div>
+    }
 </div>
 
 @if (_allowPlayerPinChange)
@@ -359,6 +377,114 @@ else
     private int _selectedGroupId = 0;
     private int? _cachedUserId = null;
 
+    // Initialize group selection
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Handle group auto-selection
+        if (_userGroups?.Any() == true)
+        {
+            // Auto-select if only one group, otherwise keep default (no group)
+            if (_userGroups.Count == 1)
+            {
+                _selectedGroupId = _userGroups.First().Id;
+            }
+        }
+
+        // Handle voice initialization (from second method)
+        try
+        {
+            _isPhoneClient = await JS.InvokeAsync<bool>("draftsVoice.isProbablyPhone");
+        }
+        catch
+        {
+            _isPhoneClient = false;
+        }
+
+        if (_isPhoneClient)
+        {
+            await ForceDefaultVoiceForPhoneClient();
+        }
+
+        var uid = GetCurrentUserId();
+        if (!uid.HasValue) return;
+
+        try
+        {
+            var preferred = await Auth.GetPreferredTtsVoiceAsync(uid.Value);
+            _selectedVoiceKey = preferred ?? "";
+            _selectedVoiceDisplay = _selectedVoiceKey;
+        }
+        catch (Exception ex)
+        {
+            _voiceLoadError = $"Voice load error: {ex.GetType().Name}: {ex.Message}";
+        }
+
+        try
+        {
+            var lang = await Auth.GetPreferredTtsLanguageAsync(uid.Value);
+            _selectedLanguage = (lang ?? string.Empty).Trim();
+        }
+        catch (Exception ex)
+        {
+            _voiceLoadError += $" | Language error: {ex.Message}";
+        }
+
+        try
+        {
+            var region = await Auth.GetPreferredTtsRegionAsync(uid.Value);
+            _selectedRegion = (region ?? string.Empty).Trim();
+        }
+        catch (Exception ex)
+        {
+            _voiceLoadError += $" | Region error: {ex.Message}";
+        }
+
+        if (_isPhoneClient)
+        {
+            _selectedVoiceKey = "";
+            _selectedVoiceDisplay = "Default voice";
+            _selectedLanguage = "";
+            _selectedRegion = "";
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedLanguage))
+        {
+            _selectedLanguage = "en";
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedRegion) && string.Equals(_selectedLanguage, "en", StringComparison.OrdinalIgnoreCase))
+        {
+            _selectedRegion = "AU";
+        }
+
+        _showVoiceSelection = false;
+        _loadedVoicePrefs = true;
+
+        // Auto-load voices to populate dropdowns with saved selections
+        if (!_isPhoneClient)
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+                await LoadVoicesAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Check if game creation should be enabled
+    private bool CanCreateGame()
+    {
+        // Enable if no groups (public games allowed) or if a group is selected
+        return _userGroups == null || _userGroups.Count == 0 || _selectedGroupId > 0;
+    }
+
     // Game settings
     private bool _playFirst = true;
 
@@ -452,96 +578,7 @@ else
         }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender) return;
-
-        try
-        {
-            _isPhoneClient = await JS.InvokeAsync<bool>("draftsVoice.isProbablyPhone");
-        }
-        catch
-        {
-            _isPhoneClient = false;
-        }
-
-        if (_isPhoneClient)
-        {
-            await ForceDefaultVoiceForPhoneClient();
-        }
-
-        var uid = GetCurrentUserId();
-        if (!uid.HasValue) return;
-
-        try
-        {
-            var preferred = await Auth.GetPreferredTtsVoiceAsync(uid.Value);
-            _selectedVoiceKey = preferred ?? "";
-            _selectedVoiceDisplay = _selectedVoiceKey;
-        }
-        catch (Exception ex)
-        {
-            _voiceLoadError = $"Voice load error: {ex.GetType().Name}: {ex.Message}";
-        }
-
-        try
-        {
-            var lang = await Auth.GetPreferredTtsLanguageAsync(uid.Value);
-            _selectedLanguage = (lang ?? string.Empty).Trim();
-        }
-        catch (Exception ex)
-        {
-            _voiceLoadError += $" | Lang error: {ex.Message}";
-        }
-
-        try
-        {
-            var region = await Auth.GetPreferredTtsRegionAsync(uid.Value);
-            _selectedRegion = (region ?? string.Empty).Trim();
-        }
-        catch (Exception ex)
-        {
-            _voiceLoadError += $" | Region error: {ex.Message}";
-        }
-
-        if (_isPhoneClient)
-        {
-            _selectedVoiceKey = "";
-            _selectedVoiceDisplay = "Default voice";
-            _selectedLanguage = "";
-            _selectedRegion = "";
-        }
-
-        if (string.IsNullOrWhiteSpace(_selectedLanguage))
-        {
-            _selectedLanguage = "en";
-        }
-
-        if (string.IsNullOrWhiteSpace(_selectedRegion) && string.Equals(_selectedLanguage, "en", StringComparison.OrdinalIgnoreCase))
-        {
-            _selectedRegion = "AU";
-        }
-
-        _showVoiceSelection = false;
-        _loadedVoicePrefs = true;
-
-        await InvokeAsync(StateHasChanged);
-
-        // Auto-load voices to populate dropdowns with saved selections
-        if (!_isPhoneClient)
-        {
-            try
-            {
-                await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
-            }
-            catch
-            {
-            }
-
-            await LoadVoicesAsync();
-        }
-    }
-
+    
     private async Task ForceDefaultVoiceForPhoneClient()
     {
         _selectedVoiceKey = "";

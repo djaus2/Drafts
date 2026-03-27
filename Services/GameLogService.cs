@@ -221,6 +221,10 @@ public class GameLogService
 
             foreach (var log in gameEndLogs)
             {
+                // Skip games without groups (public games are no longer allowed)
+                if (!log.GroupId.HasValue)
+                    continue;
+
                 var isWinner = log.PlayerId == playerId;
                 var opponentId = isWinner ? log.OpponentPlayerId : log.PlayerId;
                 var gameId = log.GameId ?? 0;

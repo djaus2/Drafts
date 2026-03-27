@@ -1,7 +1,7 @@
 # Structured Logging System
 
 ## Overview
-The application has been enhanced with a comprehensive structured logging system that replaces the previous simple message-based logging. This new system provides powerful search capabilities, better data organization, and detailed tracking of game events, user actions, and system events.
+Version 6.5.0 introduces a comprehensive structured logging system with GroupId support that replaces the previous simple message-based logging. This new system provides powerful search capabilities, better data organization, and detailed tracking of game events, user actions, and system events with group-aware context.
 
 ## **🎯 Key Features**
 
@@ -9,6 +9,7 @@ The application has been enhanced with a comprehensive structured logging system
 - **LogType Enumeration**: Categorized log entries for better filtering
 - **Player ID Tracking**: Mandatory field linking events to specific users
 - **Game ID Association**: Optional field for game-related events
+- **GroupId Support**: Optional field for group-based event organization
 - **Opponent Tracking**: For wins/losses, stores both winner and loser IDs
 - **Detailed Context**: Rich field structure instead of simple text messages
 
@@ -16,6 +17,7 @@ The application has been enhanced with a comprehensive structured logging system
 - **Type-based Filtering**: Filter by specific log categories
 - **Player-based Search**: Find all events for a specific player
 - **Game-based Search**: View complete game history
+- **Group-based Search**: Filter events by specific groups
 - **Date Range Filtering**: Search within specific time periods
 - **Combined Filters**: Multiple search criteria simultaneously
 
@@ -74,6 +76,7 @@ CREATE TABLE GameLogs (
     LogType INTEGER NOT NULL,           -- LogType enum value
     PlayerId INTEGER NOT NULL,          -- Who triggered the event
     GameId INTEGER NULL,                -- Related game (if applicable)
+    GroupId INTEGER NULL,               -- Group association (if applicable)
     OpponentPlayerId INTEGER NULL,      -- For wins/losses
     Details TEXT NULL                   -- Additional context
 );
@@ -147,16 +150,31 @@ Each log type has a distinct color:
 ### **Structured Logging Methods**
 ```csharp
 // Player actions
-await GameLog.LogPlayerActionAsync(LogType.PlayerLogin, userId, "Player logged in");
+await GameLog.LogPlayerActionAsync(LogType.PlayerLogin, userId, "Player logged in", null, null);
 
-// Game events
-await GameLog.LogGameEventAsync(LogType.GameCreated, userId, gameId, "Game created");
+// Game events with GroupId
+await GameLog.LogGameEventAsync(LogType.GameCreated, userId, gameId, "Game created", null, groupId);
 
-// Wins with opponent tracking
-await GameLog.LogWinAsync(winnerId, loserId, gameId, "Winner: Alice, Loser: Bob");
+// Wins with opponent tracking and GroupId
+await GameLog.LogWinAsync(winnerId, loserId, gameId, "Winner: Alice, Loser: Bob", groupId);
 
-// System events
+// System events (no GroupId)
 await GameLog.LogSystemEventAsync(LogType.Error, adminId, "System error occurred");
+```
+
+### **Enhanced Search Methods**
+```csharp
+// Search with GroupId filtering
+var logs = await GameLog.SearchLogsAsync(
+    playerId: 5,
+    gameId: 12345,
+    groupId: 789,        // NEW: Group-based filtering
+    logType: LogType.GameEnded,
+    count: 100
+);
+
+// Group-specific analysis
+var groupLogs = await GameLog.SearchLogsAsync(groupId: targetGroupId);
 ```
 
 ### **Backward Compatibility**
@@ -172,17 +190,51 @@ await GameLog.LogPlayerActionAsync(LogType.PlayerLogin, userId, "Player logged i
 
 ### **AuthService.cs**
 ```csharp
-// Login events
-_ = _gameLog.LogPlayerActionAsync(LogType.PlayerLogin, user.Id, $"Player {user.Name} logged in");
+// Login events (no GroupId for user actions)
+_ = _gameLog.LogPlayerActionAsync(LogType.PlayerLogin, user.Id, $"Player {user.Name} logged in", null, null);
 ```
 
 ### **DraftsService.cs**
 ```csharp
-// Game creation
-_ = _gameLog.LogGameEventAsync(LogType.GameCreated, userId, gameId, "Game created");
+// Game creation with GroupId
+_ = _gameLog.LogGameEventAsync(LogType.GameCreated, userId, gameId, "Game created", null, groupId);
 
-// Game endings with winner/loser tracking
-_ = _gameLog.LogWinAsync(winnerUserId, loserUserId, gameId, details);
+// Game endings with winner/loser tracking and GroupId
+_ = _gameLog.LogWinAsync(winnerUserId, loserUserId, gameId, details, game.GroupId);
+
+// Player joining with GroupId
+_ = _gameLog.LogGameEventAsync(LogType.GameJoined, userId, gameId, "Player joined", null, game.GroupId);
+```
+
+## **🎯 GroupId Features (V6.5.0)**
+
+### **Group-Aware Logging**
+- **Context Association**: Links events to specific groups
+- **Enhanced Search**: Filter logs by GroupId
+- **Performance Analytics**: Group-based activity tracking
+- **User Experience**: Group names displayed in interfaces
+
+### **GroupId Use Cases**
+```csharp
+// Group activity monitoring
+var groupActivity = await GameLog.SearchLogsAsync(groupId: targetGroupId);
+
+// Multi-group comparison
+var allGroups = await GameLog.SearchLogsAsync();
+var groupedByGroup = allLogs.GroupBy(x => x.GroupId);
+
+// Group-specific troubleshooting
+var groupTimeouts = await GameLog.SearchLogsAsync(
+    groupId: problemGroupId,
+    logType: LogType.GameTimeout
+);
+```
+
+### **Admin Interface Enhancements**
+- **Group Column**: Shows group names instead of IDs
+- **Group Filtering**: Search logs by specific groups
+- **Visual Consistency**: Matches group naming throughout app
+- **Fallback Handling**: Graceful display for missing groups
 
 // System timeouts
 _ = _gameLog.LogSystemEventAsync(LogType.GameTimeout, 1, details, gameId);
@@ -289,4 +341,6 @@ _logs = await GameLog.SearchLogsAsync(
 **Type**: Major Enhancement  
 **Backward Compatible**: ✅ Yes  
 **Search Enabled**: ✅ Yes  
-**Admin Interface**: ✅ Enhanced
+**Admin Interface**: ✅ Enhanced  
+**GroupId Support**: ✅ Yes  
+**Group Names**: ✅ Displayed

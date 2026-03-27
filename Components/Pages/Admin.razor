@@ -24,7 +24,8 @@
     <button type="button" @onclick="OpenLogViewer" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">View game logs</button>
     <form method="get" action="/api/admin/download-database" style="display:inline;">
     <button type="submit" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
-</form>
+    </form>
+    <button type="button" @onclick="ResetDatabase" style="text-align:left;padding:0;border:none;background:none;color:red;text-decoration:underline;cursor:pointer;">⚠️ Reset database (delete all data)</button>
 </div>
 
 <div style="max-width:360px;margin-top:12px;">
@@ -1012,5 +1013,46 @@ else
         
         var group = _userGroups?.FirstOrDefault(ug => ug.Id == groupId.Value);
         return group?.Name ?? $"Group {groupId.Value}";
+    }
+
+    private async Task ResetDatabase()
+    {
+        // First confirmation - basic warning
+        if (!await JS.InvokeAsync<bool>("confirm", "⚠️ WARNING: This will permanently delete ALL data including:\n\n• All user accounts\n• All groups\n• All game history\n• All settings\n\nThis action cannot be undone. Are you absolutely sure?"))
+        {
+            // Second confirmation - detailed warning about game data
+            if (!await JS.InvokeAsync<bool>("confirm", "🚨 FINAL WARNING: This will delete all historical game data for ALL players!\n\nThis includes:\n• All wins and losses records\n• All game statistics\n• All player progress\n• All group membership data\n• All settings and preferences\n\nPlayers will lose their entire game history!\n\nType 'accept' to confirm this irreversible action, or 'cancel' to abort."))
+            {
+                try
+                {
+                    // Get database file path
+                    var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "auth.db");
+                    
+                    // Close any existing connections
+                    await Task.Delay(100); // Give time for any pending operations
+                    
+                    // Delete the database file
+                    if (File.Exists(dbPath))
+                    {
+                        File.Delete(dbPath);
+                        
+                        // Show success message
+                        await JS.InvokeAsync<string>("alert", "✅ Database successfully reset!\n\nThe application will now restart with a fresh database.\n\nYou will need to:\n1. Create admin account\n2. Create groups\n3. Create player accounts\n4. All players will start with fresh statistics");
+                        
+                        // Restart the application
+                        Nav.NavigateTo("/", forceLoad: true);
+                    }
+                    else
+                    {
+                        await JS.InvokeAsync<string>("alert", "Database file not found. The application will restart with a fresh database.");
+                        Nav.NavigateTo("/", forceLoad: true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await JS.InvokeAsync<string>("alert", $"Error resetting database: {ex.Message}\n\nPlease contact support or restart the application manually.");
+                }
+            }
+        }
     }
 }
