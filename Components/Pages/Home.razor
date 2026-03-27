@@ -3,6 +3,7 @@
 @* @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
  *@
 @using Drafts.Services
+@using System.Text.Json
 @inject NavigationManager Nav
 @inject SettingsService Settings
 
@@ -49,11 +50,25 @@
     {
         get
         {
-            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "Unknown";
-            var parts = version.Split('.');
-            if (parts.Length >= 3)
-                return $"{parts[0]}.{parts[1]}.{parts[2]}";
-            return version;
+            try
+            {
+                // Read version from auth.json
+                var jsonPath = Path.Combine(Directory.GetCurrentDirectory(), "auth.json");
+                if (File.Exists(jsonPath))
+                {
+                    var jsonContent = File.ReadAllText(jsonPath);
+                    using var document = JsonDocument.Parse(jsonContent);
+                    if (document.RootElement.TryGetProperty("version", out var versionElement))
+                    {
+                        return versionElement.GetString() ?? "7.0.0";
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback if JSON reading fails
+            }
+            return "7.0.0"; // Fallback version
         }
     }
 
