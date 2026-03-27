@@ -41,7 +41,7 @@ public sealed class AuthService
         }
         
         // Log successful login
-        _ = _gameLog.LogAsync($"Player login: {user.Name} (ID: {user.Id})");
+        _ = _gameLog.LogPlayerActionAsync(LogType.PlayerLogin, user.Id, $"Player {user.Name} logged in");
         
         return user;
     }

@@ -12,6 +12,7 @@
 @inject DraftsService GameService
 @inject SettingsService Settings
 @inject UsableMsVoiceService UsableMsVoices
+@inject GameLogService GameLog
 
 <PageTitleHeading Title="Player" HeadingLevel="2" />
 
@@ -180,6 +181,66 @@ else
     </div>
 }
 
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">My Wins and Losses</h4>
+
+@if (_playerWinsLosses != null && _playerWinsLosses.Any())
+{
+    <div style="max-width:500px; margin-bottom:12px;">
+        <table style="border-collapse:collapse;width:100%;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.1);border-radius:8px;overflow:hidden;">
+            <thead style="background:#f8f9fa;border-bottom:2px solid #dee2e6;">
+                <tr>
+                    <th style="padding:12px;text-align:left;background:#e9ecef;font-weight:bold;color:#495057;">Group</th>
+                    <th style="padding:12px;text-align:center;background:#e9ecef;font-weight:bold;color:#495057;">Wins</th>
+                    <th style="padding:12px;text-align:center;background:#e9ecef;font-weight:bold;color:#495057;">Losses</th>
+                    <th style="padding:12px;text-align:center;background:#e9ecef;font-weight:bold;color:#495057;">Win Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var record in _playerWinsLosses)
+                {
+                    <tr style="border-bottom:1px solid #dee2e6;">
+                        <td style="padding:12px;">
+                            @GetGroupName(record.GroupId)
+                        </td>
+                        <td style="padding:12px;text-align:center;color:#28a745;font-weight:bold;">@record.Wins</td>
+                        <td style="padding:12px;text-align:center;color:#dc3545;font-weight:bold;">@record.Losses</td>
+                        <td style="padding:12px;text-align:center;">
+                            <span style="color:@GetWinRateColor(record.WinRate);font-weight:bold;">
+                                @record.WinRate.ToString("F1")%
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot style="background:#f8f9fa;border-top:2px solid #dee2e6;">
+                <tr>
+                    <td style="padding:12px;font-weight:bold;">Totals</td>
+                    <td style="padding:12px;text-align:center;color:#28a745;font-weight:bold;">@_totalWins</td>
+                    <td style="padding:12px;text-align:center;color:#dc3545;font-weight:bold;">@_totalLosses</td>
+                    <td style="padding:12px;text-align:center;">
+                        <span style="color:@GetWinRateColor(_overallWinRate);font-weight:bold;">
+                            @_overallWinRate.ToString("F1")%
+                        </span>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+        <div style="margin-top:8px;font-size:12px;color:#666;font-style:italic;">
+            Showing wins and losses for @(_playerWinsLosses.Count) group(s) • Total games: @_totalWins + @_totalLosses
+        </div>
+    </div>
+}
+else
+{
+    <div style="max-width:500px; margin-bottom:12px;">
+        <div style="padding:20px;text-align:center;color:#666;font-style:italic;border:1px solid #dee2e6;border-radius:8px;background:#f8f9fa;">
+            <div style="font-size:16px;margin-bottom:8px;">🎮</div>
+            <div>No games completed yet</div>
+            <div style="font-size:12px;margin-top:8px;">Play some games to see your wins and losses here!</div>
+        </div>
+    </div>
+}
+
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Join Game</h4>
 
 <div style="max-width:360px">
@@ -243,6 +304,12 @@ else
     private string _pinMessage = "";
     private string _currentUserName = "";
     private bool _allowPlayerPinChange = true;
+    
+    // Wins and losses tracking
+    private List<Drafts.Data.PlayerWinsLosses>? _playerWinsLosses = null;
+    private int _totalWins = 0;
+    private int _totalLosses = 0;
+    private double _overallWinRate = 0;
     
     // Session timeout tracking
     private DateTimeOffset? _sessionExpiresAt = null;
@@ -346,6 +413,9 @@ else
 
             // Load PIN change permission setting
             _allowPlayerPinChange = await Settings.GetAllowPlayerPinChangeAsync();
+
+            // Load wins and losses data
+            await LoadWinsLosses();
 
             await RefreshGames();
 
@@ -1300,5 +1370,49 @@ else
         }
         
         return $"{name}  {g.Id} — {createdLocal:yyyy-MM-dd HH:mm:ss} {connectedText}{groupInfo}";
+    }
+
+    private async Task LoadWinsLosses()
+    {
+        if (!_cachedUserId.HasValue) return;
+        
+        try
+        {
+            _playerWinsLosses = await GameLog.GetPlayerWinsLossesAsync(_cachedUserId.Value);
+            
+            // Calculate totals
+            _totalWins = _playerWinsLosses.Sum(x => x.Wins);
+            _totalLosses = _playerWinsLosses.Sum(x => x.Losses);
+            var totalGames = _totalWins + _totalLosses;
+            _overallWinRate = totalGames > 0 ? (double)_totalWins / totalGames * 100 : 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading wins/losses: {ex.Message}");
+            _playerWinsLosses = new List<Drafts.Data.PlayerWinsLosses>();
+            _totalWins = 0;
+            _totalLosses = 0;
+            _overallWinRate = 0;
+        }
+    }
+
+    private string GetWinRateColor(double winRate)
+    {
+        if (winRate >= 70) return "#28a745";      // Green - Excellent
+        if (winRate >= 60) return "#20c997";      // Teal - Good
+        if (winRate >= 50) return "#17a2b8";      // Blue - Average
+        if (winRate >= 40) return "#fd7e14";      // Orange - Below Average
+        return "#dc3545";                        // Red - Poor
+    }
+
+    private string GetGroupName(int? groupId)
+    {
+        if (!groupId.HasValue)
+        {
+            return "No Group";
+        }
+        
+        var group = _userGroups?.FirstOrDefault(ug => ug.Id == groupId.Value);
+        return group?.Name ?? $"Group {groupId.Value}";
     }
 }

@@ -3,6 +3,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @implements IDisposable
 @using Drafts.Services
+@using Drafts.Data
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IJSRuntime JS
@@ -232,7 +233,42 @@ else
                     </select>
                     entries
                 </label>
+                <label style="display:flex;align-items:center;gap:4px;">
+                    Filter by type:
+                    <select @bind="_selectedLogType" @bind:after="LoadLogs">
+                        <option value="">All</option>
+                        <option value="1">Player Login</option>
+                        <option value="2">Player Logout</option>
+                        <option value="3">Player PIN Change</option>
+                        <option value="10">Game Created</option>
+                        <option value="11">Game Started</option>
+                        <option value="12">Game Ended</option>
+                        <option value="13">Game Joined</option>
+                        <option value="20">Move Made</option>
+                        <option value="21">Turn Timeout</option>
+                        <option value="22">Game Timeout</option>
+                        <option value="30">System Startup</option>
+                        <option value="32">Error</option>
+                        <option value="33">Warning</option>
+                        <option value="40">Admin Action</option>
+                        <option value="41">User Management</option>
+                        <option value="42">Settings Changed</option>
+                    </select>
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;">
+                    Player ID:
+                    <input type="number" @bind="_searchPlayerId" @bind:after="LoadLogs" style="width:80px;" placeholder="Any" />
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;">
+                    Game ID:
+                    <input type="text" @bind="_searchGameId" @bind:after="LoadLogs" style="width:100px;" placeholder="Any" />
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;">
+                    Group ID:
+                    <input type="number" @bind="_searchGroupId" @bind:after="LoadLogs" style="width:80px;" placeholder="Any" />
+                </label>
                 <button @onclick="LoadLogs">Refresh</button>
+                <button @onclick="ClearSearch">Clear</button>
             </div>
             
             @if (_logs == null)
@@ -250,7 +286,11 @@ else
                         <thead style="position:sticky;top:0;background:white;">
                             <tr style="border-bottom:2px solid #ccc;">
                                 <th style="text-align:left;padding:8px;white-space:nowrap;">Timestamp</th>
-                                <th style="text-align:left;padding:8px;">Event</th>
+                                <th style="text-align:left;padding:8px;white-space:nowrap;">Type</th>
+                                <th style="text-align:left;padding:8px;white-space:nowrap;">Player</th>
+                                <th style="text-align:left;padding:8px;white-space:nowrap;">Game</th>
+                                <th style="text-align:left;padding:8px;white-space:nowrap;">Group</th>
+                                <th style="text-align:left;padding:8px;">Details</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -258,7 +298,40 @@ else
                             {
                                 <tr style="border-bottom:1px solid #eee;">
                                     <td style="padding:8px;white-space:nowrap;vertical-align:top;">@log.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
-                                    <td style="padding:8px;">@log.Message</td>
+                                    <td style="padding:8px;white-space:nowrap;vertical-align:top;">
+                                        <span style="background:@GetLogTypeColor(log.LogType);color:white;padding:2px 6px;border-radius:3px;font-size:11px;">
+                                            @log.LogType
+                                        </span>
+                                    </td>
+                                    <td style="padding:8px;white-space:nowrap;vertical-align:top;">
+                                        @if (log.PlayerId > 0)
+                                        {
+                                            @(_userNames.TryGetValue(log.PlayerId, out var playerName) ? playerName : $"Player {log.PlayerId}")
+                                            if (log.OpponentPlayerId.HasValue)
+                                            {
+                                                <text> vs </text>
+                                                @(_userNames.TryGetValue(log.OpponentPlayerId.Value, out var opponentName) ? opponentName : $"Player {log.OpponentPlayerId.Value}")
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <text>System</text>
+                                        }
+                                    </td>
+                                    <td style="padding:8px;white-space:nowrap;vertical-align:top;">
+                                        @if (log.GameId.HasValue)
+                                        {
+                                            <text>@log.GameId.Value</text>
+                                        }
+                                        else
+                                        {
+                                            <text>-</text>
+                                        }
+                                    </td>
+                                    <td style="padding:8px;white-space:nowrap;vertical-align:top;">
+                                        @GetGroupName(log.GroupId)
+                                    </td>
+                                    <td style="padding:8px;vertical-align:top;">@log.Details</td>
                                 </tr>
                             }
                         </tbody>
@@ -279,11 +352,16 @@ else
     // private string _pinMessage = "";
 
     private Dictionary<int, string> _userNames = new();
+    private List<Drafts.Data.Group> _userGroups = new();
     
     // Log viewer state
     private bool _showLogViewer = false;
     private List<Drafts.Data.GameLog>? _logs = null;
     private int _logCount = 100;
+    private string _selectedLogType = "";
+    private int? _searchPlayerId = null;
+    private string _searchGameId = "";
+    private int? _searchGroupId = null;
 
     // Timeouts, after which the game is cancelled //////////////////////////
     private int _maxMoveTimeoutMins = 5;         //Time a player gets to move after other player moves
@@ -374,6 +452,10 @@ else
     {
         var users = await Auth.ListUsersAsync();
         _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
+        
+        // Load all groups for group name resolution in logs
+        _userGroups = await Auth.ListGroupsAsync();
+        
         _maxMoveTimeoutMins = await Settings.GetMaxMoveTimeoutMinsAsync();
         _maxGameTimeMins = await Settings.GetMaxGameTimeMinsAsync();
         _maxGameStartWaitTimeMins = await Settings.GetMaxGameStartWaitTimeMinsAsync();
@@ -814,7 +896,33 @@ else
     {
         try
         {
-            _logs = await GameLog.GetRecentLogsAsync(_logCount);
+            // Parse search parameters
+            LogType? logType = null;
+            if (!string.IsNullOrWhiteSpace(_selectedLogType))
+            {
+                if (int.TryParse(_selectedLogType, out var typeValue))
+                {
+                    logType = (LogType)typeValue;
+                }
+            }
+
+            int? gameId = null;
+            if (!string.IsNullOrWhiteSpace(_searchGameId))
+            {
+                if (int.TryParse(_searchGameId, System.Globalization.NumberStyles.HexNumber, null, out var gameIdValue))
+                {
+                    gameId = gameIdValue;
+                }
+            }
+
+            // Use the new search method
+            _logs = await GameLog.SearchLogsAsync(
+                playerId: _searchPlayerId,
+                gameId: gameId,
+                groupId: _searchGroupId,
+                logType: logType,
+                count: _logCount
+            );
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
@@ -822,6 +930,39 @@ else
             Console.WriteLine($"Error loading logs: {ex.Message}");
             _logs = new List<Drafts.Data.GameLog>();
         }
+    }
+
+    private void ClearSearch()
+    {
+        _selectedLogType = "";
+        _searchPlayerId = null;
+        _searchGameId = "";
+        _searchGroupId = null;
+        _ = LoadLogs();
+    }
+
+    private string GetLogTypeColor(LogType logType)
+    {
+        return logType switch
+        {
+            LogType.PlayerLogin => "#28a745",
+            LogType.PlayerLogout => "#6c757d",
+            LogType.PlayerPinChange => "#17a2b8",
+            LogType.GameCreated => "#007bff",
+            LogType.GameStarted => "#28a745",
+            LogType.GameEnded => "#dc3545",
+            LogType.GameJoined => "#17a2b8",
+            LogType.MoveMade => "#6f42c1",
+            LogType.TurnTimeout => "#fd7e14",
+            LogType.GameTimeout => "#dc3545",
+            LogType.SystemStartup => "#28a745",
+            LogType.Error => "#dc3545",
+            LogType.Warning => "#fd7e14",
+            LogType.AdminAction => "#6f42c1",
+            LogType.UserManagement => "#20c997",
+            LogType.SettingsChanged => "#6610f2",
+            _ => "#6c757d"
+        };
     }
 
     // private async Task OnChangePin()
@@ -860,5 +1001,16 @@ else
         }
         
         return null;
+    }
+
+    private string GetGroupName(int? groupId)
+    {
+        if (!groupId.HasValue)
+        {
+            return "-";
+        }
+        
+        var group = _userGroups?.FirstOrDefault(ug => ug.Id == groupId.Value);
+        return group?.Name ?? $"Group {groupId.Value}";
     }
 }

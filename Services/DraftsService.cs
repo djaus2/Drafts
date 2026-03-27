@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using Drafts.Data;
 
 namespace Drafts.Services
 {
@@ -147,7 +148,7 @@ namespace Drafts.Services
             _lobbyChat.AddSystemMessage($"New game started by {displayName}: {id}", groupId);
 
             // Log game creation
-            _ = _gameLog.LogAsync($"Game created: {id} by {displayName} (ID: {userId})");
+            _ = _gameLog.LogGameEventAsync(LogType.GameCreated, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Game created by {displayName}", null, groupId);
 
             OnGameUpdated(id);
             return id;
@@ -227,11 +228,11 @@ namespace Drafts.Services
                     
                     if (wasSecondPlayer)
                     {
-                        _ = _gameLog.LogAsync($"Game started: {id} - {userName ?? $"User {userId}"} joined as Player1, game now has both players");
+                        _ = _gameLog.LogGameEventAsync(LogType.GameStarted, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Game started - {userName ?? $"User {userId}"} joined as Player1", null, game.GroupId);
                     }
                     else
                     {
-                        _ = _gameLog.LogAsync($"Player joined: {userName ?? $"User {userId}"} (ID: {userId}) joined game {id} as Player1");
+                        _ = _gameLog.LogGameEventAsync(LogType.GameJoined, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Player joined as Player1 - {userName ?? $"User {userId}"}", null, game.GroupId);
                     }
                     
                     OnGameUpdated(id);
@@ -264,11 +265,11 @@ namespace Drafts.Services
                     
                     if (wasSecondPlayer)
                     {
-                        _ = _gameLog.LogAsync($"Game started: {id} - {userName ?? $"User {userId}"} joined as Player2, game now has both players");
+                        _ = _gameLog.LogGameEventAsync(LogType.GameStarted, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Game started - {userName ?? $"User {userId}"} joined as Player2", null, game.GroupId);
                     }
                     else
                     {
-                        _ = _gameLog.LogAsync($"Player joined: {userName ?? $"User {userId}"} (ID: {userId}) joined game {id} as Player2");
+                        _ = _gameLog.LogGameEventAsync(LogType.GameJoined, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Player joined as Player2 - {userName ?? $"User {userId}"}", null, game.GroupId);
                     }
                     
                     OnGameUpdated(id);
@@ -839,11 +840,21 @@ namespace Drafts.Services
                 
                 if (winner == 0)
                 {
-                    _ = _gameLog.LogAsync($"Game ended: {game.Id} - Draw/No winner");
+                    _ = _gameLog.LogGameEventAsync(LogType.GameEnded, game.Player1UserId ?? 0, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), "Draw/No winner", null, game.GroupId);
                 }
                 else
                 {
-                    _ = _gameLog.LogAsync($"Game ended: {game.Id} - Winner: {winnerName} (Player{winner}), Loser: {loserName} (Player{loser})");
+                    var winnerUserId = winner == 1 ? game.Player1UserId : game.Player2UserId;
+                    var loserUserId = winner == 1 ? game.Player2UserId : game.Player1UserId;
+                    
+                    if (winnerUserId.HasValue && loserUserId.HasValue)
+                    {
+                        _ = _gameLog.LogWinAsync(winnerUserId.Value, loserUserId.Value, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), $"Winner: {winnerName} (Player{winner}), Loser: {loserName} (Player{loser})", game.GroupId);
+                    }
+                    else
+                    {
+                        _ = _gameLog.LogGameEventAsync(LogType.GameEnded, winnerUserId ?? 0, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), $"Winner: {winnerName} (Player{winner}), Loser: {loserName} (Player{loser})", null, game.GroupId);
+                    }
                 }
             }
         }
@@ -1063,8 +1074,8 @@ namespace Drafts.Services
                         removed++;
                         _logger.LogInformation("ProcessIdleTimeouts: removed {GameId} idle>={MaxIdle}", gameId, maxIdle);
                         
-                        // Log timeout with Admin ID (0) for system action
-                        _ = _gameLog.LogAsync($"Game timeout: {gameId} - Maximum move timeout (idle/inactivity) - System closed game");
+                        // Log timeout with Admin ID (1) for system action
+                        _ = _gameLog.LogSystemEventAsync(LogType.GameTimeout, 1, $"Game {gameId} - Maximum move timeout (idle/inactivity) - System closed game", int.Parse(gameId, System.Globalization.NumberStyles.HexNumber));
                         
                         OnGameUpdated(gameId);
                     }
@@ -1139,8 +1150,8 @@ namespace Drafts.Services
                         removed++;
                         _logger.LogInformation("ProcessGameTimeTimeouts: removed {GameId} after {MaxTime} total game time", gameId, maxGameTime);
                         
-                        // Log timeout with Admin ID (0) for system action
-                        _ = _gameLog.LogAsync($"Game timeout: {gameId} - Maximum game time exceeded - System closed game");
+                        // Log timeout with Admin ID (1) for system action
+                        _ = _gameLog.LogSystemEventAsync(LogType.GameTimeout, 1, $"Game {gameId} - Maximum game time exceeded - System closed game", int.Parse(gameId, System.Globalization.NumberStyles.HexNumber));
                         
                         // Notify again after removal so UI knows game is gone
                         OnGameUpdated(gameId);
@@ -1220,8 +1231,8 @@ namespace Drafts.Services
                         removed++;
                         _logger.LogInformation("ProcessGameStartWaitTimeouts: removed {GameId} after {MaxWait} waiting for players", gameId, maxWaitTime);
                         
-                        // Log timeout with Admin ID (0) for system action
-                        _ = _gameLog.LogAsync($"Game timeout: {gameId} - Maximum start wait time exceeded (no second player) - System closed game");
+                        // Log timeout with Admin ID (1) for system action
+                        _ = _gameLog.LogSystemEventAsync(LogType.GameTimeout, 1, $"Game {gameId} - Maximum start wait time exceeded (no second player) - System closed game", int.Parse(gameId, System.Globalization.NumberStyles.HexNumber));
                         
                         // Notify again after removal so UI knows game is gone
                         OnGameUpdated(gameId);
