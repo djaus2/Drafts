@@ -3,6 +3,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
 @implements IDisposable
 @using Drafts.Services
+@using Drafts.Data
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
@@ -175,9 +176,16 @@ else
     }
 </div>
 
-@if (_allowPlayerPinChange)
+@* Show PIN change for regular users only if enabled, but always show for Admin users *@
+@if (_allowPlayerPinChange || _isAdminUser)
 {
-    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Change My PIN</h4>
+    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">
+        @(_isAdminUser ? "Admin PIN Change" : "Change My PIN")
+        @if (!_allowPlayerPinChange && _isAdminUser)
+        {
+            <span style="font-size: 12px; color: #666;"> (Admin override - player PIN change is disabled)</span>
+        }
+    </h4>
 
     <div style="max-width:360px">
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -322,6 +330,7 @@ else
     private string _pinMessage = "";
     private string _currentUserName = "";
     private bool _allowPlayerPinChange = true;
+    private bool _isAdminUser = false;
     
     // Wins and losses tracking
     private List<Drafts.Data.PlayerWinsLosses>? _playerWinsLosses = null;
@@ -539,6 +548,9 @@ else
 
             // Load PIN change permission setting
             _allowPlayerPinChange = await Settings.GetAllowPlayerPinChangeAsync();
+
+            // Check if current user is Admin
+            await CheckIfUserIsAdmin();
 
             // Load wins and losses data
             await LoadWinsLosses();
@@ -1298,6 +1310,35 @@ else
         
         System.Diagnostics.Debug.WriteLine("GetCurrentUserId debug: All methods failed, returning null");
         return null;
+    }
+
+    private async Task CheckIfUserIsAdmin()
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (userId.HasValue)
+            {
+                // Get the user and check if they have Admin role
+                var users = await Auth.ListUsersAsync();
+                var currentUser = users.FirstOrDefault(u => u.Id == userId.Value);
+                if (currentUser != null)
+                {
+                    _isAdminUser = HasRole(currentUser, "Admin");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"CheckIfUserIsAdmin error: {ex.Message}");
+            _isAdminUser = false;
+        }
+    }
+
+    private static bool HasRole(Drafts.Data.AppUser user, string role)
+    {
+        var roles = (user.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return roles.Any(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task OnChangePin()

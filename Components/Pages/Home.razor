@@ -22,13 +22,26 @@
 <br />
 <br />
 
-<div style="max-width:400px;padding:12px;border:1px solid #ccc;background-color:#f9f9f9;">
-    <h4 style="margin-top:0;">Game Timeout Settings</h4>
+<div style="max-width:400px;padding:12px;border:1px solid #ccc;background-color:lightgreen;">
+    <h4 style="margin-top:0;"><font color="blue">Game Timeout Settings</font></h4>
     <div style="font-size:14px;line-height:1.6;">
         <div><strong>Move timeout:</strong> @_maxMoveTimeoutMins minutes</div>
         <div><strong>Max game time:</strong> @_maxGameTimeMins minutes</div>
         <div><strong>Max game start wait:</strong> @_maxGameStartWaitTimeMins minutes</div>
         <div><strong>Max login session:</strong> @_maxLoginHrs hours</div>
+        <div><strong>Multi-jump Other player can butt in after:</strong> @_multiJumpGraceSeconds secs</div>
+    </div>
+</div>
+
+<div style="max-width:400px;padding:12px;border:1px solid #ccc;background-color:beige">
+    <h4 style="margin-top:0;"><font color="purple">Players and Playing</font></h4>
+    <div style="font-size:14px;line-height:1.6;">
+        <div><strong>Players: </strong>Bob, Ted, Carol and Alice </div>
+        <div><strong>Pin for login: </strong>All pins are 9999</div>
+        <div><strong>Group Bob-Carol: </strong>Bob and Carol can play</div>
+        <div><strong>Group Ted-Alice: </strong>Ted and Alice can play</div>
+        <div><strong><i>One starts the game, other joins</i></strong> </div>
+        <div><strong><i>Note timeouts as above</i></strong> </div>
     </div>
 </div>
 
@@ -37,6 +50,7 @@
     private int _maxGameTimeMins = 30;
     private int _maxGameStartWaitTimeMins = 30;
     private int _maxLoginHrs = 4;
+    private double _multiJumpGraceSeconds = 2.0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -44,6 +58,7 @@
         _maxGameTimeMins = await Settings.GetMaxGameTimeMinsAsync();
         _maxGameStartWaitTimeMins = await Settings.GetMaxGameStartWaitTimeMinsAsync();
         _maxLoginHrs = await Settings.GetMaxLoginHrsAsync();
+        _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
     }
 
     private string Version 
