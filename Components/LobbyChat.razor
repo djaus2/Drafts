@@ -2,10 +2,12 @@
 @using Drafts.Services
 @using System.Linq
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components
 @inject LobbyChatService LobbyChatSvc
 @inject IHttpContextAccessor HttpContextAccessor
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject AuthService Auth
+@inject NavigationManager Nav
 
 <div style="margin-top:18px;max-width:520px;">
     <div class="rainbow-heading" style="margin:0;font-weight:800;letter-spacing:0.5px;font-size:18px;line-height:1.1;display:flex;align-items:center;gap:10px;">
@@ -45,6 +47,11 @@
             <div style="font-weight:bold;margin-bottom:8px;">Chat Access Required</div>
             <div style="font-size:14px;">You must be a member of at least one group to participate in lobby chat.</div>
             <div style="font-size:12px;margin-top:8px;">Contact an administrator to be added to a group.</div>
+            <div style="font-size:10px;color:#999;margin-top:8px;">Debug: DataLoaded=@_dataLoaded, UserID=@_currentUserId, Groups=@(_userGroups?.Count ?? 0), Admin=@_isAdmin</div>
+            @if (_currentUserId.HasValue)
+            {
+                <div style="font-size:10px;color:#999;margin-top:4px;">@(_userGroups?.Any() == true ? "Has groups" : "No groups")</div>
+            }
         </div>
     }
 </div>
@@ -93,11 +100,21 @@
     private bool _broadcastMode;
     private bool _dataLoaded = false;
 
+    [Parameter]
+    public int? CurrentUserId { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadUserData();
         RefreshChat();
         LobbyChatSvc.ChatUpdated += OnChatUpdated;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reload data when parameters change
+        await LoadUserData();
+        RefreshChat();
     }
 
     public void Dispose()
@@ -121,34 +138,77 @@
         _scrollPending = false;
         _dataLoaded = false;
         
-        // Get current user ID and admin status
+        System.Diagnostics.Debug.WriteLine("LobbyChat: Starting LoadUserData");
+        
+        // Use the CurrentUserId passed from Player.razor
+        _currentUserId = CurrentUserId;
+        
         var user = HttpContextAccessor.HttpContext?.User;
-        var rawUid = user?.FindFirst("uid")?.Value;
         _isAdmin = user?.IsInRole("Admin") ?? false;
         
-        if (int.TryParse(rawUid, out var userId))
+        System.Diagnostics.Debug.WriteLine($"LobbyChat: Using passed CurrentUserId: {_currentUserId}, User: {user?.Identity?.Name}, IsAdmin: {_isAdmin}");
+        
+        if (_currentUserId.HasValue)
         {
-            _currentUserId = userId;
-            
             // Clear user's personal chat view to ensure fresh start on login
-            LobbyChatSvc.ClearChatForUser(userId);
+            LobbyChatSvc.ClearChatForUser(_currentUserId.Value);
             
             // Load user groups
             try
             {
-                _userGroups = await Auth.GetUserGroupsAsync(userId);
+                _userGroups = await Auth.GetUserGroupsAsync(_currentUserId.Value);
+                System.Diagnostics.Debug.WriteLine($"LobbyChat: Loaded {_userGroups?.Count ?? 0} groups for user {_currentUserId}");
+                if (_userGroups?.Any() == true)
+                {
+                    System.Diagnostics.Debug.WriteLine($"LobbyChat: User groups: {string.Join(", ", _userGroups.Select(g => g.Name))}");
+                }
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"LobbyChat: Error loading groups for user {_currentUserId}: {ex.Message}");
                 _userGroups = new List<Drafts.Data.Group>();
             }
         }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("LobbyChat: CurrentUserId is null - no user ID passed from Player.razor");
+        }
         
         _dataLoaded = true;
+        System.Diagnostics.Debug.WriteLine($"LobbyChat: LoadUserData complete. DataLoaded={_dataLoaded}, UserID={_currentUserId}, Groups={_userGroups?.Count ?? 0}");
         
         // Refresh chat after data is loaded to apply proper filtering
         RefreshChat();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var user = HttpContextAccessor.HttpContext?.User;
+        var raw = user?.FindFirst("uid")?.Value;
+        if (int.TryParse(raw, out var id)) return id;
+        
+        // Fallback: lookup by username if uid claim not found
+        var name = user?.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            try
+            {
+                var appUser = Auth.GetUserByNameAsync(name).GetAwaiter().GetResult();
+                if (appUser != null) 
+                {
+                    System.Diagnostics.Debug.WriteLine($"LobbyChat: Found user by name '{name}' with ID {appUser.Id}");
+                    return appUser.Id;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"LobbyChat: Error looking up user by name '{name}': {ex.Message}");
+            }
+        }
+        
+        System.Diagnostics.Debug.WriteLine($"LobbyChat: Could not determine user ID - UID: '{raw}', Name: '{name}'");
+        return null;
     }
 
     private void RefreshChat()
@@ -159,8 +219,32 @@
         if (count != _lastChatCount)
         {
             _lastChatCount = count;
+            
+            // Debug: Log message details to file
+            var logMessage = $"LobbyChat: Refreshing {count} messages{Environment.NewLine}";
+            foreach (var msg in msgs)
+            {
+                logMessage += $"LobbyChat: Message - Sender: '{msg.SenderName}', Text: '{msg.Text}'{Environment.NewLine}";
+            }
+            WriteDebugLog(logMessage);
+            
             _chatInText = string.Join("\n", msgs.Select(m => $"{m.SenderName}: {m.Text}"));
             _scrollPending = true;
+        }
+    }
+
+    private void WriteDebugLog(string message)
+    {
+        try
+        {
+            var logPath = Path.Combine(Directory.GetCurrentDirectory(), "debug_log.txt");
+            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
+        }
+        catch (Exception ex)
+        {
+            // If file logging fails, try console
+            System.Diagnostics.Debug.WriteLine($"Failed to write debug log: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine(message);
         }
     }
 
@@ -191,18 +275,20 @@
         }
     }
 
-    private async Task SendChat()
+    private async Task SendChatMessage()
     {
-        var text = _chatOutText;
-        if (string.IsNullOrWhiteSpace(text)) return;
-
         if (!_currentUserId.HasValue) return;
 
-        var user = HttpContextAccessor.HttpContext?.User;
-        var senderName = user?.Identity?.Name ?? "";
+        // Get user name from database instead of HttpContext
+        var senderName = await GetUserNameById(_currentUserId.Value);
 
         var senderId = _currentUserId.Value;
         var userGroupIds = _userGroups?.Select(g => g.Id) ?? Enumerable.Empty<int>();
+        var text = _chatOutText.Trim();
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        System.Diagnostics.Debug.WriteLine($"LobbyChat: Sending message - SenderId: {senderId}, SenderName: '{senderName}', Text: '{text}'");
+        WriteDebugLog($"LobbyChat: Sending message - SenderId: {senderId}, SenderName: '{senderName}', Text: '{text}'");
 
         // Handle admin broadcast
         if (_broadcastMode && _isAdmin)
@@ -211,39 +297,11 @@
             if (broadcastOk)
             {
                 _chatOutText = "";
-                _scrollPending = true;
-                await InvokeAsync(StateHasChanged);
-            }
-            else
-            {
-                try
-                {
-                    await JS.InvokeVoidAsync("alert", "Failed to send broadcast. Admin access required.");
-                }
-                catch
-                {
-                    // If alert fails, silently fail
-                }
-            }
-            return;
-        }
-
-        // Check if user is in any groups - if not, show message
-        if (!userGroupIds.Any())
-        {
-            try
-            {
-                await JS.InvokeVoidAsync("alert", "You must be a member of at least one group to send chat messages.");
-            }
-            catch
-            {
-                // If alert fails, silently fail
             }
             return;
         }
 
         // Send message to all groups the user is a member of
-        // This creates separate messages for each group to ensure proper filtering
         var messageSent = false;
         foreach (var groupId in userGroupIds)
         {
@@ -268,6 +326,36 @@
             {
                 // If alert fails, silently fail
             }
+        }
+    }
+
+    private async Task<string> GetUserNameById(int userId)
+    {
+        try
+        {
+            // First try HttpContext (might work in some cases)
+            var user = HttpContextAccessor.HttpContext?.User;
+            var httpContextName = user?.Identity?.Name;
+            if (!string.IsNullOrWhiteSpace(httpContextName))
+            {
+                return httpContextName;
+            }
+
+            // Fallback: Get from database using AuthService
+            var appUser = await Auth.GetUserByIdAsync(userId);
+            if (appUser != null)
+            {
+                WriteDebugLog($"LobbyChat: Got user name from database: {appUser.Name} for ID {userId}");
+                return appUser.Name;
+            }
+
+            WriteDebugLog($"LobbyChat: Could not find user with ID {userId} in database");
+            return $"User{userId}"; // Fallback display name
+        }
+        catch (Exception ex)
+        {
+            WriteDebugLog($"LobbyChat: Error getting user name for ID {userId}: {ex.Message}");
+            return $"User{userId}"; // Fallback display name
         }
     }
 
@@ -303,6 +391,6 @@
     [JSInvokable]
     public async Task OnChatEnterFromJs()
     {
-        await SendChat();
+        await SendChatMessage();
     }
 }

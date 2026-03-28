@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>7.0.2</Version>
+    <Version>7.1.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
@@ -26,6 +26,10 @@
     <None Include=".github\copilot-instructions.md" />
     <None Include="wwwroot\Images\Letsplay.ps" />
     <None Include="wwwroot\Images\TheBoard.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Properties\PublishProfiles\" />
   </ItemGroup>
 
 </Project>

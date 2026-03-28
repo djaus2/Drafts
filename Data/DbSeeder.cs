@@ -137,11 +137,8 @@ public static class DbSeeder
 
         await db.SaveChangesAsync();
 
-        // Create groups and memberships from auth.json after users are saved
-        if (created)
-        {
-            await CreateGroupsAndMembershipsFromAuthJson(db);
-        }
+        // Create groups and memberships from auth.json (both for new and existing databases)
+        await CreateGroupsAndMembershipsFromAuthJson(db);
 
         await db.SaveChangesAsync();
     }
@@ -215,10 +212,14 @@ public static class DbSeeder
             return;
         }
 
-        // Create groups
+        Console.WriteLine($"DbSeeder: Processing {authExport.Groups.Count} groups from auth.json");
+
+        // Create groups and memberships
         foreach (var authGroup in authExport.Groups)
         {
             var existingGroup = await db.Groups.FirstOrDefaultAsync(x => x.Name == authGroup.Name);
+            Group group;
+            
             if (existingGroup is null)
             {
                 // Find the owner user by name (lookup outside of EF query)
@@ -228,33 +229,61 @@ public static class DbSeeder
                     var ownerUser = await db.Users.SingleOrDefaultAsync(x => x.Name == ownerUserAuth.Name);
                     if (ownerUser != null)
                     {
-                        var newGroup = new Group
+                        group = new Group
                         {
                             Name = authGroup.Name,
                             Description = authGroup.Description,
                             OwnerUserId = ownerUser.Id,
                             CreatedAtUtc = DateTime.UtcNow
                         };
-                        db.Groups.Add(newGroup);
+                        db.Groups.Add(group);
                         await db.SaveChangesAsync(); // Save to get the group ID
-
-                        // Add members
-                        foreach (var memberName in authGroup.Members)
-                        {
-                            var memberUser = await db.Users.SingleOrDefaultAsync(x => x.Name == memberName);
-                            if (memberUser != null)
-                            {
-                                db.GroupMembers.Add(new GroupMember
-                                {
-                                    GroupId = newGroup.Id,
-                                    UserId = memberUser.Id,
-                                    JoinedAtUtc = DateTime.UtcNow
-                                });
-                            }
-                        }
+                        Console.WriteLine($"DbSeeder: Created new group '{group.Name}' with ID {group.Id}");
                     }
+                    else
+                    {
+                        Console.WriteLine($"DbSeeder: Owner user '{ownerUserAuth.Name}' not found for group '{authGroup.Name}'");
+                        continue;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"DbSeeder: Owner user with ID {authGroup.OwnerId} not found for group '{authGroup.Name}'");
+                    continue;
+                }
+            }
+            else
+            {
+                group = existingGroup;
+                Console.WriteLine($"DbSeeder: Using existing group '{group.Name}' with ID {group.Id}");
+            }
+
+            // Add members (clear existing members first to avoid duplicates)
+            var existingMembers = await db.GroupMembers.Where(gm => gm.GroupId == group.Id).ToListAsync();
+            db.GroupMembers.RemoveRange(existingMembers);
+            await db.SaveChangesAsync();
+
+            foreach (var memberName in authGroup.Members)
+            {
+                var memberUser = await db.Users.SingleOrDefaultAsync(x => x.Name == memberName);
+                if (memberUser != null)
+                {
+                    db.GroupMembers.Add(new GroupMember
+                    {
+                        GroupId = group.Id,
+                        UserId = memberUser.Id,
+                        JoinedAtUtc = DateTime.UtcNow
+                    });
+                    Console.WriteLine($"DbSeeder: Added member '{memberName}' (ID: {memberUser.Id}) to group '{group.Name}'");
+                }
+                else
+                {
+                    Console.WriteLine($"DbSeeder: Member user '{memberName}' not found for group '{authGroup.Name}'");
                 }
             }
         }
+        
+        await db.SaveChangesAsync();
+        Console.WriteLine("DbSeeder: Group and membership creation completed");
     }
 }
