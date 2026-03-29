@@ -30,4 +30,3 @@ Further: [Blog Posts](https://davidjones.sportronics.com.au/cats/ai/)
 - See Detailed [technical dox](https://davidjones.sportronics.com.au/docs.html)
 - See [Release Notes](https://davidjones.sportronics.com.au/docs/release-notes-index.html)
 
-> More deatils here, comin.
