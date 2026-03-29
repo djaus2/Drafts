@@ -11,7 +11,6 @@
     </p>
 </div>
 
-![The board](https://djscheckersappsvc.azurewebsites.net/Images/TheBoard.png)
 
 Has been devloped through AI-Coding specifications. Copious documentation generated as well.  
 
