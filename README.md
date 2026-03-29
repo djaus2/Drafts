@@ -12,7 +12,7 @@
 </div>
 
 
-Has been devloped through AI-Coding specifications. Copious documentation generated as well.  
+Has been developed through AI-Coding specifications. Copious documentation generated as well.  
 
 Further: [Blog Posts](https://davidjones.sportronics.com.au/cats/ai/)
 
