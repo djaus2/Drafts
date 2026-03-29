@@ -1,5 +1,5 @@
 # Blazor Online Drafts/Checkers game with text and TTS Voice chat
-> The Drafts or Checkers game played between 2 players over the internet. Lobby Text chat and in-game Text and Voice Chat. All players must be in the same group/s to be able to play each other, See Home page for app for details. Note also that a player can only be logged in once at a a time. Note aso that there are a number of timeouts for the app.
+> The Drafts or Checkers game played between 2 players over the internet. Lobby Text chat and in-game Text and Voice Chat. All players must be in the same group/s to be able to play each other, See Home page for app for details. Note that a player can only be logged in once at a a time. Note also that there are a number of timeouts for the app.
 
 <div style="text-align: center; margin: 20px 0;">
     <img src="https://djscheckersappsvc.azurewebsites.net/Images/TheBoard.png" 
