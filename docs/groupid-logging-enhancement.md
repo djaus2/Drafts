@@ -152,7 +152,7 @@ public async Task<List<GameLog>> SearchLogsAsync(
 
 ### **Integration Points**
 ```csharp
-// DraftsService.cs - Game creation
+// DraughtsService.cs - Game creation
 _ = _gameLog.LogGameEventAsync(
     LogType.GameCreated, 
     userId, 

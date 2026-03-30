@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Drafts.Services;
+namespace Draughts.Services;
 
 public static class PinHasher
 {

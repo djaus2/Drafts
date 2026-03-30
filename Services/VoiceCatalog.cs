@@ -1,4 +1,4 @@
-namespace Drafts.Services;
+namespace Draughts.Services;
 
 public static class VoiceCatalog
 {

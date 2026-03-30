@@ -82,7 +82,7 @@ Example:
 ### **Service Architecture**
 - **GameLogService**: Handles database operations for logging
 - **Dependency Injection**: Registered as singleton in `Program.cs`
-- **Integration**: Integrated with `DraftsService` and `AuthService`
+- **Integration**: Integrated with `DraughtsService` and `AuthService`
 
 ### **Key Methods**
 ```csharp

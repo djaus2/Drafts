@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Drafts.Data;
+namespace Draughts.Data;
 
 public sealed class Group
 {

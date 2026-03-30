@@ -382,7 +382,7 @@ public class VoiceChatMetrics
 ## Files to Modify
 
 ### Frontend
-- `Components/DraftsGame.razor` - Voice chat UI
+- `Components/DraughtsGame.razor` - Voice chat UI
 - `wwwroot/js/voice.js` - Audio processing logic
 - `wwwroot/css/voice.css` - Voice chat styling
 

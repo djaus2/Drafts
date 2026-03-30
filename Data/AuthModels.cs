@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Drafts.Data;
+namespace Draughts.Data;
 
 public class AuthExport
 {

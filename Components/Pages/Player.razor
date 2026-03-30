@@ -2,15 +2,15 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
 @implements IDisposable
-@using Drafts.Services
-@using Drafts.Data
+@using Draughts.Services
+@using Draughts.Data
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject NavigationManager Nav
-@inject DraftsService GameService
+@inject DraughtsService GameService
 @inject SettingsService Settings
 @inject UsableMsVoiceService UsableMsVoices
 @inject GameLogService GameLog
@@ -289,24 +289,24 @@ else
 <LobbyChat CurrentUserId="@_cachedUserId" />
 
 <script>
-  window.draftsVoice = window.draftsVoice || {};
-  window.draftsVoice.version = 'player-voices-2026-03-09a';
-  window.draftsVoice.ping = function () {
+  window.DraughtsVoice = window.DraughtsVoice || {};
+  window.DraughtsVoice.version = 'player-voices-2026-03-09a';
+  window.DraughtsVoice.ping = function () {
     try {
-      return window.draftsVoice.version || 'unknown';
+      return window.DraughtsVoice.version || 'unknown';
     } catch (e) {
       return 'ping-error';
     }
   };
-  window.draftsVoice.getVoicesCount = function () {
+  window.DraughtsVoice.getVoicesCount = function () {
     try {
-      var vs = window.draftsVoice.getVoices();
+      var vs = window.DraughtsVoice.getVoices();
       return (vs && vs.length) ? vs.length : 0;
     } catch (e) {
       return -1;
     }
   };
-  window.draftsVoice.isProbablyPhone = function () {
+  window.DraughtsVoice.isProbablyPhone = function () {
     try {
       var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
       ua = (ua || '').toLowerCase();
@@ -333,7 +333,7 @@ else
     private bool _isAdminUser = false;
     
     // Wins and losses tracking
-    private List<Drafts.Data.PlayerWinsLosses>? _playerWinsLosses = null;
+    private List<Draughts.Data.PlayerWinsLosses>? _playerWinsLosses = null;
     private int _totalWins = 0;
     private int _totalLosses = 0;
     private double _overallWinRate = 0;
@@ -382,7 +382,7 @@ else
     private bool _isPhoneClient = false;
 
     // Group selection
-    private List<Drafts.Data.Group>? _userGroups;
+    private List<Draughts.Data.Group>? _userGroups;
     private int _selectedGroupId = 0;
     private int? _cachedUserId = null;
 
@@ -404,7 +404,7 @@ else
         // Handle voice initialization (from second method)
         try
         {
-            _isPhoneClient = await JS.InvokeAsync<bool>("draftsVoice.isProbablyPhone");
+            _isPhoneClient = await JS.InvokeAsync<bool>("DraughtsVoice.isProbablyPhone");
         }
         catch
         {
@@ -476,7 +476,7 @@ else
         {
             try
             {
-                await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+                await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
                 await LoadVoicesAsync();
             }
             catch
@@ -499,7 +499,7 @@ else
 
     private Dictionary<int, string> _userNames = new();
 
-    private List<DraftsService.GameListItem> _joinableGames = new();
+    private List<DraughtsService.GameListItem> _joinableGames = new();
 
     private System.Threading.Timer? _gamesRefreshTimer;
 
@@ -662,7 +662,7 @@ else
 
         try
         {
-            await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+            await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
         }
         catch
         {
@@ -692,7 +692,7 @@ else
 
         try
         {
-            await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+            await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
         }
         catch
         {
@@ -756,7 +756,7 @@ else
 
             try
             {
-                await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+                await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
             }
             catch (Exception exWarm)
             {
@@ -793,12 +793,12 @@ else
         try
         {
             using var pingCts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-            ping = await JS.InvokeAsync<string>("draftsVoice.ping", pingCts.Token);
+            ping = await JS.InvokeAsync<string>("DraughtsVoice.ping", pingCts.Token);
 
             try
             {
                 using var c0Cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-                var count0 = await JS.InvokeAsync<int>("draftsVoice.getVoicesCount", c0Cts.Token);
+                var count0 = await JS.InvokeAsync<int>("DraughtsVoice.getVoicesCount", c0Cts.Token);
                 c0 = $"c0:{count0}";
             }
             catch
@@ -820,7 +820,7 @@ else
             try
             {
                 using var c1Cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                var count1 = await JS.InvokeAsync<int>("draftsVoice.getVoicesAsyncCount", c1Cts.Token);
+                var count1 = await JS.InvokeAsync<int>("DraughtsVoice.getVoicesAsyncCount", c1Cts.Token);
                 c1 = $"c1:{count1}";
             }
             catch
@@ -831,7 +831,7 @@ else
             try
             {
                 using var c2Cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-                var count2 = await JS.InvokeAsync<int>("draftsVoice.getVoicesCount", c2Cts.Token);
+                var count2 = await JS.InvokeAsync<int>("DraughtsVoice.getVoicesCount", c2Cts.Token);
                 c2 = $"c2:{count2}";
             }
             catch
@@ -840,7 +840,7 @@ else
             }
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(16));
-            var raw = await JS.InvokeAsync<List<VoiceInfo>>("draftsVoice.getVoicesAsync", cts.Token);
+            var raw = await JS.InvokeAsync<List<VoiceInfo>>("DraughtsVoice.getVoicesAsync", cts.Token);
             rawCount = raw?.Count ?? 0;
             _allVoices = (raw ?? new List<VoiceInfo>())
                 .Select(v =>
@@ -1335,7 +1335,7 @@ else
         }
     }
 
-    private static bool HasRole(Drafts.Data.AppUser user, string role)
+    private static bool HasRole(Draughts.Data.AppUser user, string role)
     {
         var roles = (user.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return roles.Any(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase));
@@ -1365,7 +1365,7 @@ else
     {
         var groupId = _selectedGroupId > 0 ? _selectedGroupId : (int?)null;
         var creatorPlayerNumber = _playFirst ? 1 : 2;
-        Nav.NavigateTo($"/drafts?groupId={groupId}&creator={creatorPlayerNumber}");
+        Nav.NavigateTo($"/Draughts?groupId={groupId}&creator={creatorPlayerNumber}");
     }
 
     private void OnJoinGame()
@@ -1379,7 +1379,7 @@ else
             return;
         }
 
-        Nav.NavigateTo($"/drafts?gameId={gameId}");
+        Nav.NavigateTo($"/Draughts?gameId={gameId}");
     }
 
     private async void OnGameUpdated(string _)
@@ -1428,7 +1428,7 @@ else
         }
     }
 
-    private string FormatGameOption(DraftsService.GameListItem g)
+    private string FormatGameOption(DraughtsService.GameListItem g)
     {
         var createdLocal = g.CreatedUtc.ToLocalTime();
         var connectedText = g.HadSecondPlayerConnected ? "(connected)" : "(not connected)";
@@ -1467,7 +1467,7 @@ else
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading wins/losses: {ex.Message}");
-            _playerWinsLosses = new List<Drafts.Data.PlayerWinsLosses>();
+            _playerWinsLosses = new List<Draughts.Data.PlayerWinsLosses>();
             _totalWins = 0;
             _totalLosses = 0;
             _overallWinRate = 0;

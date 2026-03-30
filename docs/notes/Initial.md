@@ -1,7 +1,7 @@
 # Session Notes (2026-03-08)
 
 ## Goal
-- Continue UI polish and diagnostics for the Drafts Blazor app:
+- Continue UI polish and diagnostics for the Draughts Blazor app:
   - Add readable session notes / changelog.
   - Tidy UI (button styling, piece rendering).
   - Fix input/event diagnostics so board clicks register.
@@ -14,20 +14,20 @@
 - Created a readable session notes template and populated it with the day's outcomes.
 - Implemented non‑intrusive UI changes (CSS guidance) to make global buttons static and accessible.
 - Changed piece rendering approach to filled circular pieces sized to 75% of a cell (36px for a 48px cell), with white pieces having a dark border and kings showing a crown symbol.
-- Added "Copy join link" and "Open in new window" helpers to the drafts page for easier join flow.
+- Added "Copy join link" and "Open in new window" helpers to the Draughts page for easier join flow.
 - Fixed double-join race by ensuring navigation triggers the join in the newly loaded component instance only.
 - Made click handling robust: attached handlers to both `td` and inner wrapper and added client‑side console logging (temporary diagnostic script) to confirm clicks reach the browser.
-- Added server‑side logging in `DraftsService` to trace CreateGame / TryJoinGame / MakeMove operations.
+- Added server‑side logging in `DraughtsService` to trace CreateGame / TryJoinGame / MakeMove operations.
 - Documented how to run git commands from Visual Studio Terminal and produced `commits_to_edefb18.txt` (initial commit summary).
 - Provided instructions for testing LAN connectivity and Kestrel binding changes for listening on non‑localhost addresses.
 
 ---
 
 ## Files Changed / Added (high level)
-- `Components/DraftsGame.razor` — improved click handling, join helpers, piece visuals, and diagnostics.
-- `Services/DraftsService.cs` — added logging, made event invoker internal, improved move logic and promotions.
+- `Components/DraughtsGame.razor` — improved click handling, join helpers, piece visuals, and diagnostics.
+- `Services/DraughtsService.cs` — added logging, made event invoker internal, improved move logic and promotions.
 - `wwwroot/css/site.css` (suggested) — global button styles (static/rainbow‑like, accessible).
-- Diagnostics script snippet added to `DraftsGame.razor` temporarily to log client clicks to browser console.
+- Diagnostics script snippet added to `DraughtsGame.razor` temporarily to log client clicks to browser console.
 - `commits_to_edefb18.txt` — produced with a compact commit list through Git.
 
 ---
@@ -53,7 +53,7 @@
   - HTTPS over LAN requires certificate binding and is more complex — recommended to test over HTTP for local development.
 
 ### Diagnostics & Logging
-- `DraftsService` uses `ILogger` to record CreateGame, GetGame, TryJoinGame and MakeMove events — useful for debugging join failures and move rejections.
+- `DraughtsService` uses `ILogger` to record CreateGame, GetGame, TryJoinGame and MakeMove events — useful for debugging join failures and move rejections.
 - Added transient client script logging to verify clicks reach the browser (remove after debugging).
 
 ---

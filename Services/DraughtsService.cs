@@ -3,14 +3,14 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
-using Drafts.Data;
+using Draughts.Data;
 
-namespace Drafts.Services
+namespace Draughts.Services
 {
-    // Simple drafts (checkers) game service for server-side interactive components.
-    public class DraftsService
+    // Simple Draughts (checkers) game service for server-side interactive components.
+    public class DraughtsService
     {
-        private readonly ILogger<DraftsService> _logger;
+        private readonly ILogger<DraughtsService> _logger;
         private readonly LobbyChatService _lobbyChat;
         private readonly SettingsService _settings;
         private readonly GameLogService _gameLog;
@@ -18,7 +18,7 @@ namespace Drafts.Services
         // Event raised when a game changes. Subscribers can call StateHasChanged.
         public event Action<string>? GameUpdated;
 
-        private readonly ConcurrentDictionary<string, DraftsGame> _games = new();
+        private readonly ConcurrentDictionary<string, DraughtsGame> _games = new();
 
         private string? FindActiveGameIdForUser(int userId)
         {
@@ -41,7 +41,7 @@ namespace Drafts.Services
             return FindActiveGameIdForUser(userId);
         }
 
-        public DraftsService(ILogger<DraftsService> logger, LobbyChatService lobbyChat, SettingsService settings, GameLogService gameLog)
+        public DraughtsService(ILogger<DraughtsService> logger, LobbyChatService lobbyChat, SettingsService settings, GameLogService gameLog)
         {
             _logger = logger;
             _lobbyChat = lobbyChat;
@@ -113,7 +113,7 @@ namespace Drafts.Services
             }
 
             var id = Guid.NewGuid().ToString("n").Substring(0, 8);
-            var game = new DraftsGame(id)
+            var game = new DraughtsGame(id)
             {
                 CreatedByUserId = userId,
                 GroupId = groupId
@@ -154,7 +154,7 @@ namespace Drafts.Services
             return id;
         }
 
-        public DraftsGame? GetGame(string id)
+        public DraughtsGame? GetGame(string id)
         {
             var ok = _games.TryGetValue(id, out var g);
             _logger.LogInformation("GetGame: {GameId} found={Found}", id, ok);
@@ -306,8 +306,8 @@ namespace Drafts.Services
                 var p1VoiceText = string.IsNullOrWhiteSpace(p1Voice) ? "(default voice)" : p1Voice;
                 var p2VoiceText = string.IsNullOrWhiteSpace(p2Voice) ? "(default voice)" : p2Voice;
 
-                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p1Name}: voice={p1VoiceText}"));
-                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p2Name}: voice={p2VoiceText}"));
+                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p1Name}: voice={p1VoiceText}"));
+                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p2Name}: voice={p2VoiceText}"));
                 game.VoiceInfoAnnounced = true;
                 game.Touch();
                 did = true;
@@ -380,7 +380,7 @@ namespace Drafts.Services
 
             lock (game)
             {
-                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, senderUserId, senderName ?? string.Empty, text));
+                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, senderUserId, senderName ?? string.Empty, text));
                 game.Touch();
             }
 
@@ -582,7 +582,7 @@ namespace Drafts.Services
                     game.LastMoveFromC = fc;
                     game.LastMoveToR = tr;
                     game.LastMoveToC = tc;
-                    game.LastMoveCapturedSquares.Add(new DraftsGame.BoardPos(midr, midc));
+                    game.LastMoveCapturedSquares.Add(new DraughtsGame.BoardPos(midr, midc));
 
                     MaybePromote(game, tr, tc);
 
@@ -630,7 +630,7 @@ namespace Drafts.Services
 
         private sealed record CaptureMove(int CaptureR, int CaptureC, int ToR, int ToC);
 
-        private static IReadOnlyList<CaptureMove> GetCaptureMovesForPiece(DraftsGame game, int player, int fr, int fc)
+        private static IReadOnlyList<CaptureMove> GetCaptureMovesForPiece(DraughtsGame game, int player, int fr, int fc)
         {
             if (!IsInside(fr, fc)) return Array.Empty<CaptureMove>();
 
@@ -785,7 +785,7 @@ namespace Drafts.Services
             OnGameUpdated(id);
         }
 
-        private static void MarkFinished(DraftsGame game)
+        private static void MarkFinished(DraughtsGame game)
         {
             if (game.State == GameState.Finished)
             {
@@ -807,11 +807,11 @@ namespace Drafts.Services
             {
                 game.GameOverMessageSent = true;
                 var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
-                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
+                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
             }
         }
 
-        private void MarkFinishedWithWinner(DraftsGame game, int winner)
+        private void MarkFinishedWithWinner(DraughtsGame game, int winner)
         {
             if (game.State == GameState.Finished)
             {
@@ -828,7 +828,7 @@ namespace Drafts.Services
             {
                 game.GameOverMessageSent = true;
                 var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
-                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
+                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
                 
                 // Log game end with winner and loser
                 var loser = winner == 1 ? 2 : (winner == 2 ? 1 : 0);
@@ -859,7 +859,7 @@ namespace Drafts.Services
             }
         }
 
-        private static bool HasAnyLegalMove(DraftsGame game, int player)
+        private static bool HasAnyLegalMove(DraughtsGame game, int player)
         {
             for (var r = 0; r < 8; r++)
             {
@@ -903,7 +903,7 @@ namespace Drafts.Services
             return false;
         }
 
-        private void TryFinishByEntrapment(DraftsGame game)
+        private void TryFinishByEntrapment(DraughtsGame game)
         {
             if (game.State == GameState.Finished || game.State == GameState.Abandoned)
             {
@@ -944,7 +944,7 @@ namespace Drafts.Services
             return true;
         }
 
-        private static void MaybePromote(DraftsGame game, int r, int c)
+        private static void MaybePromote(DraughtsGame game, int r, int c)
         {
             var p = game.Board[r, c];
             // Promotion rules:
@@ -1035,7 +1035,7 @@ namespace Drafts.Services
                             killMsg = true;
                             game.IdleKillMessageSent = true;
                             game.KillAfterUtc = now + killGrace;
-                            game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                            game.ChatMessages.Add(new DraughtsGame.ChatMessage(
                                 now,
                                 0,
                                 "System",
@@ -1047,7 +1047,7 @@ namespace Drafts.Services
                         warn = true;
                         game.IdleWarningSent = true;
 
-                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
                             now,
                             0,
                             "System",
@@ -1116,7 +1116,7 @@ namespace Drafts.Services
                         shouldRemove = true;
                         
                         // Add a system message before removing
-                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
                             now,
                             0,
                             "System",
@@ -1127,7 +1127,7 @@ namespace Drafts.Services
                         shouldWarn = true;
                         game.GameTimeWarningSent = true;
                         
-                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
                             now,
                             0,
                             "System",
@@ -1193,7 +1193,7 @@ namespace Drafts.Services
                         shouldRemove = true;
                         
                         // Add a system message before removing
-                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
                             now,
                             0,
                             "System",
@@ -1208,7 +1208,7 @@ namespace Drafts.Services
                         var remainingMins = Math.Max(0, (int)remaining.TotalMinutes);
                         var remainingSecs = Math.Max(0, remaining.Seconds);
                         
-                        game.ChatMessages.Add(new DraftsGame.ChatMessage(
+                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
                             now,
                             0,
                             "System",
@@ -1469,7 +1469,7 @@ namespace Drafts.Services
 
                 // Add concession message to chat
                 var concessionText = $"{userName} conceded. Player {winnerPlayer} wins!";
-                game.ChatMessages.Add(new DraftsGame.ChatMessage(DateTime.UtcNow, userId, "System", concessionText));
+                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, userId, "System", concessionText));
 
                 // Mark the game as finished with the specified winner
                 MarkFinishedWithWinner(game, winnerPlayer);
@@ -1481,7 +1481,7 @@ namespace Drafts.Services
         }
     }
 
-    public class DraftsGame
+    public class DraughtsGame
     {
         public string Id { get; }
 
@@ -1501,7 +1501,7 @@ namespace Drafts.Services
 
         public DateTime? KillAfterUtc { get; set; }
 
-        public DraftsService.GameState State { get; set; } = DraftsService.GameState.New;
+        public DraughtsService.GameState State { get; set; } = DraughtsService.GameState.New;
 
         public bool AdminMode { get; set; } = false;
 
@@ -1570,7 +1570,7 @@ namespace Drafts.Services
 
         public List<BoardPos> LastMoveCapturedSquares { get; } = new();
 
-        public DraftsGame(string id)
+        public DraughtsGame(string id)
         {
             Id = id;
             InitializeBoard();
@@ -1637,7 +1637,7 @@ namespace Drafts.Services
             Player1UserId = null;
             Player2UserId = null;
 
-            State = DraftsService.GameState.New;
+            State = DraughtsService.GameState.New;
             AdminMode = false;
 
             VoiceFloorUserId = null;

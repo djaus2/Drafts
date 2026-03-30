@@ -1,11 +1,11 @@
-# Entity Relationships - Drafts Application
+# Entity Relationships - Draughts Application
 
-> The Drafts app has multiple players and games. Players can join groups and communicate with other players in their groups in The Lovbby and in-game Chat. Players can initiate a game with other players in their group/s who can join and play it.
+> The Draughts app has multiple players and games. Players can join groups and communicate with other players in their groups in The Lovbby and in-game Chat. Players can initiate a game with other players in their group/s who can join and play it.
 
 ## Core Entities
 
 ### Application Users
-A Drafts application user represents a person who can play games and participate in groups. Each user has a unique name, assigned roles, and authentication credentials.
+A Draughts application user represents a person who can play games and participate in groups. Each user has a unique name, assigned roles, and authentication credentials.
 
 ### Groups
 A group is a collection of users who can communicate with each other and play games together. Each group has a name, description, and designated owner.

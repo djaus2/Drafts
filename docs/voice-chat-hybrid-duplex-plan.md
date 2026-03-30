@@ -511,7 +511,7 @@ class AutomaticGainControl {
 ## Files to Modify
 
 ### Frontend Components
-- `Components/DraftsGame.razor` - Enhanced voice chat UI
+- `Components/DraughtsGame.razor` - Enhanced voice chat UI
 - `wwwroot/js/voice-chat.js` - Audio processing and WebRTC
 - `wwwroot/css/voice-chat.css` - Enhanced styling
 

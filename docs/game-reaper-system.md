@@ -41,7 +41,7 @@ Admins can adjust reaper settings in the Admin panel:
 - Click "Save" to apply changes
 
 ### Technical Notes
-- The reaper runs as part of the `DraftsService` background processing
+- The reaper runs as part of the `DraughtsService` background processing
 - Uses efficient database queries to identify expired games
 - Gracefully handles edge cases and prevents race conditions
 
@@ -66,7 +66,7 @@ Admins can adjust reaper settings in the Admin panel:
 
 ## Related Components
 
-- `DraftsService` - Core game management service
+- `DraughtsService` - Core game management service
 - `SettingsService` - Manages reaper configuration
 - `Admin.razor` - Admin interface for reaper settings
 - Game timeout validation logic in game creation/joining flows

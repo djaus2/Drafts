@@ -1,17 +1,17 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Drafts.Services;
+namespace Draughts.Services;
 
 public sealed class GameTimeoutReaper : BackgroundService
 {
-    private readonly DraftsService _drafts;
+    private readonly DraughtsService _Draughts;
     private readonly SettingsService _settings;
     private readonly ILogger<GameTimeoutReaper> _logger;
 
-    public GameTimeoutReaper(DraftsService drafts, SettingsService settings, ILogger<GameTimeoutReaper> logger)
+    public GameTimeoutReaper(DraughtsService Draughts, SettingsService settings, ILogger<GameTimeoutReaper> logger)
     {
-        _drafts = drafts;
+        _Draughts = Draughts;
         _settings = settings;
         _logger = logger;
     }
@@ -26,7 +26,7 @@ public sealed class GameTimeoutReaper : BackgroundService
                 var mins = await _settings.GetMaxMoveTimeoutMinsAsync(stoppingToken);
                 var seconds = await _settings.GetReaperPeriodSecondsAsync(stoppingToken);
                 var killGrace = TimeSpan.FromSeconds(Math.Max(1, seconds));
-                var (removed, warnings) = _drafts.ProcessIdleTimeouts(TimeSpan.FromMinutes(mins), killGrace, warningFraction: 0.8);
+                var (removed, warnings) = _Draughts.ProcessIdleTimeouts(TimeSpan.FromMinutes(mins), killGrace, warningFraction: 0.8);
                 if (warnings > 0)
                 {
                     _logger.LogInformation("GameTimeoutReaper sent {Count} idle warning(s)", warnings);
@@ -38,7 +38,7 @@ public sealed class GameTimeoutReaper : BackgroundService
 
                 // Process total game time timeouts (MaxGameTimeMins)
                 var maxGameTimeMins = await _settings.GetMaxGameTimeMinsAsync(stoppingToken);
-                var gameTimeRemoved = _drafts.ProcessGameTimeTimeouts(TimeSpan.FromMinutes(maxGameTimeMins));
+                var gameTimeRemoved = _Draughts.ProcessGameTimeTimeouts(TimeSpan.FromMinutes(maxGameTimeMins));
                 if (gameTimeRemoved > 0)
                 {
                     _logger.LogInformation("GameTimeoutReaper removed {Count} game(s) after {Mins} mins total game time", gameTimeRemoved, maxGameTimeMins);
@@ -46,7 +46,7 @@ public sealed class GameTimeoutReaper : BackgroundService
 
                 // Process game start wait timeouts (MaxGameStartWaitTimeMins)
                 var maxStartWaitMins = await _settings.GetMaxGameStartWaitTimeMinsAsync(stoppingToken);
-                var startWaitRemoved = _drafts.ProcessGameStartWaitTimeouts(TimeSpan.FromMinutes(maxStartWaitMins));
+                var startWaitRemoved = _Draughts.ProcessGameStartWaitTimeouts(TimeSpan.FromMinutes(maxStartWaitMins));
                 if (startWaitRemoved > 0)
                 {
                     _logger.LogInformation("GameTimeoutReaper removed {Count} game(s) after {Mins} mins waiting for players", startWaitRemoved, maxStartWaitMins);

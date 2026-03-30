@@ -2,7 +2,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @* @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
  *@
-@using Drafts.Services
+@using Draughts.Services
 @using System.Text.Json
 @inject NavigationManager Nav
 @inject SettingsService Settings
@@ -11,7 +11,7 @@
 
 <br />
 
-<p>Play Drafts or Checkers with a friend online</p>
+<p>Play Draughts or Checkers with a friend online</p>
 
 <button @onclick="Start">Login to start or join a Game</button>
 

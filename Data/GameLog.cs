@@ -1,4 +1,4 @@
-namespace Drafts.Data;
+namespace Draughts.Data;
 
 public enum LogType
 {

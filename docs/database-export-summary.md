@@ -155,8 +155,8 @@ The JSON format is structured to enable potential re-import:
 ## File Locations
 
 - **Source Database:** `C:\Users\david\Downloads\auth_backup_20260316_021641.db`
-- **JSON Export:** `c:\Users\david\source\repos\Drafts\database_export.json`
-- **Documentation:** `c:\Users\david\source\repos\Drafts\docs\database-export-summary.md`
+- **JSON Export:** `c:\Users\david\source\repos\Draughts\database_export.json`
+- **Documentation:** `c:\Users\david\source\repos\Draughts\docs\database-export-summary.md`
 
 ## Verification Checklist
 

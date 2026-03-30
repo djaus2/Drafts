@@ -194,7 +194,7 @@ await GameLog.LogPlayerActionAsync(LogType.PlayerLogin, userId, "Player logged i
 _ = _gameLog.LogPlayerActionAsync(LogType.PlayerLogin, user.Id, $"Player {user.Name} logged in", null, null);
 ```
 
-### **DraftsService.cs**
+### **DraughtsService.cs**
 ```csharp
 // Game creation with GroupId
 _ = _gameLog.LogGameEventAsync(LogType.GameCreated, userId, gameId, "Game created", null, groupId);

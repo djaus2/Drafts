@@ -1,7 +1,7 @@
 # Groups Feature Implementation
 
 ## Overview
-Complete implementation of a Groups feature for the Drafts application, allowing administrators to create groups, assign players, and restrict game visibility based on group membership.
+Complete implementation of a Groups feature for the Draughts application, allowing administrators to create groups, assign players, and restrict game visibility based on group membership.
 
 The database is a SQLite database file.
 
@@ -73,8 +73,8 @@ The database is a SQLite database file.
 ## Phase 2: Game Integration
 
 ### 2.1 Game Entity Update
-**File:** `Services/DraftsService.cs`
-- Added `GroupId` property to `DraftsGame` class
+**File:** `Services/DraughtsService.cs`
+- Added `GroupId` property to `DraughtsGame` class
 - Updated `CreateGame` methods to accept `groupId` parameter
 - Modified game creation to assign group to game
 
@@ -94,7 +94,7 @@ The database is a SQLite database file.
 <b><i><small>Game Selected Group, that wil be applied when game is started</small></i></b>
 
 ### 2.3 Game Creation with Group
-**File:** `Components/DraftsGame.razor`
+**File:** `Components/DraughtsGame.razor`
 - Added `_groupId` field
 - Parse `groupId` from query string in `OnInitializedAsync`
 - Pass `groupId` to `GameService.CreateGame` method
@@ -102,7 +102,7 @@ The database is a SQLite database file.
 ## Phase 3: Game Filtering
 
 ### 3.1 GameListItem Update
-**File:** `Services/DraftsService.cs`
+**File:** `Services/DraughtsService.cs`
 - Added `GroupId` to `GameListItem` record
 - Updated `ListGames()` method to include GroupId
 
@@ -224,11 +224,11 @@ The database is a SQLite database file.
 - `Data/AppDbContext.cs` - Group DbSets and configuration
 - `Data/DbSeeder.cs` - Group table creation
 - `Services/AuthService.cs` - Group management methods
-- `Services/DraftsService.cs` - Game group integration
+- `Services/DraughtsService.cs` - Game group integration
 - `Components/Pages/AdminGroups.razor` - Group management UI
 - `Components/Pages/Admin.razor` - Admin navigation and download
 - `Components/Pages/Player.razor` - Group selection and filtering
-- `Components/DraftsGame.razor` - Group parameter handling
+- `Components/DraughtsGame.razor` - Group parameter handling
 - `Program.cs` - Database download endpoint and authorization fixes
 
 ## Testing Checklist

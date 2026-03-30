@@ -1,15 +1,15 @@
-﻿# Creation of Drafts-Checkers Game in Blazor with LAN multiplayer support
+﻿# Creation of Draughts-Checkers Game in Blazor with LAN multiplayer support
 
 ## "First game!" Commit
 What the app could do (user-visible)
-- Display a playable drafts/checkers board in the browser.
+- Display a playable Draughts/checkers board in the browser.
 - Allow a single user to select pieces and make legal moves (basic move and capture rules).
 - Enforce turn-taking and basic promotion to king.
 - Provide minimal UI for creating/joining games (single‑instance play).
 
 Developer notes (implementation)
-- Core game UI and logic introduced (component: `Components/DraftsGame.razor`).
-- Initial game state model and move validation implemented (service: `Services/DraftsService.cs` or equivalent).
+- Core game UI and logic introduced (component: `Components/DraughtsGame.razor`).
+- Initial game state model and move validation implemented (service: `Services/DraughtsService.cs` or equivalent).
 - Local-only behavior: game state stored in memory; no network/multi-client support yet.
 - Useful for rapid iteration and validating rules/UI interaction.
 
@@ -29,7 +29,7 @@ What the app could do (user-visible)
 Developer notes (implementation)
 - Introduced multi-client synchronization: a singleton game service (in-memory) that holds games and raises updates (e.g., `GameUpdated` event).
 - `TryJoinGame` API that assigns player numbers and prevents over-joining.
-- Joined-client flow: CreateGame → Navigate to `/drafts?gameId=...` → BeginJoin(server assigns player).
+- Joined-client flow: CreateGame → Navigate to `/Draughts?gameId=...` → BeginJoin(server assigns player).
 - Defensive changes to prevent the local browser from occupying both slots (fixed double‑join race).
 - Added simple client helpers: "Copy join link" and "Open in new window".
 

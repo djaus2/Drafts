@@ -1,7 +1,7 @@
 # Entity Framework Core ORM Examples
 
 ## Overview
-This document provides comprehensive examples of Entity Framework Core ORM operations for the Drafts application database.
+This document provides comprehensive examples of Entity Framework Core ORM operations for the Draughts application database.
 
 ## Database Context Setup
 
@@ -561,4 +561,4 @@ public class UserServiceTests
 
 ## Status: ✅ COMPLETE
 
-These ORM examples provide comprehensive coverage of Entity Framework Core operations for the Drafts application database, including basic CRUD operations, complex queries, transactions, and best practices.
+These ORM examples provide comprehensive coverage of Entity Framework Core operations for the Draughts application database, including basic CRUD operations, complex queries, transactions, and best practices.

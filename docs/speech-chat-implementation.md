@@ -1,7 +1,7 @@
 # Speech Chat Implementation
 
 ## Overview
-Implementation of text-to-speech (TTS) and speech recognition features for the Drafts application, enabling voice-based communication and accessibility enhancements.
+Implementation of text-to-speech (TTS) and speech recognition features for the Draughts application, enabling voice-based communication and accessibility enhancements.
 
 ## Phase 1: Text-to-Speech (TTS) Infrastructure
 
@@ -45,8 +45,8 @@ Implementation of text-to-speech (TTS) and speech recognition features for the D
 ## Phase 2: JavaScript TTS Integration
 
 ### 2.1 TTS JavaScript Functions
-**File:** `wwwroot/js/draftsGame.js`
-- Added `window.draftsVoice` object with methods:
+**File:** `wwwroot/js/draughtsGame.js`
+- Added `window.DraughtsVoice` object with methods:
   - `isSupported()` - Check browser TTS support
   - `speak()` - Speak text with options
   - `stop()` - Stop current speech
@@ -56,7 +56,7 @@ Implementation of text-to-speech (TTS) and speech recognition features for the D
 - Error handling for unsupported browsers
 
 ### 2.2 Voice Detection
-**File:** `Components/DraftsGame.razor`
+**File:** `Components/DraughtsGame.razor`
 - Added `DetectTtsSupport()` method
 - Browser capability checking
 - Fallback to text-only mode
@@ -71,7 +71,7 @@ Implementation of text-to-speech (TTS) and speech recognition features for the D
 ## Phase 3: Game Event TTS
 
 ### 3.1 Game Event Announcements
-**File:** `Components/DraftsGame.razor`
+**File:** `Components/DraughtsGame.razor`
 - Integrated TTS for game events:
   - Game start announcements
   - Player moves
@@ -89,7 +89,7 @@ Implementation of text-to-speech (TTS) and speech recognition features for the D
 - Turn indicators
 
 ### 3.3 System Integration
-**File:** `Services/DraftsService.cs`
+**File:** `Services/DraughtsService.cs`
 - Added `TryAnnounceVoiceInfo()` method
 - Voice preference detection for players
 - Automatic voice setup on game start
@@ -112,7 +112,7 @@ Implementation of text-to-speech (TTS) and speech recognition features for the D
   - `ProcessCommandAsync()` - Handle voice commands
 
 ### 4.2 Voice Commands
-**File:** `Components/DraftsGame.razor`
+**File:** `Components/DraughtsGame.razor`
 - Implemented voice command system:
   - "Move [coordinate]" - Make moves
   - "Chat [message]" - Send chat messages
@@ -187,10 +187,10 @@ Microphone → Browser Recognition API → SpeechRecognitionService → Command 
 
 ### Modified Files:
 - `Data/AppUser.cs` - Voice preference fields
-- `Components/DraftsGame.razor` - Game TTS integration
+- `Components/DraughtsGame.razor` - Game TTS integration
 - `Components/Pages/Player.razor` - Voice settings UI
 - `Program.cs` - Service registration
-- `wwwroot/js/draftsGame.js` - TTS JavaScript functions
+- `wwwroot/js/draughtsGame.js` - TTS JavaScript functions
 
 ## Database Schema
 
@@ -218,7 +218,7 @@ ALTER TABLE "Users" ADD COLUMN "PreferredTtsVoice" TEXT;
 
 ### TTS Functions
 ```javascript
-window.draftsVoice = {
+window.DraughtsVoice = {
     // Check browser support
     isSupported: function() { /* ... */ },
     
@@ -244,7 +244,7 @@ window.draftsVoice = {
 
 ### Speech Recognition Functions
 ```javascript
-window.draftsSpeech = {
+window.DraughtsSpeech = {
     // Check recognition support
     isSupported: function() { /* ... */ },
     

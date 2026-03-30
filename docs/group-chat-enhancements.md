@@ -107,7 +107,7 @@ With the apps Groups can we now:
 ## Phase 3: System Message Integration
 
 ### 3.1 Game Creation Messages
-**File:** `Services/DraftsService.cs`
+**File:** `Services/DraughtsService.cs`
 - **Updated `CreateGame()` method** - Passes `groupId` to system messages
 - **Group-specific announcements** - Game creation messages sent to relevant groups
 - **Public game messages** - Games without groups go to public chat
@@ -247,13 +247,13 @@ foreach (var deletedSet in _userDeletedMessages.Values)
 
 ### Core Services:
 - `Services/LobbyChatService.cs` - Enhanced with group filtering and personal deletion
-- `Services/DraftsService.cs` - Group-aware system messages
+- `Services/DraughtsService.cs` - Group-aware system messages
 
 ### UI Components:
 - `Components/LobbyChat.razor` - Group integration and personal controls
 
 ### Project Configuration:
-- `Drafts.csproj` - Removed markdown compilation (build fix)
+- `Draughts.csproj` - Removed markdown compilation (build fix)
 
 ## Database Schema
 

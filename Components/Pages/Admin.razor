@@ -2,13 +2,13 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 @implements IDisposable
-@using Drafts.Services
-@using Drafts.Data
+@using Draughts.Services
+@using Draughts.Data
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IJSRuntime JS
 @inject NavigationManager Nav
-@inject DraftsService GameService
+@inject DraughtsService GameService
 @inject SettingsService Settings
 @inject UsableMsVoiceService UsableMsVoices
 @inject GameLogService GameLog
@@ -353,11 +353,11 @@ else
     // private string _pinMessage = "";
 
     private Dictionary<int, string> _userNames = new();
-    private List<Drafts.Data.Group> _userGroups = new();
+    private List<Draughts.Data.Group> _userGroups = new();
     
     // Log viewer state
     private bool _showLogViewer = false;
-    private List<Drafts.Data.GameLog>? _logs = null;
+    private List<Draughts.Data.GameLog>? _logs = null;
     private int _logCount = 100;
     private string _selectedLogType = "";
     private int? _searchPlayerId = null;
@@ -379,7 +379,7 @@ else
     private string _settingsMessage = "";
     private string _voiceCatalogMessage = "";
     private bool _checkingChromeVoices;
-    private List<Drafts.Data.UsableMsVoice> _chromeUsableVoices = new();
+    private List<Draughts.Data.UsableMsVoice> _chromeUsableVoices = new();
     private List<VoiceOptionInternal> _adminAllVoices = new();
     private List<VoiceOptionInternal> _adminFilteredVoices = new();
     private List<string> _adminLanguages = new();
@@ -447,7 +447,7 @@ else
         }
     }
 
-    private List<DraftsService.GameListItem>? _games;
+    private List<DraughtsService.GameListItem>? _games;
 
     protected override async Task OnInitializedAsync()
     {
@@ -523,7 +523,7 @@ else
         {
             try
             {
-                await JS.InvokeAsync<bool>("draftsVoice.warmupVoices");
+                await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
             }
             catch
             {
@@ -535,7 +535,7 @@ else
             try
             {
                 using var diagCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                diagnostics = await JS.InvokeAsync<VoiceDiagnostics>("draftsVoice.getVoiceDiagnostics", diagCts.Token);
+                diagnostics = await JS.InvokeAsync<VoiceDiagnostics>("DraughtsVoice.getVoiceDiagnostics", diagCts.Token);
             }
             catch
             {
@@ -544,20 +544,20 @@ else
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(16));
-                raw = await JS.InvokeAsync<List<JsVoiceInfo>>("draftsVoice.getVoicesAsync", cts.Token);
+                raw = await JS.InvokeAsync<List<JsVoiceInfo>>("DraughtsVoice.getVoicesAsync", cts.Token);
             }
             catch (OperationCanceledException)
             {
                 try
                 {
-                    await JS.InvokeAsync<bool>("draftsVoice.refreshVoices");
+                    await JS.InvokeAsync<bool>("DraughtsVoice.refreshVoices");
                 }
                 catch
                 {
                 }
 
                 using var retryCts = new CancellationTokenSource(TimeSpan.FromSeconds(16));
-                raw = await JS.InvokeAsync<List<JsVoiceInfo>>("draftsVoice.getVoicesAsync", retryCts.Token);
+                raw = await JS.InvokeAsync<List<JsVoiceInfo>>("DraughtsVoice.getVoicesAsync", retryCts.Token);
             }
 
             _adminHasSpeechSynthesis = diagnostics?.hasSpeechSynthesis ?? false;
@@ -878,7 +878,7 @@ else
 
     private void StartNewGame()
     {
-        Nav.NavigateTo($"/drafts?creator={_creatorPlayerNumber}&admin=1");
+        Nav.NavigateTo($"/Draughts?creator={_creatorPlayerNumber}&admin=1");
     }
 
     private async Task OpenLogViewer()
@@ -929,7 +929,7 @@ else
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading logs: {ex.Message}");
-            _logs = new List<Drafts.Data.GameLog>();
+            _logs = new List<Draughts.Data.GameLog>();
         }
     }
 

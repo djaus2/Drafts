@@ -1,10 +1,10 @@
-﻿@page "/drafts"
+﻿@page "/Draughts"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
 @implements IDisposable
-@using Drafts.Services
-@using Drafts.Components
-@inject DraftsService GameService
+@using Draughts.Services
+@using Draughts.Components
+@inject DraughtsService GameService
 @inject AuthService Auth
 @inject SettingsService Settings
 @inject NavigationManager Nav
@@ -421,10 +421,10 @@ else
     private string _voiceStatus = "";
     private string _ttsStatus = "";
     private int _ttsStatusVersion;
-    private DotNetObjectReference<DraftsGame>? _voiceDotNetRef;
+    private DotNetObjectReference<DraughtsGame>? _voiceDotNetRef;
     private System.Threading.Timer? _voiceHoldRenewTimer;
 
-    private Drafts.Services.DraftsGame? _game;
+    private Draughts.Services.DraughtsGame? _game;
     private bool _connected = false;
     private int _playerNumber;
     private bool _joined = false;
@@ -447,7 +447,7 @@ else
 
     private bool _showGameOverOverlay;
 
-    private string JoinLink => Nav.BaseUri.TrimEnd('/') + $"/drafts?gameId={_gameId ?? ""}";
+    private string JoinLink => Nav.BaseUri.TrimEnd('/') + $"/Draughts?gameId={_gameId ?? ""}";
 
     private ElementReference _chatInRef;
     private ElementReference _chatOutRef;
@@ -459,7 +459,7 @@ else
     private bool _chatScrollPending;
     private string _ttsDebug = "";
 
-    private DotNetObjectReference<DraftsGame>? _dotNetRef;
+    private DotNetObjectReference<DraughtsGame>? _dotNetRef;
     private bool _chatWired;
 
     private bool _gameClosedNotified;
@@ -469,7 +469,7 @@ else
     private bool _showConcedeConfirm = false;
     private int? _groupId;
 
-    private DraftsService.GameState? _lastGameState;
+    private DraughtsService.GameState? _lastGameState;
     private int? _lastWinnerPlayer;
 
     private string GameResultText
@@ -477,7 +477,7 @@ else
         get
         {
             if (_game is null) return "";
-            if (_game.State != DraftsService.GameState.Finished) return "";
+            if (_game.State != DraughtsService.GameState.Finished) return "";
             if (!_game.WinnerPlayer.HasValue) return "Game over.";
             if (_game.WinnerPlayer.Value == _playerNumber) return "You WON!";
             return "You LOST!";
@@ -488,7 +488,7 @@ else
     {
         get
         {
-            if (_game is null || _game.State != DraftsService.GameState.Finished) return "Game over";
+            if (_game is null || _game.State != DraughtsService.GameState.Finished) return "Game over";
             if (!_game.WinnerPlayer.HasValue) return "Game over";
             return _game.WinnerPlayer.Value == _playerNumber ? "Winner!" : "Defeat";
         }
@@ -498,7 +498,7 @@ else
     {
         get
         {
-            if (_game is null || _game.State != DraftsService.GameState.Finished) return "";
+            if (_game is null || _game.State != DraughtsService.GameState.Finished) return "";
             if (!_game.WinnerPlayer.HasValue) return "";
             return _game.WinnerPlayer.Value == _playerNumber
                 ? "You WON!"
@@ -510,7 +510,7 @@ else
     {
         get
         {
-            if (_game is null || _game.State != DraftsService.GameState.Finished) return "";
+            if (_game is null || _game.State != DraughtsService.GameState.Finished) return "";
             if (!_game.WinnerPlayer.HasValue) return "gameover-loser";
             return _game.WinnerPlayer.Value == _playerNumber ? "gameover-winner" : "gameover-loser";
         }
@@ -520,7 +520,7 @@ else
     {
         get
         {
-            if (_game is null || _game.State != DraftsService.GameState.Finished) return "Close";
+            if (_game is null || _game.State != DraughtsService.GameState.Finished) return "Close";
             if (!_game.WinnerPlayer.HasValue) return "Close";
             // For actual win/loss conclusions, use more celebratory/acknowledging text
             return _game.WinnerPlayer.Value == _playerNumber ? "Victory!" : "Well Played!";
@@ -752,7 +752,7 @@ else
         }
 
         _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode, _groupId);
-        Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        Nav.NavigateTo($"/Draughts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
     }
 
@@ -802,7 +802,7 @@ else
             return;
         }
         _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1);
-        Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        Nav.NavigateTo($"/Draughts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
         await InvokeAsync(StateHasChanged);
     }
@@ -811,7 +811,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(_joinId)) return;
         _gameId = _joinId.Trim();
-        Nav.NavigateTo($"/drafts?gameId={_gameId}", forceLoad: false);
+        Nav.NavigateTo($"/Draughts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
     }
 
@@ -845,7 +845,7 @@ else
                 _connected = false;
                 _joined = false;
                 _ = InvokeAsync(StateHasChanged);
-                Nav.NavigateTo($"/drafts?gameId={existing}", forceLoad: false);
+                Nav.NavigateTo($"/Draughts?gameId={existing}", forceLoad: false);
                 return;
             }
 
@@ -888,7 +888,7 @@ else
         return;
     }
 
-    private void OnGameUpdated(string id)
+    private async void OnGameUpdated(string id)
     {
         if (id != _gameId) return;
 
@@ -923,7 +923,7 @@ else
         {
             if (_lastGameState != _game.State || _lastWinnerPlayer != _game.WinnerPlayer)
             {
-                if (_game.State == DraftsService.GameState.Finished && _lastGameState != DraftsService.GameState.Finished)
+                if (_game.State == DraughtsService.GameState.Finished && _lastGameState != DraughtsService.GameState.Finished)
                 {
                     _showGameOverOverlay = true;
                     _message = GameResultText;
@@ -936,7 +936,7 @@ else
             }
             
             // Additional check: If game is finished and overlay not shown, show it
-            if (_game.State == DraftsService.GameState.Finished && !_showGameOverOverlay)
+            if (_game.State == DraughtsService.GameState.Finished && !_showGameOverOverlay)
             {
                 _showGameOverOverlay = true;
                 _message = GameResultText;
@@ -944,7 +944,7 @@ else
             }
             
             // Debug: Force overlay for finished games
-            if (_game.State == DraftsService.GameState.Finished && !_showGameOverOverlay)
+            if (_game.State == DraughtsService.GameState.Finished && !_showGameOverOverlay)
             {
                 _showGameOverOverlay = true;
                 _message = $"DEBUG: Game finished - Winner: {_game.WinnerPlayer}, You are: {_playerNumber}, Result: {GameResultText}";
@@ -956,8 +956,8 @@ else
             && _game is not null
             && string.IsNullOrWhiteSpace(_message)
             && !_game.ForcedJumpFromR.HasValue
-            && _game.State != DraftsService.GameState.Finished
-            && _game.State != DraftsService.GameState.Abandoned)
+            && _game.State != DraughtsService.GameState.Finished
+            && _game.State != DraughtsService.GameState.Abandoned)
         {
             _message = GetConnectedMessage();
         }
@@ -972,7 +972,7 @@ else
 
             if (_talkEnabled)
             {
-                QueueSpeakNewVoiceMessages(priorChatCount);
+                await QueueSpeakNewVoiceMessages(priorChatCount);
             }
             
             // Capture the last system message as potential game closure reason
@@ -992,7 +992,7 @@ else
             }
         }
 
-        InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1002,7 +1002,7 @@ else
             try
             {
                 _dotNetRef ??= DotNetObjectReference.Create(this);
-                await JS.InvokeVoidAsync("draftsChat.wireEnterToSend", _chatOutRef, _dotNetRef);
+                await JS.InvokeVoidAsync("DraughtsChat.wireEnterToSend", _chatOutRef, _dotNetRef);
                 _chatWired = true;
             }
             catch
@@ -1015,8 +1015,8 @@ else
             try
             {
                 _chatScrollPending = false;
-                await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatInRef);
-                await JS.InvokeVoidAsync("draftsChat.scrollToBottom", _chatOutRef);
+                await JS.InvokeVoidAsync("DraughtsChat.scrollToBottom", _chatInRef);
+                await JS.InvokeVoidAsync("DraughtsChat.scrollToBottom", _chatOutRef);
             }
             catch
             {
@@ -1027,15 +1027,15 @@ else
         {
             try
             {
-                await JS.InvokeAsync<bool>("draftsVoice.installTtsUnlocker");
-                _voiceSupported = await JS.InvokeAsync<bool>("draftsVoice.isSupported");
+                await JS.InvokeAsync<bool>("DraughtsVoice.installTtsUnlocker");
+                _voiceSupported = await JS.InvokeAsync<bool>("DraughtsVoice.isSupported");
                 _voiceSupportChecked = true;
                 _talkEnabled = _voiceSupported;
                 _voiceStatus = _voiceSupported ? "Hold to talk" : "Talk not supported in this browser";
 
                 try
                 {
-                    _isPhoneClient = await JS.InvokeAsync<bool>("draftsVoice.isProbablyPhone");
+                    _isPhoneClient = await JS.InvokeAsync<bool>("DraughtsVoice.isProbablyPhone");
                 }
                 catch
                 {
@@ -1096,7 +1096,7 @@ else
             return;
         }
 
-        if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned)
+        if (_game.State == DraughtsService.GameState.Finished || _game.State == DraughtsService.GameState.Abandoned)
         {
             // Don't remove the game immediately after concession
             // Let the other player see the win/loss dialog first
@@ -1147,7 +1147,7 @@ else
         get
         {
             if (_game is null) return "Cancel game";
-            if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned)
+            if (_game.State == DraughtsService.GameState.Finished || _game.State == DraughtsService.GameState.Abandoned)
             {
                 return "Exit game";
             }
@@ -1210,12 +1210,12 @@ else
         await SendChat();
     }
 
-    private string FormatChat(Drafts.Services.DraftsGame? game)
+    private string FormatChat(Draughts.Services.DraughtsGame? game)
     {
         return FormatChat(game, 0);
     }
 
-    private string FormatChat(Drafts.Services.DraftsGame? game, int startIndex)
+    private string FormatChat(Draughts.Services.DraughtsGame? game, int startIndex)
     {
         if (game is null) return "";
         if (game.ChatMessages.Count == 0) return "";
@@ -1264,7 +1264,7 @@ else
         {
             try
             {
-                await JS.InvokeAsync<bool>("draftsVoice.unlockTts");
+                await JS.InvokeAsync<bool>("DraughtsVoice.unlockTts");
             }
             catch
             {
@@ -1331,8 +1331,8 @@ else
                 try
                 {
                     var voiceLabel = _isPhoneClient
-                        ? await JS.InvokeAsync<string>("draftsVoice.speakDefaultAndDescribe", payload)
-                        : await JS.InvokeAsync<string>("draftsVoice.speakAndDescribe", payload, voiceKey, voiceLanguage, voiceRegion);
+                        ? await JS.InvokeAsync<string>("DraughtsVoice.speakDefaultAndDescribe", payload)
+                        : await JS.InvokeAsync<string>("DraughtsVoice.speakAndDescribe", payload, voiceKey, voiceLanguage, voiceRegion);
                     if (string.IsNullOrWhiteSpace(voiceLabel)) voiceLabel = "Default voice";
 
                     await JS.InvokeVoidAsync(
@@ -1346,7 +1346,7 @@ else
                     {
                         try
                         {
-                            var inspect = await JS.InvokeAsync<VoiceInspectResult>("draftsVoice.inspectVoiceMatch", voiceKey, voiceLanguage, voiceRegion);
+                            var inspect = await JS.InvokeAsync<VoiceInspectResult>("DraughtsVoice.inspectVoiceMatch", voiceKey, voiceLanguage, voiceRegion);
                             if (inspect is not null)
                             {
                                 var keyText = string.IsNullOrWhiteSpace(inspect.preferredKey) ? "(empty)" : inspect.preferredKey;
@@ -1385,8 +1385,8 @@ else
                 catch
                 {
                     var ok = _isPhoneClient
-                        ? await JS.InvokeAsync<bool>("draftsVoice.speakDefault", payload)
-                        : await JS.InvokeAsync<bool>("draftsVoice.speak", payload, voiceKey, voiceLanguage, voiceRegion);
+                        ? await JS.InvokeAsync<bool>("DraughtsVoice.speakDefault", payload)
+                        : await JS.InvokeAsync<bool>("DraughtsVoice.speak", payload, voiceKey, voiceLanguage, voiceRegion);
                     _ = ok;
                 }
 
@@ -1429,11 +1429,11 @@ else
     {
         if (!CanInteractWithBoard())
         {
-            if (_game is not null && _game.State == DraftsService.GameState.Finished)
+            if (_game is not null && _game.State == DraughtsService.GameState.Finished)
             {
                 _message = GameResultText;
             }
-            else if (_game is not null && _game.State == DraftsService.GameState.Abandoned)
+            else if (_game is not null && _game.State == DraughtsService.GameState.Abandoned)
             {
                 _message = "Game was abandoned.";
             }
@@ -1562,11 +1562,11 @@ else
 
         if (!CanInteractWithBoard())
         {
-            if (_game is not null && _game.State == DraftsService.GameState.Finished)
+            if (_game is not null && _game.State == DraughtsService.GameState.Finished)
             {
                 _message = GameResultText;
             }
-            else if (_game is not null && _game.State == DraftsService.GameState.Abandoned)
+            else if (_game is not null && _game.State == DraughtsService.GameState.Abandoned)
             {
                 _message = "Game was abandoned.";
             }
@@ -1665,11 +1665,11 @@ else
 
         if (!CanInteractWithBoard())
         {
-            if (_game is not null && _game.State == DraftsService.GameState.Finished)
+            if (_game is not null && _game.State == DraughtsService.GameState.Finished)
             {
                 _message = GameResultText;
             }
-            else if (_game is not null && _game.State == DraftsService.GameState.Abandoned)
+            else if (_game is not null && _game.State == DraughtsService.GameState.Abandoned)
             {
                 _message = "Game was abandoned.";
             }
@@ -1684,7 +1684,7 @@ else
             return;
         }
 
-        if (_game is not null && _game.State == DraftsService.GameState.Finished)
+        if (_game is not null && _game.State == DraughtsService.GameState.Finished)
         {
             _message = GameResultText;
             _suppressNextClick = true;
@@ -1786,7 +1786,7 @@ else
     {
         if (!_connected) return false;
         if (_game is null) return false;
-        if (_game.State == DraftsService.GameState.Finished || _game.State == DraftsService.GameState.Abandoned) return false;
+        if (_game.State == DraughtsService.GameState.Finished || _game.State == DraughtsService.GameState.Abandoned) return false;
         if (_game.AdminMode && !_isAdmin) return false;
         return true;
     }
@@ -1830,7 +1830,7 @@ else
         _showGameOverOverlay = false;
         
         // Auto-exit the game when win/loss dialog is closed
-        if (_game?.State == DraftsService.GameState.Finished)
+        if (_game?.State == DraughtsService.GameState.Finished)
         {
             _ = CancelOrExitGame();
         }
@@ -1896,7 +1896,7 @@ else
 
         try
         {
-            await JS.InvokeAsync<bool>("draftsVoice.start", _voiceDotNetRef);
+            await JS.InvokeAsync<bool>("DraughtsVoice.start", _voiceDotNetRef);
         }
         catch
         {
@@ -1929,7 +1929,7 @@ else
 
         try
         {
-            await JS.InvokeAsync<bool>("draftsVoice.stop");
+            await JS.InvokeAsync<bool>("DraughtsVoice.stop");
         }
         catch
         {

@@ -69,7 +69,7 @@ The system implements intelligent dialog management to minimize user fatigue whi
 private bool _gameEndedWithWinLoss = false;
 
 // Mark proper game conclusions
-if (_game.State == DraftsService.GameState.Finished && _lastGameState != DraftsService.GameState.Finished)
+if (_game.State == DraughtsService.GameState.Finished && _lastGameState != DraughtsService.GameState.Finished)
 {
     _gameEndedWithWinLoss = _game.WinnerPlayer.HasValue;
 }
@@ -149,7 +149,7 @@ private void DismissGameOverOverlay()
     _showGameOverOverlay = false;
     
     // Auto-exit the game when win/loss dialog is closed
-    if (_game?.State == DraftsService.GameState.Finished)
+    if (_game?.State == DraughtsService.GameState.Finished)
     {
         _ = CancelOrExitGame();
     }
@@ -173,7 +173,7 @@ private string GameOverButtonText
 {
     get
     {
-        if (_game is null || _game.State != DraftsService.GameState.Finished) return "Close";
+        if (_game is null || _game.State != DraughtsService.GameState.Finished) return "Close";
         if (!_game.WinnerPlayer.HasValue) return "Close";
         // For actual win/loss conclusions, use more celebratory/acknowledging text
         return _game.WinnerPlayer.Value == _playerNumber ? "Victory!" : "Well Played!";
@@ -244,7 +244,7 @@ private string GameOverButtonText
 
 **Version**: 6.6.0  
 **Last Updated**: 2026-03-27  
-**Compatibility**: Drafts Game System v6.6.0+  
+**Compatibility**: Draughts Game System v6.6.0+  
 **Dependencies**: Blazor Server, .NET 10.0, Entity Framework Core
 
 ## **📋 Version History**

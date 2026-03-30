@@ -6,7 +6,7 @@ Implementation of game concede functionality, game initiator settings, and enhan
 ## Requirements Implemented
 
 ### 1. Game Concede Functionality
-- **Concede button** on `/Drafts` page for both players
+- **Concede button** on `/Draughts` page for both players
 - **Confirmation dialog** to prevent accidental concessions
 - **Instant game ending** with opponent declared winner
 - **Chat notification** of concession to all players
@@ -68,7 +68,7 @@ public async Task<bool> UpdateGameInitiatorGoesFirstAsync(bool newValue, Cancell
 }
 ```
 
-### DraftsService Enhancements
+### DraughtsService Enhancements
 
 #### Concede Functionality
 ```csharp
@@ -95,7 +95,7 @@ public (bool ok, string? msg) SetGameWinner(string gameId, int winnerPlayer, int
 - **SettingsService integration** to load default value
 - **Game creation integration** with player's choice
 
-#### DraftsGame Page Updates (`/Drafts`)
+#### DraughtsGame Page Updates (`/Draughts`)
 - **Concede buttons** for both game creator and second player
 - **Confirmation dialog** with clear messaging
 - **Red styling** for concede buttons to indicate destructive action
@@ -124,11 +124,11 @@ public (bool ok, string? msg) SetGameWinner(string gameId, int winnerPlayer, int
 - `GetGameInitiatorGoesFirstAsync()` - Load game initiator setting
 - `UpdateGameInitiatorGoesFirstAsync(bool)` - Update game initiator setting
 
-### DraftsService Methods
+### DraughtsService Methods
 - `SetGameWinner(string gameId, int winnerPlayer, int userId, string userName)` - Concede game
 
 ### Navigation Parameters
-- `/drafts?creator={playerNumber}` - Specify who goes first when creating game
+- `/Draughts?creator={playerNumber}` - Specify who goes first when creating game
 
 ## Security Considerations
 

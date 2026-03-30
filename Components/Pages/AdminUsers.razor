@@ -1,8 +1,8 @@
 @page "/admin/users"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
-@using Drafts.Services
-@using Drafts.Data
+@using Draughts.Services
+@using Draughts.Data
 @inject AuthService Auth
 @inject UsableMsVoiceService UsableMsVoices
 @inject IJSRuntime JS
@@ -121,7 +121,7 @@ else
     private bool _isPlayer = true;
     private string _message = "";
 
-    private List<Drafts.Data.AppUser>? _users;
+    private List<Draughts.Data.AppUser>? _users;
     private IReadOnlyList<UsableMsVoice> _desktopFallbackVoices = Array.Empty<UsableMsVoice>();
     private Dictionary<int, string> _fallbackSelections = new();
     private Dictionary<int, string> _fallbackMessages = new();

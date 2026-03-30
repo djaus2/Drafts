@@ -1,8 +1,8 @@
 @page "/admin/groups"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
-@using Drafts.Services
-@using Drafts.Data
+@using Draughts.Services
+@using Draughts.Data
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
 

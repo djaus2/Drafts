@@ -1,6 +1,6 @@
-using Drafts.Components;
-using Drafts.Data;
-using Drafts.Services;
+using Draughts.Components;
+using Draughts.Data;
+using Draughts.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.IO;
 using System.Security.Claims;
 
-namespace Drafts
+namespace Draughts
 {
     public class Program
     {
@@ -119,7 +119,7 @@ namespace Drafts
             builder.Services.AddAuthorization();
 
             // Register the game service so multiple components can join the same game.
-            builder.Services.AddSingleton<DraftsService>();
+            builder.Services.AddSingleton<DraughtsService>();
 
             builder.Services.AddSingleton<LobbyChatService>();
 
@@ -257,14 +257,14 @@ namespace Drafts
                 });
             });
 
-            app.MapGet("/logout", async (HttpContext ctx, DraftsService drafts, GameLogService gameLog) =>
+            app.MapGet("/logout", async (HttpContext ctx, DraughtsService Draughts, GameLogService gameLog) =>
             {
                 var raw = ctx.User?.FindFirst("uid")?.Value;
                 var userName = ctx.User?.Identity?.Name ?? "Unknown";
                 
                 if (int.TryParse(raw, out var uid) && uid > 0)
                 {
-                    drafts.RemoveGamesForUser(uid);
+                    Draughts.RemoveGamesForUser(uid);
                     _ = gameLog.LogAsync($"Player logout: {userName} (ID: {uid})");
                 }
                 await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);

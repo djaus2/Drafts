@@ -1,7 +1,7 @@
-using Drafts.Data;
+using Draughts.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Drafts.Services;
+namespace Draughts.Services;
 
 public class GameLogService
 {

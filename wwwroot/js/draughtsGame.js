@@ -1,7 +1,7 @@
-// draftsGame.js - JavaScript functions for DraftsGame.razor
+// DraughtsGame.js - JavaScript functions for DraughtsGame.razor
 
-window.draftsChat = window.draftsChat || {};
-window.draftsChat.scrollToBottom = function (el) {
+window.DraughtsChat = window.DraughtsChat || {};
+window.DraughtsChat.scrollToBottom = function (el) {
   try {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
@@ -9,11 +9,11 @@ window.draftsChat.scrollToBottom = function (el) {
   }
 };
 
-window.draftsChat.wireEnterToSend = function (el, dotNetRef) {
+window.DraughtsChat.wireEnterToSend = function (el, dotNetRef) {
   try {
     if (!el || !dotNetRef) return;
-    if (el.__draftsEnterWired) return;
-    el.__draftsEnterWired = true;
+    if (el.__DraughtsEnterWired) return;
+    el.__DraughtsEnterWired = true;
     el.addEventListener('keydown', function (ev) {
       try {
         if (ev.key === 'Enter') {
@@ -27,9 +27,9 @@ window.draftsChat.wireEnterToSend = function (el, dotNetRef) {
   }
 };
 
-window.draftsVoice = window.draftsVoice || {};
+window.DraughtsVoice = window.DraughtsVoice || {};
 
-window.draftsVoice.isSupported = function () {
+window.DraughtsVoice.isSupported = function () {
   try {
     var hasSR = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
     var hasTTS = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
@@ -39,7 +39,7 @@ window.draftsVoice.isSupported = function () {
   }
 };
 
-window.draftsVoice.isProbablyPhone = function () {
+window.DraughtsVoice.isProbablyPhone = function () {
   try {
     var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
     ua = (ua || '').toLowerCase();
@@ -63,7 +63,7 @@ window.draftsVoice.isProbablyPhone = function () {
   }
 };
 
-window.draftsVoice.unlockTts = function () {
+window.DraughtsVoice.unlockTts = function () {
   try {
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
 
@@ -73,7 +73,7 @@ window.draftsVoice.unlockTts = function () {
     }
 
     try {
-      if (window.draftsVoice.__ttsUnlocked) {
+      if (window.DraughtsVoice.__ttsUnlocked) {
         return true;
       }
 
@@ -82,7 +82,7 @@ window.draftsVoice.unlockTts = function () {
       probe.rate = 1;
       probe.pitch = 1;
       window.speechSynthesis.speak(probe);
-      window.draftsVoice.__ttsUnlocked = true;
+      window.DraughtsVoice.__ttsUnlocked = true;
       return true;
     } catch (e1) {
     }
@@ -93,14 +93,14 @@ window.draftsVoice.unlockTts = function () {
   }
 };
 
-window.draftsVoice.installTtsUnlocker = function () {
+window.DraughtsVoice.installTtsUnlocker = function () {
   try {
-    if (window.draftsVoice.__ttsUnlockerInstalled) return true;
-    window.draftsVoice.__ttsUnlockerInstalled = true;
+    if (window.DraughtsVoice.__ttsUnlockerInstalled) return true;
+    window.DraughtsVoice.__ttsUnlockerInstalled = true;
 
     var handler = function () {
       try {
-        window.draftsVoice.unlockTts();
+        window.DraughtsVoice.unlockTts();
       } catch (e0) {
       }
       try {
@@ -119,58 +119,58 @@ window.draftsVoice.installTtsUnlocker = function () {
   }
 };
 
-window.draftsVoice._rec = null;
-window.draftsVoice._dotNetRef = null;
-window.draftsVoice._listening = false;
-window.draftsVoice._shouldListen = false;
-window.draftsVoice._bufferText = '';
-window.draftsVoice._latestInterim = '';
-window.draftsVoice._flushTimer = null;
-window.draftsVoice._stopFlushTimer = null;
-window.draftsVoice._sessionId = 0;
-window.draftsVoice._lastSentText = '';
-window.draftsVoice._lastSentAtMs = 0;
+window.DraughtsVoice._rec = null;
+window.DraughtsVoice._dotNetRef = null;
+window.DraughtsVoice._listening = false;
+window.DraughtsVoice._shouldListen = false;
+window.DraughtsVoice._bufferText = '';
+window.DraughtsVoice._latestInterim = '';
+window.DraughtsVoice._flushTimer = null;
+window.DraughtsVoice._stopFlushTimer = null;
+window.DraughtsVoice._sessionId = 0;
+window.DraughtsVoice._lastSentText = '';
+window.DraughtsVoice._lastSentAtMs = 0;
 
-window.draftsVoice._flush = function (forceInterim) {
+window.DraughtsVoice._flush = function (forceInterim) {
   try {
-    console.log('[draftsVoice._flush] forceInterim=', forceInterim, 'bufferText=', window.draftsVoice._bufferText, 'latestInterim=', window.draftsVoice._latestInterim);
-    if (!window.draftsVoice._dotNetRef) {
-      console.log('[draftsVoice._flush] no dotNetRef');
+    console.log('[DraughtsVoice._flush] forceInterim=', forceInterim, 'bufferText=', window.DraughtsVoice._bufferText, 'latestInterim=', window.DraughtsVoice._latestInterim);
+    if (!window.DraughtsVoice._dotNetRef) {
+      console.log('[DraughtsVoice._flush] no dotNetRef');
       return false;
     }
 
-    var text = (window.draftsVoice._bufferText || '').trim();
+    var text = (window.DraughtsVoice._bufferText || '').trim();
     if (!text && forceInterim) {
-      text = (window.draftsVoice._latestInterim || '').trim();
+      text = (window.DraughtsVoice._latestInterim || '').trim();
     }
 
     if (!text) return false;
 
     // Dedupe.
-    if (text === window.draftsVoice._lastSentText) {
-      window.draftsVoice._bufferText = '';
-      window.draftsVoice._latestInterim = '';
+    if (text === window.DraughtsVoice._lastSentText) {
+      window.DraughtsVoice._bufferText = '';
+      window.DraughtsVoice._latestInterim = '';
       return false;
     }
 
-    window.draftsVoice._lastSentText = text;
-    window.draftsVoice._lastSentAtMs = Date.now();
-    window.draftsVoice._bufferText = '';
-    window.draftsVoice._latestInterim = '';
+    window.DraughtsVoice._lastSentText = text;
+    window.DraughtsVoice._lastSentAtMs = Date.now();
+    window.DraughtsVoice._bufferText = '';
+    window.DraughtsVoice._latestInterim = '';
 
-    console.log('[draftsVoice._flush] sending text=', text);
-    window.draftsVoice._dotNetRef.invokeMethodAsync('OnVoiceTranscript', text);
+    console.log('[DraughtsVoice._flush] sending text=', text);
+    window.DraughtsVoice._dotNetRef.invokeMethodAsync('OnVoiceTranscript', text);
     return true;
   } catch (e) {
     return false;
   }
 };
 
-window.draftsVoice._scheduleFlush = function () {
+window.DraughtsVoice._scheduleFlush = function () {
   try {
-    if (window.draftsVoice._flushTimer) {
-      clearTimeout(window.draftsVoice._flushTimer);
-      window.draftsVoice._flushTimer = null;
+    if (window.DraughtsVoice._flushTimer) {
+      clearTimeout(window.DraughtsVoice._flushTimer);
+      window.DraughtsVoice._flushTimer = null;
     }
 
     // Intentionally no-op: we only transmit when push-to-talk is released.
@@ -178,32 +178,32 @@ window.draftsVoice._scheduleFlush = function () {
   }
 };
 
-window.draftsVoice.start = function (dotNetRef) {
+window.DraughtsVoice.start = function (dotNetRef) {
   try {
-    console.log('[draftsVoice.start] called, dotNetRef=', !!dotNetRef);
+    console.log('[DraughtsVoice.start] called, dotNetRef=', !!dotNetRef);
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      console.log('[draftsVoice.start] SpeechRecognition not supported');
+      console.log('[DraughtsVoice.start] SpeechRecognition not supported');
       return false;
     }
 
     // New push-to-talk session: invalidate any pending delayed stop-flush.
-    window.draftsVoice._sessionId = (window.draftsVoice._sessionId || 0) + 1;
+    window.DraughtsVoice._sessionId = (window.DraughtsVoice._sessionId || 0) + 1;
     try {
-      if (window.draftsVoice._stopFlushTimer) {
-        clearTimeout(window.draftsVoice._stopFlushTimer);
-        window.draftsVoice._stopFlushTimer = null;
+      if (window.DraughtsVoice._stopFlushTimer) {
+        clearTimeout(window.DraughtsVoice._stopFlushTimer);
+        window.DraughtsVoice._stopFlushTimer = null;
       }
     } catch (eStopTimer0) {
     }
 
     // Clear any prior buffered text so it cannot leak into the next transmission.
-    window.draftsVoice._bufferText = '';
-    window.draftsVoice._latestInterim = '';
+    window.DraughtsVoice._bufferText = '';
+    window.DraughtsVoice._latestInterim = '';
 
-    window.draftsVoice._dotNetRef = dotNetRef;
-    window.draftsVoice._shouldListen = true;
-    var rec = window.draftsVoice._rec;
+    window.DraughtsVoice._dotNetRef = dotNetRef;
+    window.DraughtsVoice._shouldListen = true;
+    var rec = window.DraughtsVoice._rec;
     if (!rec) {
       rec = new SR();
       rec.continuous = true;
@@ -212,9 +212,9 @@ window.draftsVoice.start = function (dotNetRef) {
 
       rec.onresult = function (ev) {
         try {
-          console.log('[draftsVoice] onresult event received');
-          if (!window.draftsVoice._dotNetRef) {
-            console.log('[draftsVoice] no dotNetRef, ignoring');
+          console.log('[DraughtsVoice] onresult event received');
+          if (!window.DraughtsVoice._dotNetRef) {
+            console.log('[DraughtsVoice] no dotNetRef, ignoring');
             return;
           }
           var finalText = '';
@@ -233,29 +233,29 @@ window.draftsVoice.start = function (dotNetRef) {
             }
           }
 
-          console.log('[draftsVoice] finalText=', finalText, 'latest=', latest);
+          console.log('[DraughtsVoice] finalText=', finalText, 'latest=', latest);
           // Treat final as a progressive transcript (Android often re-sends the whole phrase as final).
           if (finalText) {
-            var cur = (window.draftsVoice._bufferText || '').trim();
+            var cur = (window.DraughtsVoice._bufferText || '').trim();
             var cand = finalText.trim();
             if (!cur) {
-              window.draftsVoice._bufferText = cand;
+              window.DraughtsVoice._bufferText = cand;
             } else if (cand === cur) {
               // no-op
             } else if (cand.startsWith(cur)) {
-              window.draftsVoice._bufferText = cand;
+              window.DraughtsVoice._bufferText = cand;
             } else if (cur.startsWith(cand)) {
               // keep cur
             } else {
               // Fallback: append if it's not a simple extension.
-              window.draftsVoice._bufferText = (cur + ' ' + cand).trim();
+              window.DraughtsVoice._bufferText = (cur + ' ' + cand).trim();
             }
             return;
           }
 
           // Track interim but do not send immediately (prevents repeats/truncation).
           if (latest && latest.length >= 2) {
-            window.draftsVoice._latestInterim = latest;
+            window.DraughtsVoice._latestInterim = latest;
           }
         } catch (e) {
         }
@@ -264,15 +264,15 @@ window.draftsVoice.start = function (dotNetRef) {
       rec.onerror = function (ev) {
         try {
           var msg = (ev && ev.error) ? ('' + ev.error) : 'error';
-          var intentionalStop = !window.draftsVoice._shouldListen;
-          console.log('[draftsVoice] onerror', msg, 'intentionalStop=', intentionalStop);
+          var intentionalStop = !window.DraughtsVoice._shouldListen;
+          console.log('[DraughtsVoice] onerror', msg, 'intentionalStop=', intentionalStop);
 
           if (intentionalStop && (msg === 'aborted' || msg === 'no-speech')) {
             return;
           }
 
-          if (window.draftsVoice._dotNetRef) {
-            window.draftsVoice._dotNetRef.invokeMethodAsync('OnVoiceError', msg);
+          if (window.DraughtsVoice._dotNetRef) {
+            window.DraughtsVoice._dotNetRef.invokeMethodAsync('OnVoiceError', msg);
           }
         } catch (e) {
         }
@@ -280,18 +280,18 @@ window.draftsVoice.start = function (dotNetRef) {
 
       rec.onend = function () {
         try {
-          window.draftsVoice._listening = false;
+          window.DraughtsVoice._listening = false;
 
           // Mobile browsers (esp Android) may end recognition frequently. Auto-restart
           // if Talk is still enabled (i.e., we didn't explicitly call stop()).
-          if (window.draftsVoice._shouldListen) {
+          if (window.DraughtsVoice._shouldListen) {
             try {
               setTimeout(function () {
                 try {
-                  if (!window.draftsVoice._shouldListen) return;
-                  if (window.draftsVoice._rec && !window.draftsVoice._listening) {
-                    window.draftsVoice._rec.start();
-                    window.draftsVoice._listening = true;
+                  if (!window.DraughtsVoice._shouldListen) return;
+                  if (window.DraughtsVoice._rec && !window.DraughtsVoice._listening) {
+                    window.DraughtsVoice._rec.start();
+                    window.DraughtsVoice._listening = true;
                   }
                 } catch (e2) {
                 }
@@ -301,22 +301,22 @@ window.draftsVoice.start = function (dotNetRef) {
             return;
           }
 
-          if (window.draftsVoice._dotNetRef) {
-            window.draftsVoice._dotNetRef.invokeMethodAsync('OnVoiceEnded');
+          if (window.DraughtsVoice._dotNetRef) {
+            window.DraughtsVoice._dotNetRef.invokeMethodAsync('OnVoiceEnded');
           }
         } catch (e) {
         }
       };
 
-      window.draftsVoice._rec = rec;
+      window.DraughtsVoice._rec = rec;
     }
 
-    if (!window.draftsVoice._listening) {
-      console.log('[draftsVoice.start] starting recognition');
+    if (!window.DraughtsVoice._listening) {
+      console.log('[DraughtsVoice.start] starting recognition');
       rec.start();
-      window.draftsVoice._listening = true;
+      window.DraughtsVoice._listening = true;
     } else {
-      console.log('[draftsVoice.start] already listening');
+      console.log('[DraughtsVoice.start] already listening');
     }
     return true;
   } catch (e) {
@@ -324,46 +324,46 @@ window.draftsVoice.start = function (dotNetRef) {
   }
 };
 
-window.draftsVoice.stop = function () {
+window.DraughtsVoice.stop = function () {
   try {
-    console.log('[draftsVoice.stop] called, bufferText=', window.draftsVoice._bufferText, 'latestInterim=', window.draftsVoice._latestInterim);
-    var rec = window.draftsVoice._rec;
-    window.draftsVoice._shouldListen = false;
+    console.log('[DraughtsVoice.stop] called, bufferText=', window.DraughtsVoice._bufferText, 'latestInterim=', window.DraughtsVoice._latestInterim);
+    var rec = window.DraughtsVoice._rec;
+    window.DraughtsVoice._shouldListen = false;
 
-    var stopSession = window.draftsVoice._sessionId || 0;
+    var stopSession = window.DraughtsVoice._sessionId || 0;
 
     try {
-      if (window.draftsVoice._flushTimer) {
-        clearTimeout(window.draftsVoice._flushTimer);
-        window.draftsVoice._flushTimer = null;
+      if (window.DraughtsVoice._flushTimer) {
+        clearTimeout(window.DraughtsVoice._flushTimer);
+        window.DraughtsVoice._flushTimer = null;
       }
     } catch (e1) {
     }
 
     try {
-      if (window.draftsVoice._stopFlushTimer) {
-        clearTimeout(window.draftsVoice._stopFlushTimer);
-        window.draftsVoice._stopFlushTimer = null;
+      if (window.DraughtsVoice._stopFlushTimer) {
+        clearTimeout(window.DraughtsVoice._stopFlushTimer);
+        window.DraughtsVoice._stopFlushTimer = null;
       }
     } catch (eStopTimer1) {
     }
 
     // Stop first; engines often deliver the last final words right after stop().
-    if (rec && window.draftsVoice._listening) {
+    if (rec && window.DraughtsVoice._listening) {
       try {
         rec.stop();
       } catch (eStop) {
       }
     }
-    window.draftsVoice._listening = false;
+    window.DraughtsVoice._listening = false;
 
     // Flush once after a short delay.
     try {
-      window.draftsVoice._stopFlushTimer = setTimeout(function () {
+      window.DraughtsVoice._stopFlushTimer = setTimeout(function () {
         try {
           // If a new push-to-talk session started, do not flush stale text.
-          if ((window.draftsVoice._sessionId || 0) !== stopSession) return;
-          window.draftsVoice._flush(true);
+          if ((window.DraughtsVoice._sessionId || 0) !== stopSession) return;
+          window.DraughtsVoice._flush(true);
         } catch (e0) {
         }
       }, 600);
@@ -372,20 +372,20 @@ window.draftsVoice.stop = function () {
 
     return true;
   } catch (e) {
-    window.draftsVoice._shouldListen = false;
+    window.DraughtsVoice._shouldListen = false;
     try {
-      if (window.draftsVoice._flushTimer) {
-        clearTimeout(window.draftsVoice._flushTimer);
-        window.draftsVoice._flushTimer = null;
+      if (window.DraughtsVoice._flushTimer) {
+        clearTimeout(window.DraughtsVoice._flushTimer);
+        window.DraughtsVoice._flushTimer = null;
       }
     } catch (e2) {
     }
-    window.draftsVoice._listening = false;
+    window.DraughtsVoice._listening = false;
     return false;
   }
  };
 
- window.draftsVoice.ping = function () {
+ window.DraughtsVoice.ping = function () {
   try {
     return 'pong';
   } catch (e) {
@@ -393,7 +393,7 @@ window.draftsVoice.stop = function () {
   }
  };
 
- window.draftsVoice.getVoices = function () {
+ window.DraughtsVoice.getVoices = function () {
   try {
     var vs = (window.speechSynthesis && window.speechSynthesis.getVoices)
       ? window.speechSynthesis.getVoices()
@@ -411,23 +411,23 @@ window.draftsVoice.stop = function () {
   }
  };
 
- window.draftsVoice.getVoicesCount = function () {
+ window.DraughtsVoice.getVoicesCount = function () {
   try {
-    var vs = window.draftsVoice.getVoices();
+    var vs = window.DraughtsVoice.getVoices();
     return (vs && vs.length) ? vs.length : 0;
   } catch (e) {
     return -1;
   }
  };
 
- window.draftsVoice.getVoiceDiagnostics = function () {
+ window.DraughtsVoice.getVoiceDiagnostics = function () {
   try {
     var hasSpeechSynthesis = !!(window.speechSynthesis && window.speechSynthesis.getVoices);
     var hasUtterance = !!window.SpeechSynthesisUtterance;
     var voiceCount = 0;
 
     try {
-      voiceCount = window.draftsVoice.getVoicesCount();
+      voiceCount = window.DraughtsVoice.getVoicesCount();
     } catch (e0) {
       voiceCount = -1;
     }
@@ -446,7 +446,7 @@ window.draftsVoice.stop = function () {
   }
  };
 
- window.draftsVoice.getVoicesAsync = function () {
+ window.DraughtsVoice.getVoicesAsync = function () {
   try {
     return new Promise(function (resolve) {
       try {
@@ -462,7 +462,7 @@ window.draftsVoice.stop = function () {
           try {
             try { window.speechSynthesis.getVoices(); } catch (eKick) { }
 
-            var existing = window.draftsVoice.getVoices();
+            var existing = window.DraughtsVoice.getVoices();
             if (existing && existing.length) {
               finish(existing);
               return;
@@ -512,16 +512,16 @@ window.draftsVoice.stop = function () {
   }
  };
 
- window.draftsVoice.getVoicesAsyncCount = async function () {
+ window.DraughtsVoice.getVoicesAsyncCount = async function () {
   try {
-    var vs = await window.draftsVoice.getVoicesAsync();
+    var vs = await window.DraughtsVoice.getVoicesAsync();
     return (vs && vs.length) ? vs.length : 0;
   } catch (e) {
     return -1;
   }
  };
 
- window.draftsVoice.refreshVoices = function () {
+ window.DraughtsVoice.refreshVoices = function () {
   try {
     if (window.speechSynthesis && window.speechSynthesis.getVoices) {
       window.speechSynthesis.getVoices();
@@ -532,7 +532,7 @@ window.draftsVoice.stop = function () {
   }
  };
 
- window.draftsVoice.warmupVoices = function () {
+ window.DraughtsVoice.warmupVoices = function () {
   try {
     if (!window.speechSynthesis || !window.speechSynthesis.getVoices) return false;
 
@@ -547,8 +547,8 @@ window.draftsVoice.stop = function () {
     }
 
     try {
-      if (typeof window.draftsVoice.refreshVoices === 'function') {
-        window.draftsVoice.refreshVoices();
+      if (typeof window.DraughtsVoice.refreshVoices === 'function') {
+        window.DraughtsVoice.refreshVoices();
       }
     } catch (e1) {
     }
@@ -570,16 +570,16 @@ window.draftsVoice.stop = function () {
   }
  };
 
- window.draftsVoice.getTalkEnabled = function () {
+ window.DraughtsVoice.getTalkEnabled = function () {
   try {
     if (!window.localStorage) return false;
-    return window.localStorage.getItem('draftsTalkEnabled') === '1';
+    return window.localStorage.getItem('DraughtsTalkEnabled') === '1';
   } catch (e) {
     return false;
   }
 };
 
-window.draftsVoice.getBrowserFamily = function () {
+window.DraughtsVoice.getBrowserFamily = function () {
   try {
     var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
     ua = (ua || '').toLowerCase();
@@ -592,11 +592,11 @@ window.draftsVoice.getBrowserFamily = function () {
   }
 };
 
-window.draftsVoice.getMicrosoftVoicesAsync = async function () {
+window.DraughtsVoice.getMicrosoftVoicesAsync = async function () {
   try {
     var voices = [];
     try {
-      voices = await window.draftsVoice.getVoicesAsync();
+      voices = await window.DraughtsVoice.getVoicesAsync();
     } catch (e0) {
       voices = [];
     }
@@ -614,17 +614,17 @@ window.draftsVoice.getMicrosoftVoicesAsync = async function () {
   }
 };
 
-window.draftsVoice.setTalkEnabled = function (enabled) {
+window.DraughtsVoice.setTalkEnabled = function (enabled) {
   try {
     if (!window.localStorage) return false;
-    window.localStorage.setItem('draftsTalkEnabled', enabled ? '1' : '0');
+    window.localStorage.setItem('DraughtsTalkEnabled', enabled ? '1' : '0');
     return true;
   } catch (e) {
     return false;
   }
 };
 
-window.draftsVoice._selectVoice = function (preferredKey, preferredLanguage, preferredRegion) {
+window.DraughtsVoice._selectVoice = function (preferredKey, preferredLanguage, preferredRegion) {
   try {
     preferredKey = (preferredKey || '').trim();
     preferredLanguage = (preferredLanguage || '').trim().toLowerCase();
@@ -761,11 +761,11 @@ window.draftsVoice._selectVoice = function (preferredKey, preferredLanguage, pre
   }
 };
 
-window.draftsVoice.describeVoice = function (preferredKey, preferredLanguage, preferredRegion) {
+window.DraughtsVoice.describeVoice = function (preferredKey, preferredLanguage, preferredRegion) {
   try {
     preferredKey = (preferredKey || '').trim();
     var v = null;
-    try { v = window.draftsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion); } catch (eSel) { v = null; }
+    try { v = window.DraughtsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion); } catch (eSel) { v = null; }
 
     if (!v) {
       if (!preferredKey) return 'Default voice';
@@ -787,14 +787,14 @@ window.draftsVoice.describeVoice = function (preferredKey, preferredLanguage, pr
   }
 };
 
-window.draftsVoice.inspectVoiceMatch = async function (preferredKey, preferredLanguage, preferredRegion) {
+window.DraughtsVoice.inspectVoiceMatch = async function (preferredKey, preferredLanguage, preferredRegion) {
   try {
     preferredKey = (preferredKey || '').trim();
     preferredLanguage = (preferredLanguage || '').trim();
     preferredRegion = (preferredRegion || '').trim();
 
     try {
-      await window.draftsVoice.getVoicesAsync();
+      await window.DraughtsVoice.getVoicesAsync();
     } catch (eLoad) {
     }
 
@@ -809,7 +809,7 @@ window.draftsVoice.inspectVoiceMatch = async function (preferredKey, preferredLa
 
     var matched = null;
     try {
-      matched = window.draftsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
+      matched = window.DraughtsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
     } catch (eSel) {
       matched = null;
     }
@@ -865,15 +865,15 @@ window.draftsVoice.inspectVoiceMatch = async function (preferredKey, preferredLa
   }
 };
 
-window.draftsVoice.speak = async function (text, preferredKey, preferredLanguage, preferredRegion) {
+window.DraughtsVoice.speak = async function (text, preferredKey, preferredLanguage, preferredRegion) {
   try {
-    console.log('[draftsVoice.speak] text=', text, 'preferredKey=', preferredKey, 'preferredLanguage=', preferredLanguage, 'preferredRegion=', preferredRegion);
+    console.log('[DraughtsVoice.speak] text=', text, 'preferredKey=', preferredKey, 'preferredLanguage=', preferredLanguage, 'preferredRegion=', preferredRegion);
     if (!text) return false;
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
-    window.draftsVoice.unlockTts();
+    window.DraughtsVoice.unlockTts();
 
     try {
-      await window.draftsVoice.getVoicesAsync();
+      await window.DraughtsVoice.getVoicesAsync();
     } catch (eLoad) {
     }
 
@@ -910,7 +910,7 @@ window.draftsVoice.speak = async function (text, preferredKey, preferredLanguage
     }
 
     try {
-      var v = window.draftsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
+      var v = window.DraughtsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
       if (v) {
         u.voice = v;
         if (!u.lang && v.lang) {
@@ -927,12 +927,12 @@ window.draftsVoice.speak = async function (text, preferredKey, preferredLanguage
   }
 };
 
-window.draftsVoice.speakDefault = async function (text) {
+window.DraughtsVoice.speakDefault = async function (text) {
   try {
-    console.log('[draftsVoice.speakDefault] text=', text);
+    console.log('[DraughtsVoice.speakDefault] text=', text);
     if (!text) return false;
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
-    window.draftsVoice.unlockTts();
+    window.DraughtsVoice.unlockTts();
 
     try {
       window.speechSynthesis.resume();
@@ -958,15 +958,15 @@ window.draftsVoice.speakDefault = async function (text) {
   }
 };
 
-window.draftsVoice.speakAndDescribe = async function (text, preferredKey, preferredLanguage, preferredRegion) {
+window.DraughtsVoice.speakAndDescribe = async function (text, preferredKey, preferredLanguage, preferredRegion) {
   try {
-    console.log('[draftsVoice.speakAndDescribe] text=', text, 'preferredKey=', preferredKey, 'preferredLanguage=', preferredLanguage, 'preferredRegion=', preferredRegion);
+    console.log('[DraughtsVoice.speakAndDescribe] text=', text, 'preferredKey=', preferredKey, 'preferredLanguage=', preferredLanguage, 'preferredRegion=', preferredRegion);
     if (!text) return '';
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return '';
-    window.draftsVoice.unlockTts();
+    window.DraughtsVoice.unlockTts();
 
     try {
-      await window.draftsVoice.getVoicesAsync();
+      await window.DraughtsVoice.getVoicesAsync();
     } catch (eLoad) {
     }
 
@@ -1004,7 +1004,7 @@ window.draftsVoice.speakAndDescribe = async function (text, preferredKey, prefer
 
     var applied = null;
     try {
-      applied = window.draftsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
+      applied = window.DraughtsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
       if (applied) {
         u.voice = applied;
         if (!u.lang && applied.lang) {
@@ -1017,8 +1017,8 @@ window.draftsVoice.speakAndDescribe = async function (text, preferredKey, prefer
 
     if (!applied) {
       try {
-        await window.draftsVoice.getVoicesAsync();
-        applied = window.draftsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
+        await window.DraughtsVoice.getVoicesAsync();
+        applied = window.DraughtsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
         if (applied) {
           u.voice = applied;
           if (!u.lang && applied.lang) {
@@ -1035,7 +1035,7 @@ window.draftsVoice.speakAndDescribe = async function (text, preferredKey, prefer
     try {
       var finalApplied = null;
       try {
-        finalApplied = u.voice || applied || window.draftsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
+        finalApplied = u.voice || applied || window.DraughtsVoice._selectVoice(preferredKey, preferredLanguage, preferredRegion);
       } catch (eFinal) {
         finalApplied = u.voice || applied || null;
       }
@@ -1059,7 +1059,7 @@ window.draftsVoice.speakAndDescribe = async function (text, preferredKey, prefer
     }
   } catch (e) {
     try {
-      var fallback = window.draftsVoice.describeVoice(preferredKey, preferredLanguage, preferredRegion);
+      var fallback = window.DraughtsVoice.describeVoice(preferredKey, preferredLanguage, preferredRegion);
       if (fallback && fallback.trim()) {
         return fallback;
       }
@@ -1076,12 +1076,12 @@ window.draftsVoice.speakAndDescribe = async function (text, preferredKey, prefer
   }
 };
 
-window.draftsVoice.speakDefaultAndDescribe = async function (text) {
+window.DraughtsVoice.speakDefaultAndDescribe = async function (text) {
   try {
-    console.log('[draftsVoice.speakDefaultAndDescribe] text=', text);
+    console.log('[DraughtsVoice.speakDefaultAndDescribe] text=', text);
     if (!text) return '';
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return '';
-    window.draftsVoice.unlockTts();
+    window.DraughtsVoice.unlockTts();
 
     try {
       window.speechSynthesis.resume();
@@ -1113,7 +1113,7 @@ window.draftsVoice.speakDefaultAndDescribe = async function (text) {
   }
 };
 
-window.draftsVoice.getTtsState = function () {
+window.DraughtsVoice.getTtsState = function () {
   try {
     var has = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
     var paused = false;
@@ -1144,7 +1144,7 @@ window.draftsVoice.getTtsState = function () {
   }
 };
 
-window.draftsVoice.cancel = function () {
+window.DraughtsVoice.cancel = function () {
   try {
     if (!window.speechSynthesis) return false;
     window.speechSynthesis.cancel();

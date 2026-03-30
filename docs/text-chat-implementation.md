@@ -1,12 +1,12 @@
 # Text Chat Implementation
 
 ## Overview
-Implementation of a real-time text chat system for the Drafts application, enabling players to communicate during games and in the lobby.
+Implementation of a real-time text chat system for the Draughts application, enabling players to communicate during games and in the lobby.
 
 ## Phase 1: Chat Infrastructure
 
 ### 1.1 Chat Message Entity
-**File:** `Components/DraftsGame.razor`
+**File:** `Components/DraughtsGame.razor`
 - Created `ChatMessage` class with properties:
   - `Timestamp` - Message creation time
   - `UserId` - Sender's user ID
@@ -25,7 +25,7 @@ Implementation of a real-time text chat system for the Drafts application, enabl
 - Automatic message limit (50 messages) to prevent memory issues
 
 ### 1.3 Game Chat Integration
-**File:** `Components/DraftsGame.razor`
+**File:** `Components/DraughtsGame.razor`
 - Added `ChatMessages` list to game state
 - Added `AddChatMessage()` method for game-specific chat
 - Added `IsTyping` tracking for user presence
@@ -56,7 +56,7 @@ Implementation of a real-time text chat system for the Drafts application, enabl
 - Connected chat to user authentication
 
 ### 2.3 JavaScript Functions
-**File:** `wwwroot/js/draftsGame.js`
+**File:** `wwwroot/js/draughtsGame.js`
 - Added `scrollToBottom()` function for chat auto-scroll
 - Added `wireEnterToSend()` function for Enter key handling
 - Error handling for DOM manipulation
@@ -64,7 +64,7 @@ Implementation of a real-time text chat system for the Drafts application, enabl
 ## Phase 3: Game Chat UI
 
 ### 3.1 In-Game Chat Component
-**File:** `Components/DraftsGame.razor`
+**File:** `Components/DraughtsGame.razor`
 - Integrated chat panel into game interface
 - Features:
   - Separate game chat from lobby
@@ -104,7 +104,7 @@ Implementation of a real-time text chat system for the Drafts application, enabl
 - User authentication integration
 
 ### 4.3 Client-Side SignalR
-**File:** `Components/LobbyChat.razor` & `Components/DraftsGame.razor`
+**File:** `Components/LobbyChat.razor` & `Components/DraughtsGame.razor`
 - Added HubConnection for real-time updates
 - Event handlers for incoming messages
 - Connection management (connect/disconnect)
@@ -113,7 +113,7 @@ Implementation of a real-time text chat system for the Drafts application, enabl
 ## Phase 5: Chat Features
 
 ### 5.1 Message Persistence
-**File:** `Services/DraftsService.cs`
+**File:** `Services/DraughtsService.cs`
 - Chat messages stored in game state
 - Message history available during game
 - Automatic cleanup when game ends
@@ -164,10 +164,10 @@ Implementation of a real-time text chat system for the Drafts application, enabl
 - `Hubs/ChatHub.cs` - SignalR hub for real-time messaging
 
 ### Modified Files:
-- `Components/DraftsGame.razor` - Game chat integration
+- `Components/DraughtsGame.razor` - Game chat integration
 - `Components/Pages/Player.razor` - Lobby chat integration
 - `Program.cs` - Service registration and SignalR setup
-- `wwwroot/js/draftsGame.js` - Chat UI JavaScript functions
+- `wwwroot/js/draughtsGame.js` - Chat UI JavaScript functions
 
 ## Database Schema
 
@@ -202,7 +202,7 @@ builder.Services.AddSingleton<LobbyChatService>();
 ### Chat Functions
 ```javascript
 // Auto-scroll chat to bottom
-window.draftsChat.scrollToBottom = function(el) {
+window.DraughtsChat.scrollToBottom = function(el) {
     try {
         if (!el) return;
         el.scrollTop = el.scrollHeight;
@@ -212,11 +212,11 @@ window.draftsChat.scrollToBottom = function(el) {
 };
 
 // Wire Enter key to send message
-window.draftsChat.wireEnterToSend = function(el, dotNetRef) {
+window.DraughtsChat.wireEnterToSend = function(el, dotNetRef) {
     try {
         if (!el || !dotNetRef) return;
-        if (el.__draftsEnterWired) return;
-        el.__draftsEnterWired = true;
+        if (el.__DraughtsEnterWired) return;
+        el.__DraughtsEnterWired = true;
         el.addEventListener('keydown', function(ev) {
             try {
                 if (ev.key === 'Enter') {

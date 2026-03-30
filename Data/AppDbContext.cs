@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace Drafts.Data;
+namespace Draughts.Data;
 
 public sealed class AppDbContext : DbContext
 {

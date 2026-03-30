@@ -1,5 +1,5 @@
 @implements IDisposable
-@using Drafts.Services
+@using Draughts.Services
 @using System.Linq
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components
@@ -94,7 +94,7 @@
     private int _lastChatCount;
     private bool _scrollPending;
     private DotNetObjectReference<LobbyChat>? _dotNetRef;
-    private List<Drafts.Data.Group>? _userGroups;
+    private List<Draughts.Data.Group>? _userGroups;
     private int? _currentUserId;
     private bool _isAdmin;
     private bool _broadcastMode;
@@ -166,7 +166,7 @@
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"LobbyChat: Error loading groups for user {_currentUserId}: {ex.Message}");
-                _userGroups = new List<Drafts.Data.Group>();
+                _userGroups = new List<Draughts.Data.Group>();
             }
         }
         else

@@ -52,7 +52,7 @@ private async Task LoadUserData()
         }
         catch
         {
-            _userGroups = new List<Drafts.Data.Group>();
+            _userGroups = new List<Draughts.Data.Group>();
         }
     }
     

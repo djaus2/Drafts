@@ -1,10 +1,10 @@
-using Drafts.Services;
+using Draughts.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Drafts.Data;
+namespace Draughts.Data;
 
 public static class DbSeeder
 {

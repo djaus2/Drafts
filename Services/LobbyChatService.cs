@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Drafts.Services;
+namespace Draughts.Services;
 
 public sealed class LobbyChatService
 {

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Drafts game implements a comprehensive timeout system to manage game lifecycle and prevent stale games from consuming resources. The system uses a background reaper service that periodically checks and enforces four different timeout types.
+The Draughts game implements a comprehensive timeout system to manage game lifecycle and prevent stale games from consuming resources. The system uses a background reaper service that periodically checks and enforces four different timeout types.
 
 **Version:** V6.2.0  
 **Implementation Date:** March 2026
@@ -82,9 +82,9 @@ protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         var maxStartWait = await _settings.GetMaxGameStartWaitTimeMinsAsync();
         
         // Process all timeout types
-        _drafts.ProcessIdleTimeouts(TimeSpan.FromMinutes(maxMoveTimeout), TimeSpan.FromSeconds(1));
-        _drafts.ProcessGameTimeTimeouts(TimeSpan.FromMinutes(maxGameTime));
-        _drafts.ProcessGameStartWaitTimeouts(TimeSpan.FromMinutes(maxStartWait));
+        _Draughts.ProcessIdleTimeouts(TimeSpan.FromMinutes(maxMoveTimeout), TimeSpan.FromSeconds(1));
+        _Draughts.ProcessGameTimeTimeouts(TimeSpan.FromMinutes(maxGameTime));
+        _Draughts.ProcessGameStartWaitTimeouts(TimeSpan.FromMinutes(maxStartWait));
         
         await Task.Delay(TimeSpan.FromSeconds(period), stoppingToken);
     }
@@ -96,8 +96,8 @@ protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 - Runs continuously as a hosted background service
 - Gracefully handles cancellation on shutdown
 
-#### 2. DraftsService (Timeout Processing)
-**File:** `Services/DraftsService.cs`
+#### 2. DraughtsService (Timeout Processing)
+**File:** `Services/DraughtsService.cs`
 
 **Key Methods:**
 - `ProcessIdleTimeouts()`: Handles move timeout with grace period
@@ -109,8 +109,8 @@ protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 - Concurrent dictionary for game storage
 - Atomic flag checks prevent duplicate warnings
 
-#### 3. DraftsGame (State Tracking)
-**File:** `Services/DraftsService.cs` (nested class)
+#### 3. DraughtsGame (State Tracking)
+**File:** `Services/DraughtsService.cs` (nested class)
 
 **Timeout-Related Properties:**
 ```csharp
@@ -139,7 +139,7 @@ public bool HadSecondPlayerConnected { get; set; }
 ```
 
 **Game Closure Dialog:**
-`Components/DraftsGame.razor` captures and displays specific timeout reasons in popup alert.
+`Components/DraughtsGame.razor` captures and displays specific timeout reasons in popup alert.
 
 ## Message Flow
 

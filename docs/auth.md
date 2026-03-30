@@ -16,7 +16,7 @@
 | **Bob** | 2 | Player | 9999 | Bob-Carol | ✅ Group member |
 | **Carol** | 3 | Player | 9999 | Bob-Carol | ✅ Group member |
 | **Fred** | 6 | Player | 9999 | *(none)* | ❌ No groups |
-| **Tad** | 4 | Player | 9999 | Ted-Alice | ✅ Group member |
+| **Ted** | 4 | Player | 9999 | Ted-Alice | ✅ Group member |
 
 ### 🏷️ **Groups (2 total)**
 | Name | ID | Owner | Members | Description |
