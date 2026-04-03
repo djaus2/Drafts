@@ -599,6 +599,9 @@ else
                 
                 // Load AI difficulty preference
                 await LoadAiDifficultyPreference();
+                
+                // Force UI update after loading preferences
+                await InvokeAsync(StateHasChanged);
             }
 
             // Load game initiator setting
@@ -1374,22 +1377,40 @@ else
     {
         try
         {
-            // Use localStorage for simplicity - this will persist across sessions
-            var savedDifficulty = await JS.InvokeAsync<int>("localStorage.getItem", "aiDifficultyLevel");
-            if (savedDifficulty >= 0 && savedDifficulty <= 3)
+            // Load AI difficulty level - localStorage returns strings
+            var savedDifficultyStr = await JS.InvokeAsync<string>("localStorage.getItem", "aiDifficultyLevel");
+            Console.WriteLine($"[Player] Loaded AI difficulty from localStorage: '{savedDifficultyStr}'");
+            
+            if (!string.IsNullOrWhiteSpace(savedDifficultyStr) && int.TryParse(savedDifficultyStr, out var savedDifficulty))
             {
-                _aiDifficultyLevel = savedDifficulty;
+                if (savedDifficulty >= 0 && savedDifficulty <= 3)
+                {
+                    _aiDifficultyLevel = savedDifficulty;
+                    Console.WriteLine($"[Player] Set AI difficulty to: {_aiDifficultyLevel}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("[Player] No AI difficulty saved, using default (Moderate)");
             }
             
             // Load Play against AI setting
             var savedPlayAgainstAi = await JS.InvokeAsync<string>("localStorage.getItem", "playAgainstAi");
+            Console.WriteLine($"[Player] Loaded Play Against AI from localStorage: '{savedPlayAgainstAi}'");
+            
             if (!string.IsNullOrWhiteSpace(savedPlayAgainstAi) && bool.TryParse(savedPlayAgainstAi, out var playAgainstAi))
             {
                 _playAgainstAi = playAgainstAi;
+                Console.WriteLine($"[Player] Set Play Against AI to: {_playAgainstAi}");
+            }
+            else
+            {
+                Console.WriteLine("[Player] No Play Against AI setting saved, using default (false)");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"[Player] Error loading AI preferences: {ex.Message}");
             // Use default if loading fails
             _aiDifficultyLevel = 1; // Moderate
             _playAgainstAi = false;
@@ -1401,10 +1422,11 @@ else
         try
         {
             await JS.InvokeVoidAsync("localStorage.setItem", "aiDifficultyLevel", _aiDifficultyLevel);
+            Console.WriteLine($"[Player] Saved AI difficulty: {_aiDifficultyLevel}");
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently fail if saving doesn't work
+            Console.WriteLine($"[Player] Error saving AI difficulty: {ex.Message}");
         }
     }
 
@@ -1413,10 +1435,25 @@ else
         try
         {
             await JS.InvokeVoidAsync("localStorage.setItem", "playAgainstAi", _playAgainstAi);
+            Console.WriteLine($"[Player] Saved Play Against AI: {_playAgainstAi}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Player] Error saving Play Against AI: {ex.Message}");
+        }
+    }
+
+    private async Task ClearAiSettings()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", "aiDifficultyLevel");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "playAgainstAi");
+            Console.WriteLine("[Player] Cleared AI settings from localStorage");
         }
         catch
         {
-            // Silently fail if saving doesn't work
+            // Silently fail if clearing doesn't work
         }
     }
 

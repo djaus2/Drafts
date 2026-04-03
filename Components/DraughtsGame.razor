@@ -406,7 +406,12 @@ else
             <div class="gameover-title">@GameOverTitle</div>
             <div class="gameover-sub">@GameOverSubtitle</div>
             <div class="gameover-actions">
-                <button @onclick="StartNewGame" style="background:#28a745;color:white;">New Game</button>
+                <button @onclick="StartNewGame" 
+                        style="background:#28a745;color:white;"
+                        disabled="@(_isAiMode && !IsAiDifficultyImplemented)"
+                        title="@(_isAiMode && !IsAiDifficultyImplemented ? "This AI difficulty level is not yet implemented" : "Start a new game")">
+                    New Game
+                </button>
                 <button @onclick="DismissGameOverOverlay">@GameOverButtonText</button>
             </div>
         </div>
@@ -610,9 +615,10 @@ else
     {
         get
         {
-            // Currently only Random mode (3) is implemented
-            // Other modes (0=Easy, 1=Moderate, 2=Hard) use random logic but aren't "properly" implemented
-            return _aiDifficultyLevel == 3;
+            // Easy (0): Implemented - avoids moves that can be captured
+            // Random (3): Implemented - completely random
+            // Moderate (1) and Hard (2): Not yet implemented
+            return _aiDifficultyLevel == 0 || _aiDifficultyLevel == 3;
         }
     }
 
@@ -706,6 +712,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Clear any existing game state to ensure fresh start
+        ClearGameState();
+        
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         var ctxUser = HttpContextAccessor.HttpContext?.User;
@@ -718,7 +727,8 @@ else
         if (user?.Identity?.IsAuthenticated != true)
         {
             var relative = Nav.ToBaseRelativePath(Nav.Uri);
-            var returnUrl = Uri.EscapeDataString("/" + relative);
+            var cleanPath = relative.StartsWith("/") ? relative : "/" + relative;
+            var returnUrl = Uri.EscapeDataString(cleanPath);
             Nav.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
             return;
         }
@@ -731,7 +741,9 @@ else
         if (!int.TryParse(rawUid, out _currentUserId) || _currentUserId <= 0)
         {
             var relative = Nav.ToBaseRelativePath(Nav.Uri);
-            var returnUrl = Uri.EscapeDataString("/" + relative);
+            // Ensure no double slash - if relative starts with /, don't add another one
+            var cleanPath = relative.StartsWith("/") ? relative : "/" + relative;
+            var returnUrl = Uri.EscapeDataString(cleanPath);
             Nav.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
             return;
         }
@@ -826,16 +838,32 @@ else
         // Don't auto-create games when accessing /Draughts directly
         if (query.ContainsKey("ai") || query.ContainsKey("groupId") || query.ContainsKey("creator") || query.ContainsKey("admin"))
         {
+            // Close any existing active game for this user before creating a new one
+            var existingGameId = GameService.GetActiveGameIdForUser(_currentUserId);
+            if (!string.IsNullOrWhiteSpace(existingGameId))
+            {
+                Console.WriteLine($"[DraughtsGame] Found existing active game {existingGameId}, closing it before creating new game");
+                var existingGame = GameService.GetGame(existingGameId);
+                if (existingGame != null && existingGame.State != DraughtsService.GameState.Finished && existingGame.State != DraughtsService.GameState.Abandoned)
+                {
+                    // Set the game as finished/abandoned so a new one can be created
+                    GameService.SetGameWinner(existingGameId, 0, _currentUserId, _currentUserName); // 0 = no winner, just close it
+                    Console.WriteLine($"[DraughtsGame] Closed existing game {existingGameId}");
+                }
+            }
+            
             // Create AI game or regular game
             if (_isAiMode)
             {
                 _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1, false, null);
+                Console.WriteLine($"[DraughtsGame] Created new AI game: {_gameId}");
                 // Navigate with AI parameters preserved
                 Nav.NavigateTo($"/Draughts?gameId={_gameId}&ai=true&aiDifficulty={_aiDifficultyLevel}", forceLoad: false);
             }
             else
             {
                 _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode, _groupId);
+                Console.WriteLine($"[DraughtsGame] Created new multiplayer game: {_gameId}");
                 var urlParams = $"gameId={_gameId}";
                 if (_groupId.HasValue) urlParams += $"&groupId={_groupId}";
                 if (adminMode) urlParams += "&admin=true";
@@ -1114,7 +1142,7 @@ else
                 // Add a small delay to make the AI move feel more natural
                 await Task.Delay(1000);
                 
-                var (success, message, fromR, fromC, toR, toC) = AiService.MakeRandomMove(_gameId!, 2);
+                var (success, message, fromR, fromC, toR, toC) = AiService.MakeRandomMove(_gameId!, 2, _aiDifficultyLevel);
                 
                 if (success)
                 {
@@ -1236,9 +1264,13 @@ else
 
         if (_game.State == DraughtsService.GameState.Finished || _game.State == DraughtsService.GameState.Abandoned)
         {
-            // Don't remove the game immediately after concession
-            // Let the other player see the win/loss dialog first
-            // The game will be cleaned up by the timeout reaper or when both players exit
+            // Game is finished - dispose of it properly by removing it
+            if (!string.IsNullOrWhiteSpace(_gameId))
+            {
+                Console.WriteLine($"[DraughtsGame] Exiting finished game {_gameId}, removing from active games");
+                GameService.RemoveGame(_gameId);
+                Console.WriteLine($"[DraughtsGame] Game {_gameId} removed");
+            }
             
             Nav.NavigateTo(_isAdmin ? "/admin" : "/player", forceLoad: true);
             await Task.CompletedTask;
@@ -1994,6 +2026,8 @@ else
 
     private void ClearGameState()
     {
+        Console.WriteLine($"[DraughtsGame] ClearGameState called - clearing game state. Current gameId: {_gameId}");
+        
         _gameId = null;
         _game = null;
         _playerNumber = 0;
@@ -2014,11 +2048,14 @@ else
         _showCancelConfirm = false;
         _showConcedeConfirm = false;
         
+        Console.WriteLine("[DraughtsGame] Game state cleared - all variables reset");
+        
         // Clear UI timer
         try
         {
             _uiTimer?.Dispose();
             _uiTimer = null;
+            Console.WriteLine("[DraughtsGame] UI timer disposed");
         }
         catch
         {
