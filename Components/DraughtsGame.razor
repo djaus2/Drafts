@@ -10,6 +10,7 @@
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IHttpContextAccessor HttpContextAccessor
+@inject AiService AiService
 
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
@@ -191,6 +192,13 @@ else
 {
     <div style="--lastmove-color:@LastMoveHighlightColor;">
         <p>Game: <b>@_gameId</b> — You are player <b>@_playerNumber</b> (<b>@_currentUserName</b>). Current turn: <b>@_game?.CurrentTurn</b></p>
+        @if (_isAiMode)
+        {
+            <div style="margin:8px 0;padding:10px;background:#e8f5e8;border:1px solid #4caf50;border-radius:6px;">
+                <p style="margin:0;color:#2e7d32;font-weight:600;">🤖 You are playing against AI - Good luck!</p>
+                <p style="margin:4px 0 0 0;color:#666;font-size:13px;">Difficulty: @(_aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate", 2 => "Hard", 3 => "Random", _ => "Moderate" })</p>
+            </div>
+        }
       @if (!string.IsNullOrWhiteSpace(GameResultText))
       {
           <p><b>@GameResultText</b></p>
@@ -212,7 +220,19 @@ else
         {
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
                 <button class="game-btn" @onclick="CancelOrExitGame">@CancelOrExitButtonText</button>
+                <button class="game-btn" @onclick="StartGame" 
+                        style="background:#28a745;color:white;"
+                        disabled="@(_isAiMode && !IsAiDifficultyImplemented)"
+                        title="@(_isAiMode && !IsAiDifficultyImplemented ? "This AI difficulty level is not yet implemented" : "Start the game")">
+                    Start game
+                </button>
             </div>
+            @if (_isAiMode && !IsAiDifficultyImplemented)
+            {
+                <div style="margin-top:8px;padding:8px;background:#fff3cd;border:1px solid #ffeaa7;border-radius:4px;font-size:13px;color:#856404;">
+                    ⚠️ This AI difficulty level is not yet implemented. Please select "Random" mode to play against AI.
+                </div>
+            }
         }
         @if (_game is not null && _game.HadSecondPlayerConnected)
         {
@@ -283,80 +303,98 @@ else
             }
         </table>
 
-        <div style="margin-top:10px;width:384px;max-width:calc(100vw - 24px);display:flex;flex-direction:column;gap:8px;">
-            <div class="funky-heading">Chat</div>
-            <textarea @ref="_chatInRef" rows="4" style="width:100%;resize:vertical;min-height:80px;" readonly>@_chatInText</textarea>
-            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
-                <button class="game-btn" @onclick="ClearChatReceive">Clear Chat</button>
-                <button class="game-btn" @onclick="ToggleHideVoiceInChat"
-                        style="background:@(_hideVoiceInChat ? "#cce5ff" : "#f3f3f3");"
-                        title="@(_hideVoiceInChat ? "Voice messages hidden from chat" : "Voice messages shown in chat")">
-                    @if (_hideVoiceInChat)
-                    {
-                        <span style="font-size:18px;">💬</span>
-                        <span>Voice Hidden</span>
-                    }
-                    else
-                    {
-                        <span style="font-size:18px;">👁</span>
-                        <span>Show Voice</span>
-                    }
-                </button>
-            </div>
-            <div class="funky-heading">Send</div>
-            <textarea @ref="_chatOutRef" rows="4" style="width:100%;resize:vertical;min-height:80px;" placeholder="Type message and press Enter"
-                      @bind-value="_chatOutText" @bind-value:event="oninput"
-                      @onkeydown="OnChatOutKeyDown"
-                      @onkeyup="OnChatOutKeyUp"
-                      ></textarea>
-
-            @if (_game?.HadSecondPlayerConnected == true)
-            {
-                <div style="display:flex;align-items:center;width:100%;gap:12px;">
-                    <button class="game-btn" @onclick="SendChat">Send</button>
-                </div>
-            }
-        </div>
-        <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
-        @if (!string.IsNullOrWhiteSpace(_ttsDebug))
+        @if (!_isAiMode)
         {
-            <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
-        }
-
-        @if (_game?.HadSecondPlayerConnected == true)
-        {
-            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
-                <button class="game-btn" disabled="@(!CanPressToTalk)"
-                        @onpointerdown="OnTalkPointerDown"
-                        @onpointerup="OnTalkPointerUp"
-                        @onpointercancel="OnTalkPointerCancel"
-                        @onpointerleave="OnTalkPointerLeave"
-                        @onpointerdown:preventDefault="true"
-                        @onpointerup:preventDefault="true">
-                    @TalkButtonText
-                </button>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
-                    {
-                        <span style="font-size:14px;color:#666;">(muted by @_game.VoiceMutedByUserName)</span>
-                    }
-                    <button class="game-btn" @onclick="ToggleMute" 
-                            disabled="@(IsVoiceMuted && !CanUnmute)"
-                            style="background:@(IsVoiceMuted ? "#ffcccc" : "#f3f3f3");"
-                            title="@MuteButtonTitle">
-                        @if (IsVoiceMuted)
+            <div style="margin-top:10px;width:384px;max-width:calc(100vw - 24px);display:flex;flex-direction:column;gap:8px;">
+                <div class="funky-heading">Chat</div>
+                <textarea @ref="_chatInRef" rows="4" style="width:100%;resize:vertical;min-height:80px;" readonly>@_chatInText</textarea>
+                <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
+                    <button class="game-btn" @onclick="ClearChatReceive">Clear Chat</button>
+                    <button class="game-btn" @onclick="ToggleHideVoiceInChat"
+                            style="background:@(_hideVoiceInChat ? "#cce5ff" : "#f3f3f3");"
+                            title="@(_hideVoiceInChat ? "Voice messages hidden from chat" : "Voice messages shown in chat")">
+                        @if (_hideVoiceInChat)
                         {
-                            <span style="font-size:18px;">🔇</span>
-                            <span>Unmute</span>
+                            <span style="font-size:18px;">💬</span>
+                            <span>Voice Hidden</span>
                         }
                         else
                         {
-                            <span style="font-size:18px;">🔊</span>
-                            <span>Mute</span>
+                            <span style="font-size:18px;">👁</span>
+                            <span>Show Voice</span>
                         }
                     </button>
                 </div>
+                <div class="funky-heading">Send</div>
+                <textarea @ref="_chatOutRef" rows="4" style="width:100%;resize:vertical;min-height:80px;" placeholder="Type message and press Enter"
+                          @bind-value="_chatOutText" @bind-value:event="oninput"
+                          @onkeydown="OnChatOutKeyDown"
+                          @onkeyup="OnChatOutKeyUp"
+                          ></textarea>
+
+                @if (_game?.HadSecondPlayerConnected == true)
+                {
+                    <div style="display:flex;align-items:center;width:100%;gap:12px;">
+                        <button class="game-btn" @onclick="SendChat">Send</button>
+                    </div>
+                }
             </div>
+            <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
+            @if (!string.IsNullOrWhiteSpace(_ttsDebug))
+            {
+                <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
+            }
+
+            @if (_game?.HadSecondPlayerConnected == true)
+            {
+                <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
+                    <button class="game-btn" disabled="@(!CanPressToTalk)"
+                            @onpointerdown="OnTalkPointerDown"
+                            @onpointerup="OnTalkPointerUp"
+                            @onpointercancel="OnTalkPointerCancel"
+                            @onpointerleave="OnTalkPointerLeave"
+                            @onpointerdown:preventDefault="true"
+                            @onpointerup:preventDefault="true">
+                        @TalkButtonText
+                    </button>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
+                        {
+                            <span style="font-size:14px;color:#666;">(muted by @_game.VoiceMutedByUserName)</span>
+                        }
+                        <button class="game-btn" @onclick="ToggleMute" 
+                                disabled="@(IsVoiceMuted && !CanUnmute)"
+                                style="background:@(IsVoiceMuted ? "#ffcccc" : "#f3f3f3");"
+                                title="@MuteButtonTitle">
+                            @if (IsVoiceMuted)
+                            {
+                                <span style="font-size:18px;">🔇</span>
+                                <span>Unmute</span>
+                            }
+                            else
+                            {
+                                <span style="font-size:18px;">🔊</span>
+                                <span>Mute</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div style="margin-top:10px;width:384px;max-width:calc(100vw - 24px);display:flex;flex-direction:column;gap:8px;">
+                <div class="funky-heading">AI Game Mode</div>
+                <div style="padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #dee2e6;">
+                    <div style="font-size:14px;color:#666;margin-bottom:8px;">
+                        You are playing against the AI. Chat and voice features are disabled in AI mode.
+                    </div>
+                    <div style="font-size:13px;color:#888;">
+                        Difficulty: @(_aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate", 2 => "Hard", 3 => "Random", _ => "Moderate" })
+                    </div>
+                </div>
+            </div>
+            <p style="margin-top:8px;">@_message</p>
         }
     </div>
 }
@@ -368,6 +406,7 @@ else
             <div class="gameover-title">@GameOverTitle</div>
             <div class="gameover-sub">@GameOverSubtitle</div>
             <div class="gameover-actions">
+                <button @onclick="StartNewGame" style="background:#28a745;color:white;">New Game</button>
                 <button @onclick="DismissGameOverOverlay">@GameOverButtonText</button>
             </div>
         </div>
@@ -453,6 +492,9 @@ else
     private ElementReference _chatOutRef;
     private string _chatInText = "";
     private string _chatOutText = "";
+    private bool _isAiMode = false;
+    private bool _aiGameLevel = false;
+    private int _aiDifficultyLevel = 1; // 0=Easy, 1=Moderate, 2=Hard, 3=Random
     private int _lastChatCount;
     private int _chatDisplayStartIndex;
     private int _lastVoiceSpokenChatIndex;
@@ -561,6 +603,16 @@ else
             if (_game.VoiceFloorUserId.Value != _currentUserId) return false;
             if (!_game.VoiceFloorUntilUtc.HasValue) return false;
             return _game.VoiceFloorUntilUtc.Value > DateTime.UtcNow;
+        }
+    }
+
+    private bool IsAiDifficultyImplemented
+    {
+        get
+        {
+            // Currently only Random mode (3) is implemented
+            // Other modes (0=Easy, 1=Moderate, 2=Hard) use random logic but aren't "properly" implemented
+            return _aiDifficultyLevel == 3;
         }
     }
 
@@ -719,6 +771,25 @@ else
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
 
+        // Check for AI mode parameters
+        if (query.TryGetValue("ai", out var aiParam) && bool.TryParse(aiParam, out var isAi))
+        {
+            _isAiMode = isAi;
+        }
+        
+        if (query.TryGetValue("aiDifficulty", out var aiDifficultyParam) && int.TryParse(aiDifficultyParam, out var aiDifficulty))
+        {
+            _aiDifficultyLevel = aiDifficulty;
+            // Set the legacy boolean for backward compatibility
+            _aiGameLevel = aiDifficulty >= 2; // Hard or Random = true
+        }
+        // Handle legacy aiLevel parameter for backward compatibility
+        else if (query.TryGetValue("aiLevel", out var legacyAiLevelParam) && bool.TryParse(legacyAiLevelParam, out var legacyAiLevel))
+        {
+            _aiGameLevel = legacyAiLevel;
+            _aiDifficultyLevel = legacyAiLevel ? 2 : 1; // Convert true=Hard, false=Moderate
+        }
+
         if (query.TryGetValue("gameId", out var gid))
         {
             _gameId = gid;
@@ -751,9 +822,34 @@ else
             adminMode = false;
         }
 
-        _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode, _groupId);
-        Nav.NavigateTo($"/Draughts?gameId={_gameId}", forceLoad: false);
-        BeginJoin(_gameId);
+        // Only create games when explicitly requested with proper parameters
+        // Don't auto-create games when accessing /Draughts directly
+        if (query.ContainsKey("ai") || query.ContainsKey("groupId") || query.ContainsKey("creator") || query.ContainsKey("admin"))
+        {
+            // Create AI game or regular game
+            if (_isAiMode)
+            {
+                _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1, false, null);
+                // Navigate with AI parameters preserved
+                Nav.NavigateTo($"/Draughts?gameId={_gameId}&ai=true&aiDifficulty={_aiDifficultyLevel}", forceLoad: false);
+            }
+            else
+            {
+                _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode, _groupId);
+                var urlParams = $"gameId={_gameId}";
+                if (_groupId.HasValue) urlParams += $"&groupId={_groupId}";
+                if (adminMode) urlParams += "&admin=true";
+                Nav.NavigateTo($"/Draughts?{urlParams}", forceLoad: false);
+            }
+            BeginJoin(_gameId);
+        }
+        else
+        {
+            // No valid game creation parameters - redirect to player page
+            Nav.NavigateTo("/player", forceLoad: true);
+        }
+
+        EnsureUiTimer();
     }
 
     private void EnsureUiTimer()
@@ -804,6 +900,22 @@ else
         _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1);
         Nav.NavigateTo($"/Draughts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task StartGame()
+    {
+        if (string.IsNullOrWhiteSpace(_gameId)) return;
+        if (_game is null) return;
+        if (_game.CreatedByUserId != _currentUserId) return;
+
+        // Start the game - this will set the game state to "Started" and begin play
+        var (ok, msg) = GameService.StartGame(_gameId);
+        if (!ok && !string.IsNullOrWhiteSpace(msg))
+        {
+            _message = msg;
+        }
+        
         await InvokeAsync(StateHasChanged);
     }
 
@@ -990,6 +1102,32 @@ else
                     }
                 }
             }
+        }
+
+        // AI move logic for all AI modes
+        if (_isAiMode && _game is not null && (_game.State == DraughtsService.GameState.Connected || _game.State == DraughtsService.GameState.Playing) && _game.CurrentTurn == 2)
+        {
+            // In AI mode, Player 1 is human, Player 2 is AI
+            // If it's AI's turn, make a move based on difficulty level
+            _ = Task.Run(async () =>
+            {
+                // Add a small delay to make the AI move feel more natural
+                await Task.Delay(1000);
+                
+                var (success, message, fromR, fromC, toR, toC) = AiService.MakeRandomMove(_gameId!, 2);
+                
+                if (success)
+                {
+                    var difficultyText = _aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate", 2 => "Hard", 3 => "Random", _ => "Moderate" };
+                    _message = $"AI ({difficultyText}) moved: {fromR},{fromC} → {toR},{toC}";
+                }
+                else
+                {
+                    _message = $"AI move failed: {message}";
+                }
+                
+                await InvokeAsync(StateHasChanged);
+            });
         }
 
         await InvokeAsync(StateHasChanged);
@@ -1833,6 +1971,66 @@ else
         if (_game?.State == DraughtsService.GameState.Finished)
         {
             _ = CancelOrExitGame();
+        }
+    }
+
+    private void StartNewGame()
+    {
+        // Clear any existing game state
+        ClearGameState();
+        
+        // Start new game with same settings as current game
+        if (_isAiMode)
+        {
+            // Start AI game with same difficulty level
+            Nav.NavigateTo($"/Draughts?ai=true&aiDifficulty={_aiDifficultyLevel}", forceLoad: true);
+        }
+        else
+        {
+            // For multiplayer games, go to player page to select group/settings
+            Nav.NavigateTo("/player", forceLoad: true);
+        }
+    }
+
+    private void ClearGameState()
+    {
+        _gameId = null;
+        _game = null;
+        _playerNumber = 0;
+        _connected = false;
+        _joined = false;
+        _status = "";
+        _message = "";
+        _selectedR = null;
+        _selectedC = null;
+        _showGameOverOverlay = false;
+        _gameEndedWithWinLoss = false;
+        _gameClosedReason = null;
+        _lastGameState = DraughtsService.GameState.New;
+        _lastWinnerPlayer = null;
+        _lastChatCount = 0;
+        _chatDisplayStartIndex = 0;
+        _chatScrollPending = false;
+        _showCancelConfirm = false;
+        _showConcedeConfirm = false;
+        
+        // Clear UI timer
+        try
+        {
+            _uiTimer?.Dispose();
+            _uiTimer = null;
+        }
+        catch
+        {
+        }
+        
+        // Unsubscribe from game updates
+        try
+        {
+            GameService.GameUpdated -= OnGameUpdated;
+        }
+        catch
+        {
         }
     }
 
