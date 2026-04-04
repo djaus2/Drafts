@@ -120,12 +120,11 @@ namespace Draughts
 
             // Register the game service so multiple components can join the same game.
             builder.Services.AddSingleton<DraughtsService>();
-
             builder.Services.AddSingleton<LobbyChatService>();
-
             builder.Services.AddSingleton<SettingsService>();
             builder.Services.AddSingleton<UsableMsVoiceService>();
             builder.Services.AddSingleton<GameLogService>();
+            builder.Services.AddSingleton<AiService>();
             builder.Services.AddHostedService<GameTimeoutReaper>();
 
             var app = builder.Build();
@@ -267,7 +266,29 @@ namespace Draughts
                     Draughts.RemoveGamesForUser(uid);
                     _ = gameLog.LogAsync($"Player logout: {userName} (ID: {uid})");
                 }
+                
+                // Clear all authentication cookies
                 await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                
+                // Clear all cookies including any persistent auth cookies
+                foreach (var cookie in ctx.Request.Cookies.Keys.ToList())
+                {
+                    ctx.Response.Cookies.Delete(cookie, new CookieOptions 
+                    { 
+                        Path = "/", 
+                        Domain = null, 
+                        Expires = DateTime.UtcNow.AddDays(-1)
+                    });
+                }
+                
+                // Clear response headers for cache
+                ctx.Response.Headers.Clear();
+                
+                // Set headers to prevent caching
+                ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+                ctx.Response.Headers["Pragma"] = "no-cache";
+                ctx.Response.Headers["Expires"] = "0";
+                
                 return Results.Redirect("/login", permanent: false);
             });
 
@@ -1004,6 +1025,62 @@ namespace Draughts
                     return Results.Redirect("/login?error=1", permanent: false);
                 }
             }).DisableAntiforgery();
+
+            app.MapGet("/clear-cache", async (HttpContext ctx) =>
+            {
+                // Clear all authentication cookies
+                await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                
+                // Clear all cookies including any persistent auth cookies
+                foreach (var cookie in ctx.Request.Cookies.Keys.ToList())
+                {
+                    ctx.Response.Cookies.Delete(cookie, new CookieOptions 
+                    { 
+                        Path = "/", 
+                        Domain = null, 
+                        Expires = DateTime.UtcNow.AddDays(-1)
+                    });
+                }
+                
+                // Clear response headers for cache
+                ctx.Response.Headers.Clear();
+                
+                // Set headers to prevent caching
+                ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+                ctx.Response.Headers["Pragma"] = "no-cache";
+                ctx.Response.Headers["Expires"] = "0";
+                ctx.Response.Headers["Clear-Site-Data"] = "\"cache\", \"cookies\", \"storage\", \"executionContexts\"";
+                
+                return Results.Redirect("/?from-clear-cache=true", permanent: false);
+            });
+
+            app.MapGet("/hard-reset", async (HttpContext ctx) =>
+            {
+                // Clear all authentication cookies
+                await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                
+                // Clear all cookies including any persistent auth cookies
+                foreach (var cookie in ctx.Request.Cookies.Keys.ToList())
+                {
+                    ctx.Response.Cookies.Delete(cookie, new CookieOptions 
+                    { 
+                        Path = "/", 
+                        Domain = null, 
+                        Expires = DateTime.UtcNow.AddDays(-1)
+                    });
+                }
+                
+                // Clear response headers for cache
+                ctx.Response.Headers.Clear();
+                
+                // Set headers to prevent caching
+                ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+                ctx.Response.Headers["Pragma"] = "no-cache";
+                ctx.Response.Headers["Expires"] = "0";
+                ctx.Response.Headers["Clear-Site-Data"] = "\"cache\", \"cookies\", \"storage\", \"executionContexts\"";
+                
+                return Results.Redirect("/", permanent: false);
+            });
 
             app.Run();
         }

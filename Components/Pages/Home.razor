@@ -4,8 +4,12 @@
  *@
 @using Draughts.Services
 @using System.Text.Json
+@using Microsoft.AspNetCore.Components.Authorization
 @inject NavigationManager Nav
 @inject SettingsService Settings
+@inject AuthenticationStateProvider AuthStateProvider
+@inject Microsoft.JSInterop.IJSRuntime JSRuntime
+@inject IHttpContextAccessor HttpContextAccessor
 
 <PageTitleHeading Title="@($"Checkers online V{Version}")" HeadingLevel="2" />
 

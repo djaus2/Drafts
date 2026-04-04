@@ -115,64 +115,123 @@ else if (!string.IsNullOrWhiteSpace(_selectedVoiceKey))
     </div>
 </div>
 
-<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Group</h4>
+@if (!_playAgainstAi)
+{
+    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Group</h4>
 
-@if (_userGroups?.Any() == true)
-{
-    <div style="max-width:360px">
-        <div style="display:flex;flex-direction:column;gap:8px">
-            <select @bind="_selectedGroupId">
-                <option value="0">No group (public game)</option>
-                @foreach (var g in _userGroups)
+    @if (_userGroups?.Any() == true)
+    {
+        <div style="max-width:360px">
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <select @bind="_selectedGroupId">
+                    <option value="0">No group (public game)</option>
+                    @foreach (var g in _userGroups)
+                    {
+                        <option value="@g.Id">@g.Name</option>
+                    }
+                </select>
+                @if (_selectedGroupId == 0 && _userGroups.Count > 1)
                 {
-                    <option value="@g.Id">@g.Name</option>
+                    <div style="font-size:12px;color:#dc3545;">
+                        Select a group to start a game, or choose "No group" for a public game
+                    </div>
                 }
-            </select>
-            @if (_selectedGroupId == 0 && _userGroups.Count > 1)
-            {
-                <div style="font-size:12px;color:#dc3545;">
-                    Select a group to start a game, or choose "No group" for a public game
-                </div>
-            }
-            @if (_selectedGroupId == 0 && _userGroups.Count == 1)
-            {
-                <div style="font-size:12px;color:#6c757d;">
-                    Only one group available - it will be auto-selected for you
-                </div>
-            }
+                @if (_selectedGroupId == 0 && _userGroups.Count == 1)
+                {
+                    <div style="font-size:12px;color:#6c757d;">
+                        Only one group available - it will be auto-selected for you
+                    </div>
+                }
+            </div>
+            <div style="font-size:12px;opacity:0.85;">
+                Selected group will be assigned to new games you create
+            </div>
         </div>
-        <div style="font-size:12px;opacity:0.85;">
-            Selected group will be assigned to new games you create
+    }
+    else
+    {
+        <div style="max-width:360px;font-size:12px;opacity:0.85;">
+            You are not a member of any groups. Games will be public.
         </div>
-    </div>
-}
-else
-{
-    <div style="max-width:360px;font-size:12px;opacity:0.85;">
-        You are not a member of any groups. Games will be public.
-    </div>
+    }
 }
 
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Game Settings</h4>
 
 <div style="max-width:360px;margin-bottom:12px;">
     <label style="display:flex;align-items:center;gap:8px">
-        <input type="checkbox" @bind="_playFirst" />
-        I play first
+        <input type="checkbox" @bind="_playAgainstAi" @bind:after="SavePlayAgainstAiPreference" />
+        Play against AI
         <br />
     </label>
     <div style="font-size:12px;opacity:0.85;">
-        Determines who plays first when you start a game
+        When enabled, you will play against an AI opponent instead of other players
     </div>
 </div>
 
+@if (!_playAgainstAi)
+{
+    <div style="max-width:360px;margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" @bind="_playFirst" />
+            I play first
+            <br />
+        </label>
+        <div style="font-size:12px;opacity:0.85;">
+            Determines who plays first when you start a game
+        </div>
+    </div>
+}
+else
+{
+    @if (_playAgainstAi)
+    {
+        <div style="max-width:360px;margin-bottom:12px;">
+            <label style="display:block;margin-bottom:4px;font-weight:600;">AI Difficulty Level</label>
+            <select @bind="_aiDifficultyLevel" @bind:after="SaveAiDifficultyPreference" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;">
+                <option value="0">Easy</option>
+                <option value="1">Moderate-3-ply</option>
+                <option value="2">Hard</option>
+                <option value="3">Random</option>
+            </select>
+            <div style="font-size:12px;opacity:0.85;margin-top:4px;">
+                @if (_aiDifficultyLevel == 0)
+                {
+                    <text>Easy: AI makes occasional mistakes for casual play</text>
+                }
+                else if (_aiDifficultyLevel == 1)
+                {
+                    <text>Moderate-3-ply: AI looks ahead 3 half-moves</text>
+                }
+                else if (_aiDifficultyLevel == 2)
+                {
+                    <text>Hard: AI plays at maximum difficulty</text>
+                }
+                else
+                {
+                    <text>Random: AI difficulty varies randomly each game</text>
+                }
+            </div>
+        </div>
+    }
+}
+
 <div style="max-width:360px;margin-top:12px;">
     <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame" disabled="@(!CanCreateGame())">Start a new game</button>
-    @if (!CanCreateGame() && _userGroups?.Any() == true)
+    @if (!CanCreateGame())
     {
-        <div style="margin-top:8px;font-size:12px;color:#dc3545;">
-            Please select a group before starting a game
-        </div>
+        @if (_playAgainstAi && !IsAiDifficultyImplemented)
+        {
+            <div style="margin-top:8px;font-size:12px;color:#dc3545;">
+                This AI difficulty level is not yet implemented. Please select "Easy" or "Random".
+            </div>
+        }
+        else if (_userGroups?.Any() == true)
+        {
+            <div style="margin-top:8px;font-size:12px;color:#dc3545;">
+                Please select a group before starting a game
+            </div>
+        }
     }
 </div>
 
@@ -490,12 +549,28 @@ else
     // Check if game creation should be enabled
     private bool CanCreateGame()
     {
+        // Only enable AI games if the selected AI difficulty is implemented
+        if (_playAgainstAi) return IsAiDifficultyImplemented;
+        
         // Enable if no groups (public games allowed) or if a group is selected
         return _userGroups == null || _userGroups.Count == 0 || _selectedGroupId > 0;
     }
 
+    private bool IsAiDifficultyImplemented
+    {
+        get
+        {
+            // Easy (0): Implemented
+            // Random (3): Implemented
+            // Moderate (1) and Hard (2): Not yet implemented
+            return _aiDifficultyLevel == 0 || _aiDifficultyLevel == 1 || _aiDifficultyLevel == 3;
+        }
+    }
+
     // Game settings
     private bool _playFirst = true;
+    private bool _playAgainstAi = false;
+    private int _aiDifficultyLevel = 1; // 0=Easy, 1=Moderate, 2=Hard, 3=Random
 
     private Dictionary<int, string> _userNames = new();
 
@@ -541,6 +616,12 @@ else
             if (_cachedUserId.HasValue)
             {
                 _userGroups = await Auth.GetUserGroupsAsync(_cachedUserId.Value);
+                
+                // Load AI difficulty preference
+                await LoadAiDifficultyPreference();
+                
+                // Force UI update after loading preferences
+                await InvokeAsync(StateHasChanged);
             }
 
             // Load game initiator setting
@@ -1312,6 +1393,90 @@ else
         return null;
     }
 
+    private async Task LoadAiDifficultyPreference()
+    {
+        try
+        {
+            // Load AI difficulty level - localStorage returns strings
+            var savedDifficultyStr = await JS.InvokeAsync<string>("localStorage.getItem", "aiDifficultyLevel");
+            Console.WriteLine($"[Player] Loaded AI difficulty from localStorage: '{savedDifficultyStr}'");
+            
+            if (!string.IsNullOrWhiteSpace(savedDifficultyStr) && int.TryParse(savedDifficultyStr, out var savedDifficulty))
+            {
+                if (savedDifficulty >= 0 && savedDifficulty <= 3)
+                {
+                    _aiDifficultyLevel = savedDifficulty;
+                    Console.WriteLine($"[Player] Set AI difficulty to: {_aiDifficultyLevel}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("[Player] No AI difficulty saved, using default (Moderate)");
+            }
+            
+            // Load Play against AI setting
+            var savedPlayAgainstAi = await JS.InvokeAsync<string>("localStorage.getItem", "playAgainstAi");
+            Console.WriteLine($"[Player] Loaded Play Against AI from localStorage: '{savedPlayAgainstAi}'");
+            
+            if (!string.IsNullOrWhiteSpace(savedPlayAgainstAi) && bool.TryParse(savedPlayAgainstAi, out var playAgainstAi))
+            {
+                _playAgainstAi = playAgainstAi;
+                Console.WriteLine($"[Player] Set Play Against AI to: {_playAgainstAi}");
+            }
+            else
+            {
+                Console.WriteLine("[Player] No Play Against AI setting saved, using default (false)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Player] Error loading AI preferences: {ex.Message}");
+            // Use default if loading fails
+            _aiDifficultyLevel = 1; // Moderate
+            _playAgainstAi = false;
+        }
+    }
+
+    private async Task SaveAiDifficultyPreference()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "aiDifficultyLevel", _aiDifficultyLevel);
+            Console.WriteLine($"[Player] Saved AI difficulty: {_aiDifficultyLevel}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Player] Error saving AI difficulty: {ex.Message}");
+        }
+    }
+
+    private async Task SavePlayAgainstAiPreference()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "playAgainstAi", _playAgainstAi);
+            Console.WriteLine($"[Player] Saved Play Against AI: {_playAgainstAi}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Player] Error saving Play Against AI: {ex.Message}");
+        }
+    }
+
+    private async Task ClearAiSettings()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", "aiDifficultyLevel");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "playAgainstAi");
+            Console.WriteLine("[Player] Cleared AI settings from localStorage");
+        }
+        catch
+        {
+            // Silently fail if clearing doesn't work
+        }
+    }
+
     private async Task CheckIfUserIsAdmin()
     {
         try
@@ -1363,9 +1528,18 @@ else
 
     private void StartNewGame()
     {
-        var groupId = _selectedGroupId > 0 ? _selectedGroupId : (int?)null;
-        var creatorPlayerNumber = _playFirst ? 1 : 2;
-        Nav.NavigateTo($"/Draughts?groupId={groupId}&creator={creatorPlayerNumber}");
+        if (_playAgainstAi)
+        {
+            // Start AI game - no group, always play first as human, include AI difficulty level
+            Nav.NavigateTo($"/Draughts?ai=true&aiDifficulty={_aiDifficultyLevel}");
+        }
+        else
+        {
+            // Start regular multiplayer game
+            var groupId = _selectedGroupId > 0 ? _selectedGroupId : (int?)null;
+            var creatorPlayerNumber = _playFirst ? 1 : 2;
+            Nav.NavigateTo($"/Draughts?groupId={groupId}&creator={creatorPlayerNumber}");
+        }
     }
 
     private void OnJoinGame()

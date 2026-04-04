@@ -1479,6 +1479,38 @@ namespace Draughts.Services
             OnGameUpdated(gameId);
             return (true, null);
         }
+
+        public (bool ok, string? msg) StartGame(string gameId)
+        {
+            if (string.IsNullOrWhiteSpace(gameId)) return (false, "No game");
+
+            var game = GetGame(gameId);
+            if (game is null) return (false, "Game not found");
+
+            lock (game)
+            {
+                if (game.State == GameState.Finished || game.State == GameState.Abandoned)
+                {
+                    return (false, $"Game is {game.State}");
+                }
+
+                if (game.State == GameState.Connected || game.State == GameState.Playing)
+                {
+                    return (false, "Game already started");
+                }
+
+                // Transition from New to Connected to allow play to begin
+                if (game.State == GameState.New)
+                {
+                    game.State = GameState.Connected;
+                    game.HadSecondPlayerConnected = true;
+                }
+
+                game.Touch();
+                OnGameUpdated(gameId);
+                return (true, null);
+            }
+        }
     }
 
     public class DraughtsGame

@@ -1,10 +1,11 @@
 @page "/login"
 @using Draughts.Services
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitleHeading Title="Login" HeadingLevel="2" />
 
-<form method="post" action="/auth/login" style="max-width:320px">
+<form method="post" action="/auth/login" style="max-width:320px" onsubmit="clearAiSettings()">
     <div style="display:flex;flex-direction:column;gap:8px">
         <input name="name" value="@_name" placeholder="Name" />
         <input name="pin" value="@_pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
@@ -16,6 +17,18 @@
         }
     </div>
 </form>
+
+<script>
+    function clearAiSettings() {
+        try {
+            localStorage.removeItem('aiDifficultyLevel');
+            localStorage.removeItem('playAgainstAi');
+            console.log('[Login] Cleared AI settings from localStorage on login');
+        } catch (e) {
+            console.error('[Login] Error clearing AI settings:', e);
+        }
+    }
+</script>
 
 @code {
     [SupplyParameterFromQuery]
