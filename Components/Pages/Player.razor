@@ -190,7 +190,7 @@ else
             <label style="display:block;margin-bottom:4px;font-weight:600;">AI Difficulty Level</label>
             <select @bind="_aiDifficultyLevel" @bind:after="SaveAiDifficultyPreference" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;">
                 <option value="0">Easy</option>
-                <option value="1">Moderate</option>
+                <option value="1">Moderate-3-ply</option>
                 <option value="2">Hard</option>
                 <option value="3">Random</option>
             </select>
@@ -201,7 +201,7 @@ else
                 }
                 else if (_aiDifficultyLevel == 1)
                 {
-                    <text>Moderate: AI plays at intermediate level</text>
+                    <text>Moderate-3-ply: AI looks ahead 3 half-moves</text>
                 }
                 else if (_aiDifficultyLevel == 2)
                 {
@@ -563,7 +563,7 @@ else
             // Easy (0): Implemented
             // Random (3): Implemented
             // Moderate (1) and Hard (2): Not yet implemented
-            return _aiDifficultyLevel == 0 || _aiDifficultyLevel == 3;
+            return _aiDifficultyLevel == 0 || _aiDifficultyLevel == 1 || _aiDifficultyLevel == 3;
         }
     }
 

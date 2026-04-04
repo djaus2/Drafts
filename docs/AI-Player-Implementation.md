@@ -30,14 +30,22 @@ These were simple enough to be defined by the developer.
   - Unpredictable and chaotic gameplay
 - **Best For**: Testing game mechanics, experiencing varied game states, fun casual play
 
-#### 3. **Moderate Mode** 🚧 *Planned*
-- **Strategy**: Balanced offensive and defensive play
-- **Planned Behavior**:
-  - Basic position evaluation
-  - Prioritizes captures when advantageous
-  - Considers piece advancement and king promotion
-  - Simple multi-move lookahead (2-3 moves)
-- **Target Audience**: Intermediate players seeking a challenge
+#### 3. **Moderate-3-ply Mode** ✅ *Implemented*
+- **Strategy**: 3-ply lookahead with a simple weighted evaluation (non-minimax)
+- **Behavior**:
+  - Generates all legal AI moves (including mandatory captures and forced multi-jumps)
+  - For each candidate move, simulates a 3-ply sequence:
+    - AI move → Opponent reply → AI move
+  - Scores each resulting leaf state using a custom weighting function (`GameMe`) and chooses the highest-scoring initial move
+- **Weighting (GameMe)**:
+  - `+1` for each opponent piece taken
+  - `-1` for each AI piece taken
+  - `+2` for creating an AI king
+  - `+2` for taking an opponent king
+  - `-2` for losing an AI king
+  - `-100` if AI has no pieces or no legal moves (concede/lose)
+  - `+100` if opponent has no pieces
+- **Target Audience**: Intermediate players seeking a step up from Easy
 
 #### 4. **Hard Mode** 🚧 *Planned*
 - **Strategy**: Advanced tactical play with deep analysis
@@ -88,6 +96,19 @@ These were simple enough to be defined by the developer.
 3. Execute the selected move
 ```
 
+**Moderate-3-ply Mode Algorithm:**
+```
+1. Snapshot the current game state
+2. Get all legal moves for AI (respect mandatory capture and forced multi-jumps)
+3. For each AI move (ply 1):
+   a. Simulate the move
+   b. Enumerate opponent legal replies (ply 2)
+   c. For each opponent reply, enumerate AI legal moves again (ply 3)
+   d. Score the leaf state with GameMe
+4. Choose the initial AI move with the best resulting score
+5. Execute the selected move
+```
+
 ## User Interface Features
 
 ### AI Mode Indicators
@@ -96,8 +117,8 @@ These were simple enough to be defined by the developer.
 - **Move Feedback**: AI moves are logged with difficulty level for debugging
 
 ### Difficulty Availability
-- **Implemented Modes**: "Easy" and "Random" buttons are enabled
-- **Unimplemented Modes**: "Moderate" and "Hard" show warning message and disable game start
+- **Implemented Modes**: "Easy", "Moderate-3-ply", and "Random" are enabled
+- **Unimplemented Modes**: "Hard" shows warning message and disables game start
 - **Visual Feedback**: Disabled buttons with tooltips explaining unavailability
 
 ### Chat and Voice Features
@@ -137,14 +158,10 @@ These were simple enough to be defined by the developer.
 ## Future Enhancements
 
 ### Moderate Mode Implementation
-**Planned Features:**
-- Position evaluation function scoring material advantage
-- Basic tactical patterns (forks, pins, discovered attacks)
-- King promotion prioritization
-- Center control evaluation
-- 2-3 move lookahead with position scoring
-
-**Estimated Complexity**: Medium - requires position evaluation and basic search algorithm
+Moderate is now implemented as **Moderate-3-ply** (see above). Future refinements will likely include:
+- Improved positional evaluation beyond material/king events
+- Better move ordering and pruning (still non-minimax)
+- Tactical pattern detection and trap avoidance
 
 ### Hard Mode Implementation
 **Planned Features:**
@@ -193,4 +210,4 @@ The current implementation focuses on correctness and user experience, ensuring 
 
 **Version**: 8.1.0  
 **Last Updated**: April 2026  
-**Status**: Easy and Random modes implemented, Moderate and Hard modes planned
+**Status**: Easy, Moderate-3-ply, and Random modes implemented; Hard mode planned

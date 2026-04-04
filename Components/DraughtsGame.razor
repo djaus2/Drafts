@@ -196,7 +196,7 @@ else
         {
             <div style="margin:8px 0;padding:10px;background:#e8f5e8;border:1px solid #4caf50;border-radius:6px;">
                 <p style="margin:0;color:#2e7d32;font-weight:600;">🤖 You are playing against AI - Good luck!</p>
-                <p style="margin:4px 0 0 0;color:#666;font-size:13px;">Difficulty: @(_aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate", 2 => "Hard", 3 => "Random", _ => "Moderate" })</p>
+                <p style="margin:4px 0 0 0;color:#666;font-size:13px;">Difficulty: @(_aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate-3-ply", 2 => "Hard", 3 => "Random", _ => "Moderate-3-ply" })</p>
             </div>
         }
       @if (!string.IsNullOrWhiteSpace(GameResultText))
@@ -227,16 +227,31 @@ else
                 </button>
             </div>
         }
-        @if (_game is not null && _game.HadSecondPlayerConnected)
+        @if (_game is not null 
+            && _game.State != DraughtsService.GameState.Finished 
+            && _game.State != DraughtsService.GameState.Abandoned 
+            && _game.HadSecondPlayerConnected)
         {
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
                 <button class="game-btn" @onclick="ShowConcedeConfirm" style="background:#ff6b6b;color:white;">Concede</button>
             </div>
         }
-        @if (_game is not null && _game.HadSecondPlayerConnected)
+        @if (_game is not null 
+            && _game.State != DraughtsService.GameState.Finished 
+            && _game.State != DraughtsService.GameState.Abandoned 
+            && _game.HadSecondPlayerConnected)
         {
             <div style="margin:6px 0 10px 0;">
                 Idle timeout in: <b>@IdleTimeoutRemainingText</b>
+            </div>
+        }
+        @if (_game is not null 
+            && (_game.State == DraughtsService.GameState.Finished || _game.State == DraughtsService.GameState.Abandoned)
+            && !_showGameOverOverlay
+            && _gameOverAcknowledged)
+        {
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                <button class="game-btn" @onclick="CancelOrExitGame">Exit game</button>
             </div>
         }
         <table style="border-collapse:collapse;">
@@ -383,7 +398,7 @@ else
                         You are playing against the AI. Chat and voice features are disabled in AI mode.
                     </div>
                     <div style="font-size:13px;color:#888;">
-                        Difficulty: @(_aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate", 2 => "Hard", 3 => "Random", _ => "Moderate" })
+                        Difficulty: @(_aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate-3-ply", 2 => "Hard", 3 => "Random", _ => "Moderate-3-ply" })
                     </div>
                 </div>
             </div>
@@ -399,14 +414,16 @@ else
             <div class="gameover-title">@GameOverTitle</div>
             <div class="gameover-sub">@GameOverSubtitle</div>
             <div class="gameover-actions">
-                <button @onclick="StartNewGame" 
-                        style="background:#28a745;color:white;"
-                        title="Start a new game">
-                    New Game
-                </button>
                 <button @onclick="DismissGameOverOverlay">@GameOverButtonText</button>
             </div>
         </div>
+    </div>
+}
+
+@if (_game?.State == DraughtsService.GameState.Finished && !_showGameOverOverlay && _gameOverAcknowledged)
+{
+    <div style="margin:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="game-btn" @onclick="CancelOrExitGame">Close</button>
     </div>
 }
 
@@ -482,6 +499,7 @@ else
     private bool _copied = false;
 
     private bool _showGameOverOverlay;
+    private bool _gameOverAcknowledged;
 
     private string JoinLink => Nav.BaseUri.TrimEnd('/') + $"/Draughts?gameId={_gameId ?? ""}";
 
@@ -491,7 +509,7 @@ else
     private string _chatOutText = "";
     private bool _isAiMode = false;
     private bool _aiGameLevel = false;
-    private int _aiDifficultyLevel = 1; // 0=Easy, 1=Moderate, 2=Hard, 3=Random
+    private int _aiDifficultyLevel = 1; // 0=Easy, 1=Moderate-3-ply, 2=Hard, 3=Random
     private int _lastChatCount;
     private int _chatDisplayStartIndex;
     private int _lastVoiceSpokenChatIndex;
@@ -1058,6 +1076,7 @@ else
                 if (_game.State == DraughtsService.GameState.Finished && _lastGameState != DraughtsService.GameState.Finished)
                 {
                     _showGameOverOverlay = true;
+                    _gameOverAcknowledged = false;
                     _message = GameResultText;
                     // Mark that the game ended with a proper win/loss (not timeout/abandonment)
                     _gameEndedWithWinLoss = _game.WinnerPlayer.HasValue;
@@ -1067,19 +1086,11 @@ else
                 _lastWinnerPlayer = _game.WinnerPlayer;
             }
             
-            // Additional check: If game is finished and overlay not shown, show it
-            if (_game.State == DraughtsService.GameState.Finished && !_showGameOverOverlay)
+            // Additional check: If game is finished and overlay not shown, show it (unless already acknowledged)
+            if (_game.State == DraughtsService.GameState.Finished && !_showGameOverOverlay && !_gameOverAcknowledged)
             {
                 _showGameOverOverlay = true;
                 _message = GameResultText;
-                _gameEndedWithWinLoss = _game.WinnerPlayer.HasValue;
-            }
-            
-            // Debug: Force overlay for finished games
-            if (_game.State == DraughtsService.GameState.Finished && !_showGameOverOverlay)
-            {
-                _showGameOverOverlay = true;
-                _message = $"DEBUG: Game finished - Winner: {_game.WinnerPlayer}, You are: {_playerNumber}, Result: {GameResultText}";
                 _gameEndedWithWinLoss = _game.WinnerPlayer.HasValue;
             }
         }
@@ -1138,7 +1149,7 @@ else
                 
                 if (success)
                 {
-                    var difficultyText = _aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate", 2 => "Hard", 3 => "Random", _ => "Moderate" };
+                    var difficultyText = _aiDifficultyLevel switch { 0 => "Easy", 1 => "Moderate-3-ply", 2 => "Hard", 3 => "Random", _ => "Moderate-3-ply" };
                     _message = $"AI ({difficultyText}) moved: {fromR},{fromC} → {toR},{toC}";
                 }
                 else
@@ -1990,11 +2001,11 @@ else
     private void DismissGameOverOverlay()
     {
         _showGameOverOverlay = false;
-        
-        // Auto-exit the game when win/loss dialog is closed
+
+        // Acknowledge the result and keep the finished board visible.
         if (_game?.State == DraughtsService.GameState.Finished)
         {
-            _ = CancelOrExitGame();
+            _gameOverAcknowledged = true;
         }
     }
 
@@ -2030,6 +2041,7 @@ else
         _selectedR = null;
         _selectedC = null;
         _showGameOverOverlay = false;
+        _gameOverAcknowledged = false;
         _gameEndedWithWinLoss = false;
         _gameClosedReason = null;
         _lastGameState = DraughtsService.GameState.New;
