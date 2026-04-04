@@ -8,7 +8,7 @@ The Draughts game now includes an AI opponent feature, allowing players to pract
 
 ### Available AI Difficulty Modes
 
-The AI player system currently supports four difficulty levels, with two fully implemented.
+The AI player system currently supports four difficulty levels, with three fully implemented.
 These were simple enough to be defined by the developer.
 
 #### 1. **Easy Mode** ✅ *Implemented*
@@ -202,7 +202,7 @@ Moderate is now implemented as **Moderate-3-ply** (see above). Future refinement
 
 ## Conclusion
 
-The AI player implementation provides a solid foundation for solo play, with two working difficulty modes suitable for beginners and casual players. The architecture is designed to support more sophisticated AI implementations in future releases, with clear separation of concerns and extensible difficulty system.
+The AI player implementation provides a solid foundation for solo play, with three working difficulty modes suitable for beginners and casual players. The architecture is designed to support more sophisticated AI implementations in future releases, with clear separation of concerns and extensible difficulty system.
 
 The current implementation focuses on correctness and user experience, ensuring that AI opponents play fair, follow all game rules, and provide an enjoyable practice environment for players of all skill levels.
 
