@@ -218,21 +218,14 @@ else
 
         @if (_game is not null && _game.CreatedByUserId == _currentUserId && !_game.HadSecondPlayerConnected)
         {
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <button class="game-btn" @onclick="CancelOrExitGame">@CancelOrExitButtonText</button>
                 <button class="game-btn" @onclick="StartGame" 
                         style="background:#28a745;color:white;"
-                        disabled="@(_isAiMode && !IsAiDifficultyImplemented)"
-                        title="@(_isAiMode && !IsAiDifficultyImplemented ? "This AI difficulty level is not yet implemented" : "Start the game")">
+                        title="Start the game">
                     Start game
                 </button>
             </div>
-            @if (_isAiMode && !IsAiDifficultyImplemented)
-            {
-                <div style="margin-top:8px;padding:8px;background:#fff3cd;border:1px solid #ffeaa7;border-radius:4px;font-size:13px;color:#856404;">
-                    ⚠️ This AI difficulty level is not yet implemented. Please select "Random" mode to play against AI.
-                </div>
-            }
         }
         @if (_game is not null && _game.HadSecondPlayerConnected)
         {
@@ -408,8 +401,7 @@ else
             <div class="gameover-actions">
                 <button @onclick="StartNewGame" 
                         style="background:#28a745;color:white;"
-                        disabled="@(_isAiMode && !IsAiDifficultyImplemented)"
-                        title="@(_isAiMode && !IsAiDifficultyImplemented ? "This AI difficulty level is not yet implemented" : "Start a new game")">
+                        title="Start a new game">
                     New Game
                 </button>
                 <button @onclick="DismissGameOverOverlay">@GameOverButtonText</button>
