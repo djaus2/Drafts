@@ -2,13 +2,14 @@
 @inject IHttpContextAccessor HttpContextAccessor
 @inject AuthenticationStateProvider AuthStateProvider
 @inject Microsoft.JSInterop.IJSRuntime JSRuntime
+@inject NavigationManager Nav
 @implements IAsyncDisposable
 
 <CascadingAuthenticationState>
     <div style="padding:12px 0;">
         <div style="width:420px;max-width:calc(100vw - 24px);margin:0;display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <h1 style="margin:0;font-weight:800;letter-spacing:0.5px;background:linear-gradient(90deg,#ff3d00,#ffca28,#00c853,#2979ff,#d500f9);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 1px 0 rgba(0,0,0,0.15);">Checkers</h1>
-            @if (_isActuallyAuthenticated)
+            @if (_isActuallyAuthenticated && !IsHomePage())
             {
                 <button onclick="location.href='/logout'" style="min-width:120px;padding:6px 12px;border-radius:4px;border:1px solid #888;background:#f3f3f3;cursor:pointer;">Logout</button>
             }
@@ -64,6 +65,21 @@
             
             // Only consider authenticated if both uid and name are present
             return !string.IsNullOrWhiteSpace(uid) && !string.IsNullOrWhiteSpace(name);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool IsHomePage()
+    {
+        try
+        {
+            var relative = Nav.ToBaseRelativePath(Nav.Uri);
+            if (string.IsNullOrEmpty(relative)) return true;
+            var path = relative.Split('?', '#')[0].Trim('/');
+            return string.IsNullOrEmpty(path);
         }
         catch
         {

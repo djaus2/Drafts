@@ -147,3 +147,7 @@ button:disabled::before {
     font-weight: bold;
     color: #333;
 }
+
+#blazor-error-ui {
+    display: none !important;
+}
