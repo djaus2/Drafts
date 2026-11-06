@@ -46,6 +46,7 @@ This folder contains progressive technical documentation for the Draughts/Checke
 - [Azure Authentication Debugging](azure-authentication-debugging.md)
 - [Azure "No player id" Fix](azure-no-player-id-fix.md)
 - [Azure Password Change Fix](azure-password-change-fix.md)
+- [Blazor Error Banner CSS Kludge](blazor-error-ui-kludge.md)
 
 ## 7) Database and seeding
 
