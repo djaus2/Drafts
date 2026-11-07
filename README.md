@@ -25,7 +25,7 @@ Further: [Blog Posts](https://davidjones.sportronics.com.au/cats/ai/)
 - You will need 2 instances _(i.e. 2 players)_ of separate browsers _(i.e separate deveices)_ to play pointing to same URL.
 -->
 
-[Try it out here](https://draughts.sportronics.com.au) &larr;  *Available again*_Available again_
+[Try it out here](https://draughts.sportronics.com.au) &larr;  _Available again_
 
 - [About](https://davidjones.sportronics.com.au/ai/checkers-drafts-game.html)
 - See Documentation [blog posts](https://davidjones.sportronics.com.au/cats/ai/)
