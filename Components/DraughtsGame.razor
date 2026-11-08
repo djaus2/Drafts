@@ -71,6 +71,32 @@
     cursor:not-allowed;
   }
 
+.game-voice-button {
+    min-width: 120px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid #888;
+    --btn-bg: linear-gradient(90deg,
+      #ffffff 0%,
+      #eaffea 20%,
+      #d4f7d4 30%,
+      #bff3bf 50%,
+      #d4f7d4 70%,
+      #eaffea 80%,
+      #ffffff 100%);
+    --btn-bg-opacity: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.game-voice-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
   @@keyframes funkyGradient {
     0% { background-position:0% 50%; }
     100% { background-position:100% 50%; }
@@ -318,18 +344,18 @@ else
                 <textarea @ref="_chatInRef" rows="4" style="width:100%;resize:vertical;min-height:80px;" readonly>@_chatInText</textarea>
                 <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;">
                     <button class="game-btn" @onclick="ClearChatReceive">Clear Chat</button>
-                    <button class="game-btn" @onclick="ToggleHideVoiceInChat"
-                            style="background:@(_hideVoiceInChat ? "#cce5ff" : "#f3f3f3");"
-                            title="@(_hideVoiceInChat ? "Voice messages hidden from chat" : "Voice messages shown in chat")">
+                    <button class="game-voice-button" @onclick="ToggleHideVoiceInChat" x:Name="btnToggleVoiceChat"
+
+                        title="@(_hideVoiceInChat ? "Voice messages hidden from chat" : "Voice messages shown in chat")">
                         @if (_hideVoiceInChat)
                         {
                             <span style="font-size:18px;">💬</span>
-                            <span>Voice Hidden</span>
+                            <span>Talk Txt Hidden</span>
                         }
                         else
                         {
                             <span style="font-size:18px;">👁</span>
-                            <span>Show Voice</span>
+                            <span>Show Talk Txt</span>
                         }
                     </button>
                 </div>
@@ -342,18 +368,60 @@ else
 
                 @if (_game?.HadSecondPlayerConnected == true)
                 {
-                    <div style="display:flex;align-items:center;width:100%;gap:12px;">
-                        <button class="game-btn" @onclick="SendChat">Send</button>
+                    <div style="margin-top:12px;display:flex;flex-wrap:nowrap;gap:12px;align-items:center;width:100%;max-width:calc(100vw - 24px);">
+                        <button class="game-btn" @onclick="SendChat">Send Txt</button>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <button class="game-voice-button" disabled="@(!CanPressToTalk)" x:Name="btnTalk"
+                                    @onpointerdown="OnTalkPointerDown"
+                                    @onpointerup="OnTalkPointerUp"
+                                    @onpointercancel="OnTalkPointerCancel"
+                                    @onpointerleave="OnTalkPointerLeave"
+                                    @onpointerdown:preventDefault="true"
+                                    @onpointerup:preventDefault="true">
+                                @if (IsVoiceMuted)
+                                {
+                                    <span style="font-size:18px;">🔇</span>
+                                }
+                                else
+                                {
+                                    <span style="font-size:18px;">🔊</span>
+                                }
+                                <span>@TalkButtonText</span>
+                            </button>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <button class="game-voice-button" @onclick="ToggleMute" x:Name = "btnMute"
+                                    disabled="@(IsVoiceMuted && !CanUnmute)"
+                                    title="@MuteButtonTitle">
+                                @if (IsVoiceMuted)
+                                {
+                                    <span style="font-size:18px;">🔇</span>
+                                    <span>Unmute</span>
+                                }
+                                else
+                                {
+                                    <span style="font-size:18px;">🔊</span>
+                                    <span>Mute</span>
+                                }
+                            </button>
+                        </div>
                     </div>
                 }
             </div>
-            <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
-            @if (!string.IsNullOrWhiteSpace(_ttsDebug))
+            @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
             {
-                <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
+                <span style="font-size:16px;color:red">Muted by @_game.VoiceMutedByUserName</span>
+            }
+            else
+            {
+                <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
+                if (!string.IsNullOrWhiteSpace(_ttsDebug))
+                {
+                    <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
+                }
             }
 
-            @if (_game?.HadSecondPlayerConnected == true)
+           /* @if (_game?.HadSecondPlayerConnected == true)
             {
                 <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
                     <button class="game-btn" disabled="@(!CanPressToTalk)"
@@ -387,7 +455,7 @@ else
                         </button>
                     </div>
                 </div>
-            }
+            }*/
         }
         else
         {
@@ -643,7 +711,7 @@ else
             if (IsVoiceMuted) return "Muted";
             if (_pttHeld) return "Talking…";
             if (IsVoiceFloorHeldByOther) return "Other talking…";
-            return "Hold to talk";
+            return "Talk";
         }
     }
 

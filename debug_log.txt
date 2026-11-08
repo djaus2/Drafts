@@ -1,0 +1,122 @@
+[2026-11-08 14:26:20] LobbyChat: Sending message - SenderId: 4, SenderName: 'Carol', Text: 'hi there'
+[2026-11-08 14:26:20] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'Carol', Text: 'hi there'
+
+[2026-11-08 14:26:20] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'Carol', Text: 'hi there'
+
+[2026-11-08 14:26:31] LobbyChat: Sending message - SenderId: 3, SenderName: 'Bob', Text: 'hi to you'
+[2026-11-08 14:26:31] LobbyChat: Refreshing 2 messages
+LobbyChat: Message - Sender: 'Carol', Text: 'hi there'
+LobbyChat: Message - Sender: 'Bob', Text: 'hi to you'
+
+[2026-11-08 14:26:31] LobbyChat: Refreshing 2 messages
+LobbyChat: Message - Sender: 'Carol', Text: 'hi there'
+LobbyChat: Message - Sender: 'Bob', Text: 'hi to you'
+
+[2026-11-08 14:27:14] LobbyChat: Refreshing 3 messages
+LobbyChat: Message - Sender: 'Carol', Text: 'hi there'
+LobbyChat: Message - Sender: 'Bob', Text: 'hi to you'
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 7fe342e7'
+
+[2026-11-08 14:27:14] LobbyChat: Refreshing 3 messages
+LobbyChat: Message - Sender: 'Carol', Text: 'hi there'
+LobbyChat: Message - Sender: 'Bob', Text: 'hi to you'
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 7fe342e7'
+
+[2026-11-08 14:36:07] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 60e28951'
+
+[2026-11-08 14:36:07] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 60e28951'
+
+[2026-11-08 14:45:00] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: f89fe7c7'
+
+[2026-11-08 14:49:09] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: f728db60'
+
+[2026-11-08 14:54:03] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: 480cc7a0'
+
+[2026-11-08 15:00:15] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 7334ced4'
+
+[2026-11-08 15:10:44] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: 0ac5829a'
+
+[2026-11-08 15:13:29] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 24557c76'
+
+[2026-11-08 15:13:29] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 24557c76'
+
+[2026-11-08 15:17:42] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: a68cc737'
+
+[2026-11-08 15:24:17] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: c9be612d'
+
+[2026-11-08 15:24:17] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: c9be612d'
+
+[2026-11-08 15:27:20] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: cde5457d'
+
+[2026-11-08 15:27:20] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: cde5457d'
+
+[2026-11-08 15:31:03] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 18a84558'
+
+[2026-11-08 15:31:03] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 18a84558'
+
+[2026-11-08 15:38:57] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: b7540038'
+
+[2026-11-08 15:43:14] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: f1478a00'
+
+[2026-11-08 15:43:14] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: f1478a00'
+
+[2026-11-08 15:46:33] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: d5b08d0e'
+
+[2026-11-08 15:49:29] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: e55d4777'
+
+[2026-11-08 15:51:34] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: 1519a1d6'
+
+[2026-11-08 18:24:36] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: 2a2906ab'
+
+[2026-11-08 18:47:02] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: c0d79d24'
+
+[2026-11-08 18:47:02] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: c0d79d24'
+
+[2026-11-08 18:56:28] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 15aac871'
+
+[2026-11-08 18:58:36] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: fa5b9219'
+
+[2026-11-08 18:58:36] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: fa5b9219'
+
+[2026-11-08 19:01:05] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: 8320a657'
+
+[2026-11-08 19:15:43] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Bob: 0b85168a'
+
+[2026-11-08 19:24:54] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 8a26e92a'
+
+[2026-11-08 19:24:54] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 8a26e92a'
+
