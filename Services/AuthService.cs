@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Threading;
 using Draughts.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,12 +9,21 @@ public sealed class AuthService
 {
     private readonly AppDbContext _db;
     private readonly GameLogService _gameLog;
+    private static readonly SemaphoreSlim LoginStateGuard = new(1, 1);
 
     public AuthService(AppDbContext db, GameLogService gameLog)
     {
         _db = db;
         _gameLog = gameLog;
     }
+
+    public sealed record DbContextLoginResult(
+        bool Success,
+        bool AlreadyLoggedIn,
+        bool InvalidCredentials,
+        string? ContextId,
+        AppUser? User,
+        string? Error);
 
     public async Task<AppUser?> ValidateLoginAsync(string name, string pin)
     {
@@ -380,25 +390,75 @@ public sealed class AuthService
         return true;
     }
 
-    public async Task<string?> RotatePlayerSessionAsync(AppUser user)
+    public async Task<bool> TrySetIsLoggedInAsync(int userId)
     {
-        if (!HasRole(user, "Player")) return null;
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var rows = await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE ""Users""
+                SET ""IsLoggedIn"" = {true}
+                WHERE ""Id"" = {userId}
+                  AND ""IsLoggedIn"" = {false}");
 
-        var sessionId = Guid.NewGuid().ToString("N");
-        user.ActiveSessionId = sessionId;
-        await _db.SaveChangesAsync();
-        return sessionId;
+            return rows > 0;
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
     }
 
-    public async Task ClearPlayerSessionAsync(int userId)
+    public async Task ClearIsLoggedInAsync(int userId)
     {
-        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
-        if (user is null || !HasRole(user, "Player")) return;
-
-        if (!string.IsNullOrWhiteSpace(user.ActiveSessionId))
+        await LoginStateGuard.WaitAsync();
+        try
         {
-            user.ActiveSessionId = null;
-            await _db.SaveChangesAsync();
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE ""Users""
+                SET ""IsLoggedIn"" = {false}
+                WHERE ""Id"" = {userId}");
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
+    }
+
+    public async Task<int> ClearAllIsLoggedInAsync()
+    {
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var clearedUsers = await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE ""Users""
+                SET ""IsLoggedIn"" = {false}
+                WHERE ""IsLoggedIn"" = {true}");
+
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE ""LoginContexts""
+                SET ""IsActive"" = {false}
+                WHERE ""IsActive"" = {true}");
+
+            return clearedUsers;
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
+    }
+
+    public async Task<bool> IsUserLoggedInAsync(int userId)
+    {
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var user = await _db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId);
+            return user?.IsLoggedIn == true;
+        }
+        finally
+        {
+            LoginStateGuard.Release();
         }
     }
 
@@ -407,13 +467,139 @@ public sealed class AuthService
         var rawUserId = principal.FindFirst("uid")?.Value;
         if (!int.TryParse(rawUserId, out var userId) || userId <= 0) return false;
 
-        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
-        if (user is null) return false;
-        if (!HasRole(user, "Player")) return true;
+        return await IsUserLoggedInAsync(userId);
+    }
 
-        var claimSessionId = principal.FindFirst("sid")?.Value;
-        if (string.IsNullOrWhiteSpace(claimSessionId)) return false;
-        return string.Equals(user.ActiveSessionId, claimSessionId, StringComparison.Ordinal);
+    public async Task<DbContextLoginResult> TryDbContextLoginAsync(string name, string pin)
+    {
+        name = (name ?? string.Empty).Trim();
+        pin = (pin ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(name) || !IsValidPin(pin))
+        {
+            return new DbContextLoginResult(false, false, true, null, null, "Invalid credentials");
+        }
+
+        var lookup = name.ToUpperInvariant();
+
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var user = await _db.Users.SingleOrDefaultAsync(x => x.Name.ToUpper() == lookup);
+            if (user is null)
+            {
+                return new DbContextLoginResult(false, false, true, null, null, "Invalid credentials");
+            }
+
+            if (!PinHasher.VerifyPin(pin, user.PinSalt, user.PinHash))
+            {
+                return new DbContextLoginResult(false, false, true, null, null, "Invalid credentials");
+            }
+
+            if (user.IsLoggedIn)
+            {
+                var hasActiveContext = await _db.LoginContexts
+                    .AnyAsync(x => x.UserId == user.Id && x.IsActive);
+
+                if (!hasActiveContext)
+                {
+                    // Repair stale lock state (e.g., old tab/browser closed without logout)
+                    user.IsLoggedIn = false;
+                    await _db.SaveChangesAsync();
+                }
+                else
+                {
+                    return new DbContextLoginResult(false, true, false, null, null, "Already logged in");
+                }
+            }
+
+            user.IsLoggedIn = true;
+            var contextId = Guid.NewGuid().ToString("N");
+            var now = DateTime.UtcNow;
+            _db.LoginContexts.Add(new LoginContext
+            {
+                ContextId = contextId,
+                UserId = user.Id,
+                IsActive = true,
+                CreatedUtc = now,
+                LastSeenUtc = now
+            });
+
+            await _db.SaveChangesAsync();
+            _ = _gameLog.LogPlayerActionAsync(LogType.PlayerLogin, user.Id, $"Player {user.Name} logged in");
+            return new DbContextLoginResult(true, false, false, contextId, user, null);
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
+    }
+
+    public async Task<AppUser?> GetUserByContextIdAsync(string contextId, bool touch)
+    {
+        contextId = (contextId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(contextId)) return null;
+
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var ctx = await _db.LoginContexts
+                .Include(x => x.User)
+                .SingleOrDefaultAsync(x => x.ContextId == contextId && x.IsActive);
+
+            if (ctx?.User is null) return null;
+            if (!ctx.User.IsLoggedIn)
+            {
+                ctx.IsActive = false;
+                await _db.SaveChangesAsync();
+                return null;
+            }
+
+            if (touch)
+            {
+                ctx.LastSeenUtc = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+
+            return ctx.User;
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
+    }
+
+    public async Task LogoutByContextIdAsync(string contextId)
+    {
+        contextId = (contextId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(contextId)) return;
+
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var ctx = await _db.LoginContexts
+                .Include(x => x.User)
+                .SingleOrDefaultAsync(x => x.ContextId == contextId && x.IsActive);
+
+            if (ctx?.User is null) return;
+
+            ctx.IsActive = false;
+            ctx.LastSeenUtc = DateTime.UtcNow;
+
+            var hasOtherActive = await _db.LoginContexts
+                .AnyAsync(x => x.UserId == ctx.UserId && x.IsActive && x.ContextId != contextId);
+
+            if (!hasOtherActive)
+            {
+                ctx.User.IsLoggedIn = false;
+            }
+
+            await _db.SaveChangesAsync();
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
     }
 
     private static bool IsValidPin(string pin)

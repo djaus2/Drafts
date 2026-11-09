@@ -1,19 +1,26 @@
 @page "/login"
-@using Draughts.Services
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject Draughts.Services.DbAuthenticationStateProvider DbAuthStateProvider
 
 <PageTitleHeading Title="Login" HeadingLevel="2" />
 
-<form method="post" action="/auth/login" style="max-width:320px" onsubmit="clearAiSettings()">
+<form @onsubmit="OnSubmit" @onsubmit:preventDefault="true" style="max-width:320px">
     <div style="display:flex;flex-direction:column;gap:8px">
-        <input name="name" value="@_name" placeholder="Name" />
-        <input name="pin" value="@_pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
-        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-        <button type="submit">Login</button>
-        @if (_showError)
+        <input @bind="_name" placeholder="Name" />
+        <input @bind="_pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" />
+        <button type="submit" disabled="@_isSubmitting">@(_isSubmitting ? "Logging in..." : "Login")</button>
+        @if (_showInvalidCredentials)
         {
             <div style="color:#b00020">Invalid name or PIN.</div>
+        }
+        else if (_showAlreadyLoggedIn)
+        {
+            <div style="color:#b00020">This player is already logged in on another session.</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div style="color:#b00020">@_errorMessage</div>
         }
     </div>
 </form>
@@ -37,7 +44,54 @@
     [SupplyParameterFromQuery(Name = "error")]
     private string? Error { get; set; }
 
-    private bool _showError => string.Equals(Error, "1", StringComparison.Ordinal);
-    private string _name => "";
-    private string _pin => "";
+    private bool _showInvalidCredentials;
+    private bool _showAlreadyLoggedIn;
+    private bool _isSubmitting;
+    private string _errorMessage = "";
+    private string _name = "";
+    private string _pin = "";
+
+    protected override void OnParametersSet()
+    {
+        _showInvalidCredentials = string.Equals(Error, "1", StringComparison.Ordinal);
+        _showAlreadyLoggedIn = string.Equals(Error, "2", StringComparison.Ordinal);
+    }
+
+    private async Task OnSubmit()
+    {
+        _showInvalidCredentials = false;
+        _showAlreadyLoggedIn = false;
+        _errorMessage = "";
+        _isSubmitting = true;
+
+        try
+        {
+            await JS.InvokeVoidAsync("clearAiSettings");
+
+            var (success, alreadyLoggedIn, invalidCredentials, error) = await DbAuthStateProvider.TryLoginAsync(_name, _pin);
+            if (!success)
+            {
+                _showInvalidCredentials = invalidCredentials;
+                _showAlreadyLoggedIn = alreadyLoggedIn;
+                _errorMessage = !invalidCredentials && !alreadyLoggedIn
+                    ? (string.IsNullOrWhiteSpace(error) ? "Login failed." : error)
+                    : "";
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(ReturnUrl) && Uri.IsWellFormedUriString(ReturnUrl, UriKind.Relative))
+            {
+                Nav.NavigateTo(ReturnUrl);
+                return;
+            }
+
+            var authState = await DbAuthStateProvider.GetAuthenticationStateAsync();
+            var isAdmin = authState.User.IsInRole("Admin");
+            Nav.NavigateTo(isAdmin ? "/admin" : "/player");
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
 }

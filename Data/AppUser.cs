@@ -40,4 +40,7 @@ public sealed class AppUser
 
     [MaxLength(64)]
     public string? ActiveSessionId { get; set; }
+
+    [Required]
+    public bool IsLoggedIn { get; set; } = false;
 }

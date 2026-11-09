@@ -8,7 +8,6 @@ public sealed class UsableMsVoiceService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly object _lock = new();
     private List<UsableMsVoice> _voices = new();
-    private bool _loaded;
 
     public UsableMsVoiceService(IServiceScopeFactory scopeFactory)
     {
@@ -28,7 +27,6 @@ public sealed class UsableMsVoiceService
         lock (_lock)
         {
             _voices = voices;
-            _loaded = true;
         }
     }
 

@@ -25,6 +25,8 @@
     private bool IsPublicRoute(RouteData routeData)
     {
         var pageType = routeData.PageType;
-        return pageType == typeof(Pages.Home) || pageType == typeof(Pages.Login);
+        return pageType == typeof(Pages.Home)
+            || pageType == typeof(Pages.Login)
+            || pageType == typeof(Pages.Logout);
     }
 }

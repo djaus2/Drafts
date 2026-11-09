@@ -14,6 +14,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<UsableMsVoice> UsableMsVoices => Set<UsableMsVoice>();
     public DbSet<GameLog> GameLogs => Set<GameLog>();
+    public DbSet<LoginContext> LoginContexts => Set<LoginContext>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,11 +23,21 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<AppUser>(b =>
         {
             b.HasIndex(x => x.Name).IsUnique();
+            b.Property(x => x.IsLoggedIn).HasDefaultValue(false).IsRequired();
         });
 
         modelBuilder.Entity<UsableMsVoice>(b =>
         {
             b.HasIndex(x => new { x.BrowserFamily, x.Token }).IsUnique();
+        });
+
+        modelBuilder.Entity<LoginContext>(b =>
+        {
+            b.HasIndex(x => x.ContextId).IsUnique();
+            b.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

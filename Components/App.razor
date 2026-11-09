@@ -17,6 +17,18 @@
     <ReconnectModal />
     <script src="js/draughtsGame.js"></script>
     <script>
+        window.DraughtsAuth = window.DraughtsAuth || {
+            getContextId: function () {
+                try { return sessionStorage.getItem('draughtsContextId') || ''; } catch { return ''; }
+            },
+            setContextId: function (value) {
+                try { sessionStorage.setItem('draughtsContextId', value || ''); } catch { }
+            },
+            clearContextId: function () {
+                try { sessionStorage.removeItem('draughtsContextId'); } catch { }
+            }
+        };
+
         function downloadFile(fileName, base64Data) {
             const byteCharacters = atob(base64Data);
             const byteNumbers = new Array(byteCharacters.length);

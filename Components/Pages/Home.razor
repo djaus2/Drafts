@@ -17,7 +17,14 @@
 
 <p>Play Draughts or Checkers with a friend online</p>
 
-<button @onclick="Start">Login to start or join a Game</button>
+@if (!_isAuthenticated)
+{
+    <a href="/login" role="button" style="display:inline-block;padding:6px 12px;border-radius:4px;border:1px solid #888;background:#f3f3f3;color:inherit;text-decoration:none;">Login to start or join a Game</a>
+}
+else
+{
+    <a href="@(_isAdmin ? "/admin" : "/player")" role="button" style="display:inline-block;padding:6px 12px;border-radius:4px;border:1px solid #888;background:#f3f3f3;color:inherit;text-decoration:none;">Continue</a>
+}
 
 <br />
 
@@ -46,6 +53,7 @@
         <div><strong>Group Ted-Alice: </strong>Ted and Alice can play</div>
         <div><strong><i>One starts the game, other joins</i></strong> </div>
         <div><strong><i>Note timeouts as above</i></strong> </div>
+        <div><strong><i>New: </i><font color="red">Fred,John,Harry,Mary,Sue,Libby</font> all in <font color="purple">Global</font> Group</strong></div>
     </div>
 </div>
 
@@ -67,6 +75,8 @@
     private int _maxGameStartWaitTimeMins = 30;
     private int _maxLoginHrs = 4;
     private double _multiJumpGraceSeconds = 2.0;
+    private bool _isAuthenticated = false;
+    private bool _isAdmin = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -75,6 +85,11 @@
         _maxGameStartWaitTimeMins = await Settings.GetMaxGameStartWaitTimeMinsAsync();
         _maxLoginHrs = await Settings.GetMaxLoginHrsAsync();
         _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        _isAuthenticated = user?.Identity?.IsAuthenticated == true;
+        _isAdmin = _isAuthenticated && user!.IsInRole("Admin");
     }
 
     private string Version 
@@ -103,8 +118,4 @@
         }
     }
 
-    private void Start()
-    {
-        Nav.NavigateTo($"/login");
-    }
 }

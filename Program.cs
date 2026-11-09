@@ -1,6 +1,7 @@
 using Draughts.Components;
 using Draughts.Data;
 using Draughts.Services;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
@@ -75,12 +76,14 @@ namespace Draughts
         });
 
             builder.Services.AddScoped<AuthService>();
+            builder.Services.AddScoped<DbAuthenticationStateProvider>();
+            builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<DbAuthenticationStateProvider>());
 
             builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
                 .AddCookie(options =>
                 {
                     options.LoginPath = "/login";
-                    options.LogoutPath = "/logout";
+                    options.LogoutPath = "/legacy-logout";
                     options.AccessDeniedPath = "/login";
                     
                     // Azure-specific cookie settings
@@ -150,6 +153,14 @@ namespace Draughts
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 DbSeeder.EnsureSeededAsync(db).GetAwaiter().GetResult();
+                DbSeeder.ValidateSchemaHealthAsync(db).GetAwaiter().GetResult();
+            }
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
+                var cleared = auth.ClearAllIsLoggedInAsync().GetAwaiter().GetResult();
+                Console.WriteLine($"Startup login reset: cleared {cleared} logged-in user flag(s)");
             }
 
             using (var scope = app.Services.CreateScope())
@@ -273,42 +284,7 @@ namespace Draughts
                 });
             });
 
-            app.MapGet("/logout", async (HttpContext ctx, DraughtsService Draughts, GameLogService gameLog, AuthService auth) =>
-            {
-                var raw = ctx.User?.FindFirst("uid")?.Value;
-                var userName = ctx.User?.Identity?.Name ?? "Unknown";
-                
-                if (int.TryParse(raw, out var uid) && uid > 0)
-                {
-                    Draughts.RemoveGamesForUser(uid);
-                    _ = gameLog.LogAsync($"Player logout: {userName} (ID: {uid})");
-                    await auth.ClearPlayerSessionAsync(uid);
-                }
-                
-                // Clear all authentication cookies
-                await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                
-                // Clear all cookies including any persistent auth cookies
-                foreach (var cookie in ctx.Request.Cookies.Keys.ToList())
-                {
-                    ctx.Response.Cookies.Delete(cookie, new CookieOptions 
-                    { 
-                        Path = "/", 
-                        Domain = null, 
-                        Expires = DateTime.UtcNow.AddDays(-1)
-                    });
-                }
-                
-                // Clear response headers for cache
-                ctx.Response.Headers.Clear();
-                
-                // Set headers to prevent caching
-                ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
-                ctx.Response.Headers["Pragma"] = "no-cache";
-                ctx.Response.Headers["Expires"] = "0";
-                
-                return Results.Redirect("/login", permanent: false);
-            });
+            // Legacy server-side logout endpoint removed; use /logout page (DB context logout).
 
             app.MapGet("/admin/change-pin-test", async (HttpContext ctx, AuthService auth) =>
             {
@@ -494,7 +470,7 @@ namespace Draughts
                 try
                 {
                     // Replicate the EXACT logic from Player.razor OnChangePin() method
-                    Console.WriteLine($"UI PIN test: Starting - HttpContext={ctx != null}, User={ctx.User != null}");
+                    Console.WriteLine($"UI PIN test: Starting - HttpContext={ctx != null}, User={ctx?.User != null}");
                     
                     var httpContext = ctx;
                     var user = httpContext?.User;
@@ -576,11 +552,12 @@ namespace Draughts
             {
                 try
                 {
-                    Console.WriteLine($"Simple PIN test: Starting - HttpContext={ctx != null}, User={ctx.User != null}");
-                    Console.WriteLine($"Simple PIN test: User.Identity={ctx.User?.Identity}, IsAuthenticated={ctx.User?.Identity?.IsAuthenticated}");
+                    var principal = ctx?.User;
+                    Console.WriteLine($"Simple PIN test: Starting - HttpContext={ctx != null}, User={principal != null}");
+                    Console.WriteLine($"Simple PIN test: User.Identity={principal?.Identity}, IsAuthenticated={principal?.Identity?.IsAuthenticated}");
                     
                     // Get the current user ID using the same logic as the components
-                    var user = ctx.User;
+                    var user = principal;
                     int? userId = null;
                     
                     var raw = user?.FindFirst("uid")?.Value;
@@ -949,105 +926,16 @@ namespace Draughts
                 }
             });
 
-            app.MapGet("/debug/auth-test", async (AuthService auth, SettingsService settings, HttpContext ctx) =>
+            // Legacy cookie-based debug/auth endpoints removed; login is now DB-context based via Login.razor.
+
+            app.MapGet("/clear-cache", async (HttpContext ctx, AuthService auth) =>
             {
-                try
+                var raw = ctx.User?.FindFirst("uid")?.Value;
+                if (int.TryParse(raw, out var uid) && uid > 0)
                 {
-                    var user = await auth.ValidateLoginAsync("Admin", "1371");
-                    if (user == null)
-                    {
-                        return Results.Json(new { success = false, message = "User validation failed" });
-                    }
-
-                    var activeSessionId = await auth.RotatePlayerSessionAsync(user);
-                    var principal = AuthService.BuildPrincipal(user, activeSessionId);
-                    
-                    // Get the MaxLoginHrs setting and use it for cookie expiration
-                    var maxLoginHrs = await settings.GetMaxLoginHrsAsync();
-                    var authProperties = new AuthenticationProperties
-                    {
-                        IsPersistent = true,
-                        ExpiresUtc = DateTimeOffset.UtcNow.AddHours(maxLoginHrs)
-                    };
-                    
-                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, authProperties);
-
-                    return Results.Json(new { 
-                        success = true, 
-                        message = "Authentication test successful",
-                        userName = user.Name,
-                        userRoles = user.Roles,
-                        isAuthenticated = ctx.User.Identity?.IsAuthenticated ?? false
-                    });
+                    await auth.ClearIsLoggedInAsync(uid);
                 }
-                catch (Exception ex)
-                {
-                    return Results.Json(new { success = false, message = $"Auth test failed: {ex.Message}" });
-                }
-            });
 
-            app.MapPost("/auth/login", async (
-                HttpContext ctx,
-                AuthService auth,
-                SettingsService settings,
-                [FromForm] string name,
-                [FromForm] string pin,
-                [FromForm] string? returnUrl) =>
-            {
-                try
-                {
-                    name = (name ?? string.Empty).Trim();
-                    pin = (pin ?? string.Empty).Trim();
-
-                    if (string.IsNullOrWhiteSpace(name) || (pin.Length != 4 && pin.Length != 6) || !pin.All(char.IsDigit))
-                    {
-                        return Results.Redirect("/login?error=1", permanent: false);
-                    }
-
-                    var user = await auth.ValidateLoginAsync(name, pin);
-                    if (user is null)
-                    {
-                        Console.WriteLine($"Login debug: Authentication failed for user '{name}'");
-                        return Results.Redirect("/login?error=1", permanent: false);
-                    }
-
-                    Console.WriteLine($"Login debug: Authentication successful for user '{user.Name}' (ID: {user.Id})");
-                    
-                    var activeSessionId = await auth.RotatePlayerSessionAsync(user);
-                    var principal = AuthService.BuildPrincipal(user, activeSessionId);
-                    Console.WriteLine($"Login debug: About to sign in principal");
-                    
-                    // Get the MaxLoginHrs setting and use it for cookie expiration
-                    var maxLoginHrs = await settings.GetMaxLoginHrsAsync();
-                    var authProperties = new AuthenticationProperties
-                    {
-                        IsPersistent = true,
-                        ExpiresUtc = DateTimeOffset.UtcNow.AddHours(maxLoginHrs)
-                    };
-                    
-                    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, authProperties);
-                    
-                    Console.WriteLine($"Login debug: Sign-in completed for user '{user.Name}' with {maxLoginHrs}hr expiration");
-
-                    if (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
-                    {
-                        return Results.Redirect(returnUrl, permanent: false);
-                    }
-
-                    var roles = (user.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    var isAdmin = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
-                    return Results.Redirect(isAdmin ? "/admin" : "/player", permanent: false);
-                }
-                catch (Exception ex)
-                {
-                    // Log the error for debugging
-                    Console.WriteLine($"Login error: {ex}");
-                    return Results.Redirect("/login?error=1", permanent: false);
-                }
-            }).DisableAntiforgery();
-
-            app.MapGet("/clear-cache", async (HttpContext ctx) =>
-            {
                 // Clear all authentication cookies
                 await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 
@@ -1074,8 +962,14 @@ namespace Draughts
                 return Results.Redirect("/?from-clear-cache=true", permanent: false);
             });
 
-            app.MapGet("/hard-reset", async (HttpContext ctx) =>
+            app.MapGet("/hard-reset", async (HttpContext ctx, AuthService auth) =>
             {
+                var raw = ctx.User?.FindFirst("uid")?.Value;
+                if (int.TryParse(raw, out var uid) && uid > 0)
+                {
+                    await auth.ClearIsLoggedInAsync(uid);
+                }
+
                 // Clear all authentication cookies
                 await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 

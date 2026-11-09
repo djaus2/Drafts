@@ -40,10 +40,11 @@ Publishing proceeded successfully after moving to the current subscription.
 
 ### Result
 
+Summary:
+
 - Voice buttons now share consistent styling.
 - The brown default button shading is overridden for voice buttons.
 - Talk button text displays correctly.
 - Layout is cleaner and consistent for chat/voice actions.
 
 ![V9.4.0 uPdates](V9.4.0-Updates.png)
-

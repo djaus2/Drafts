@@ -3,7 +3,6 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Player,Admin")]
 @implements IDisposable
 @using Draughts.Services
-@using Draughts.Data
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthService Auth
 @inject IHttpContextAccessor HttpContextAccessor
@@ -1270,7 +1269,7 @@ else
             {
                 try
                 {
-                    Nav.NavigateTo("/logout", forceLoad: true);
+                    Nav.NavigateTo("/logout", forceLoad: false);
                 }
                 catch
                 {

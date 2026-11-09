@@ -120,3 +120,9 @@ LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 8a26e92
 [2026-11-08 19:24:54] LobbyChat: Refreshing 1 messages
 LobbyChat: Message - Sender: 'System', Text: 'New game started by Carol: 8a26e92a'
 
+[2026-11-10 09:45:36] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by Sue: 3b5d6bf8'
+
+[2026-11-10 09:46:38] LobbyChat: Refreshing 1 messages
+LobbyChat: Message - Sender: 'System', Text: 'New game started by John: c6db06b1'
+

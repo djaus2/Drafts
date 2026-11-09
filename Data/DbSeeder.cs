@@ -48,7 +48,7 @@ public static class DbSeeder
         }
 
         // Create Groups table if it doesn't exist
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Groups'").AnyAsync())
+        if (!await TableExistsAsync(db, "Groups"))
         {
             await db.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE ""Groups"" (
@@ -63,7 +63,7 @@ public static class DbSeeder
         }
 
         // Create GroupMembers table if it doesn't exist
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='GroupMembers'").AnyAsync())
+        if (!await TableExistsAsync(db, "GroupMembers"))
         {
             await db.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE ""GroupMembers"" (
@@ -78,7 +78,7 @@ public static class DbSeeder
         }
 
         // Create UsableMsVoices table if it doesn't exist
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='UsableMsVoices'").AnyAsync())
+        if (!await TableExistsAsync(db, "UsableMsVoices"))
         {
             await db.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE ""UsableMsVoices"" (
@@ -120,24 +120,45 @@ public static class DbSeeder
             }
         }
 
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='AdminDesktopFallbackTtsVoice'").AnyAsync())
+        if (!await UserColumnExistsAsync(db, "AdminDesktopFallbackTtsVoice"))
         {
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsVoice\" TEXT NULL");
         }
 
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='AdminDesktopFallbackTtsLanguage'").AnyAsync())
+        if (!await UserColumnExistsAsync(db, "AdminDesktopFallbackTtsLanguage"))
         {
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsLanguage\" TEXT NULL");
         }
 
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='AdminDesktopFallbackTtsRegion'").AnyAsync())
+        if (!await UserColumnExistsAsync(db, "AdminDesktopFallbackTtsRegion"))
         {
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsRegion\" TEXT NULL");
         }
 
-        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='ActiveSessionId'").AnyAsync())
+        if (!await UserColumnExistsAsync(db, "ActiveSessionId"))
         {
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"ActiveSessionId\" TEXT NULL");
+        }
+
+        if (!await UserColumnExistsAsync(db, "IsLoggedIn"))
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"IsLoggedIn\" INTEGER NOT NULL DEFAULT 0");
+        }
+
+        if (!await TableExistsAsync(db, "LoginContexts"))
+        {
+            await db.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE ""LoginContexts"" (
+                    ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    ""ContextId"" TEXT NOT NULL,
+                    ""UserId"" INTEGER NOT NULL,
+                    ""IsActive"" INTEGER NOT NULL,
+                    ""CreatedUtc"" TEXT NOT NULL,
+                    ""LastSeenUtc"" TEXT NOT NULL,
+                    FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE
+                )");
+            await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX \"IX_LoginContexts_ContextId\" ON \"LoginContexts\" (\"ContextId\")");
+            await db.Database.ExecuteSqlRawAsync("CREATE INDEX \"IX_LoginContexts_UserId_IsActive\" ON \"LoginContexts\" (\"UserId\", \"IsActive\")");
         }
 
         await db.SaveChangesAsync();
@@ -148,13 +169,132 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
+    public static async Task ValidateSchemaHealthAsync(AppDbContext db)
+    {
+        var issues = new List<string>();
+
+        async Task RequireTable(string table)
+        {
+            if (!await TableExistsAsync(db, table))
+            {
+                issues.Add($"Missing table: {table}");
+            }
+        }
+
+        async Task RequireColumn(string table, string column)
+        {
+            if (!await ColumnExistsAsync(db, table, column))
+            {
+                issues.Add($"Missing column: {table}.{column}");
+            }
+        }
+
+        // Core tables
+        await RequireTable("Users");
+        await RequireTable("Settings");
+        await RequireTable("Groups");
+        await RequireTable("GroupMembers");
+        await RequireTable("UsableMsVoices");
+        await RequireTable("GameLogs");
+        await RequireTable("LoginContexts");
+
+        // Core user/auth columns
+        await RequireColumn("Users", "Name");
+        await RequireColumn("Users", "Roles");
+        await RequireColumn("Users", "PinSalt");
+        await RequireColumn("Users", "PinHash");
+        await RequireColumn("Users", "IsLoggedIn");
+
+        // DB-context auth columns
+        await RequireColumn("LoginContexts", "ContextId");
+        await RequireColumn("LoginContexts", "UserId");
+        await RequireColumn("LoginContexts", "IsActive");
+        await RequireColumn("LoginContexts", "CreatedUtc");
+        await RequireColumn("LoginContexts", "LastSeenUtc");
+
+        if (issues.Count > 0)
+        {
+            var message = "Database schema health check failed:\n - " + string.Join("\n - ", issues);
+            throw new InvalidOperationException(message);
+        }
+    }
+
+    private static async Task<bool> TableExistsAsync(AppDbContext db, string tableName)
+    {
+        var count = await ExecuteScalarIntAsync(
+            db,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@name",
+            "@name",
+            tableName);
+
+        return count > 0;
+    }
+
+    private static async Task<bool> UserColumnExistsAsync(AppDbContext db, string columnName)
+    {
+        var count = await ExecuteScalarIntAsync(
+            db,
+            "SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name=@name",
+            "@name",
+            columnName);
+
+        return count > 0;
+    }
+
+    private static async Task<bool> ColumnExistsAsync(AppDbContext db, string tableName, string columnName)
+    {
+        var safeTable = tableName.Replace("'", "''", StringComparison.Ordinal);
+        var count = await ExecuteScalarIntAsync(
+            db,
+            $"SELECT COUNT(*) FROM pragma_table_info('{safeTable}') WHERE name=@name",
+            "@name",
+            columnName);
+
+        return count > 0;
+    }
+
+    private static async Task<int> ExecuteScalarIntAsync(
+        AppDbContext db,
+        string sql,
+        string parameterName,
+        string parameterValue)
+    {
+        var connection = db.Database.GetDbConnection();
+        var openedHere = connection.State != ConnectionState.Open;
+
+        if (openedHere)
+        {
+            await connection.OpenAsync();
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = parameterName;
+            parameter.Value = parameterValue;
+            command.Parameters.Add(parameter);
+
+            var result = await command.ExecuteScalarAsync();
+            return Convert.ToInt32(result);
+        }
+        finally
+        {
+            if (openedHere)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
     private static async Task CreateUsersFromAuthJson(AppDbContext db)
     {
-        var authJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "auth.json");
-        Console.WriteLine($"DbSeeder: Looking for auth.json at: {authJsonPath}");
-        Console.WriteLine($"DbSeeder: auth.json exists: {File.Exists(authJsonPath)}");
-        
-        if (!File.Exists(authJsonPath))
+        var authJsonPath = ResolveAuthJsonPath();
+        Console.WriteLine($"DbSeeder: Resolved auth.json path: {authJsonPath ?? "<not found>"}");
+
+        if (string.IsNullOrWhiteSpace(authJsonPath) || !File.Exists(authJsonPath))
         {
             Console.WriteLine("Warning: auth.json not found, skipping user creation from JSON");
             return;
@@ -172,17 +312,33 @@ public static class DbSeeder
 
         Console.WriteLine($"DbSeeder: Found {authExport.Users.Count} users in auth.json");
         var usersCreated = 0;
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         
         foreach (var authUser in authExport.Users)
         {
-            var existingUser = await db.Users.SingleOrDefaultAsync(x => x.Name == authUser.Name);
-            if (existingUser is null)
+            var userName = (authUser.Name ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(userName))
             {
-                Console.WriteLine($"DbSeeder: Creating user: {authUser.Name}");
+                Console.WriteLine("DbSeeder: Skipping user with blank name in auth.json");
+                continue;
+            }
+
+            if (!seenNames.Add(userName))
+            {
+                Console.WriteLine($"DbSeeder: Duplicate user name '{userName}' in auth.json, skipping duplicate entry");
+                continue;
+            }
+
+            var existingInDb = await db.Users.AnyAsync(x => x.Name == userName);
+            var existingInLocal = db.Users.Local.Any(x => string.Equals(x.Name, userName, StringComparison.OrdinalIgnoreCase));
+
+            if (!existingInDb && !existingInLocal)
+            {
+                Console.WriteLine($"DbSeeder: Creating user: {userName}");
                 var (salt, hash) = PinHasher.HashPin(authUser.Pin);
                 db.Users.Add(new AppUser
                 {
-                    Name = authUser.Name,
+                    Name = userName,
                     Roles = authUser.Roles,
                     PinSalt = salt,
                     PinHash = hash
@@ -191,7 +347,7 @@ public static class DbSeeder
             }
             else
             {
-                Console.WriteLine($"DbSeeder: User {authUser.Name} already exists");
+                Console.WriteLine($"DbSeeder: User {userName} already exists");
             }
         }
         
@@ -200,9 +356,9 @@ public static class DbSeeder
 
     private static async Task CreateGroupsAndMembershipsFromAuthJson(AppDbContext db)
     {
-        var authJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "auth.json");
-        
-        if (!File.Exists(authJsonPath))
+        var authJsonPath = ResolveAuthJsonPath();
+
+        if (string.IsNullOrWhiteSpace(authJsonPath) || !File.Exists(authJsonPath))
         {
             Console.WriteLine("Warning: auth.json not found, skipping group creation from JSON");
             return;
@@ -290,5 +446,48 @@ public static class DbSeeder
         
         await db.SaveChangesAsync();
         Console.WriteLine("DbSeeder: Group and membership creation completed");
+    }
+
+    private static string? ResolveAuthJsonPath()
+    {
+        var candidates = new List<string>();
+
+        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        var currentDir = Directory.GetCurrentDirectory();
+
+        if (!string.IsNullOrWhiteSpace(baseDir))
+        {
+            candidates.Add(Path.Combine(baseDir, "auth.json"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentDir))
+        {
+            candidates.Add(Path.Combine(currentDir, "auth.json"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(baseDir))
+        {
+            var dir = new DirectoryInfo(baseDir);
+            for (var i = 0; i < 8 && dir is not null; i++)
+            {
+                candidates.Add(Path.Combine(dir.FullName, "auth.json"));
+                dir = dir.Parent;
+            }
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in candidates)
+        {
+            if (!seen.Add(path)) continue;
+            try
+            {
+                if (File.Exists(path)) return path;
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
     }
 }
