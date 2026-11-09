@@ -380,6 +380,42 @@ public sealed class AuthService
         return true;
     }
 
+    public async Task<string?> RotatePlayerSessionAsync(AppUser user)
+    {
+        if (!HasRole(user, "Player")) return null;
+
+        var sessionId = Guid.NewGuid().ToString("N");
+        user.ActiveSessionId = sessionId;
+        await _db.SaveChangesAsync();
+        return sessionId;
+    }
+
+    public async Task ClearPlayerSessionAsync(int userId)
+    {
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null || !HasRole(user, "Player")) return;
+
+        if (!string.IsNullOrWhiteSpace(user.ActiveSessionId))
+        {
+            user.ActiveSessionId = null;
+            await _db.SaveChangesAsync();
+        }
+    }
+
+    public async Task<bool> IsSessionValidAsync(ClaimsPrincipal principal)
+    {
+        var rawUserId = principal.FindFirst("uid")?.Value;
+        if (!int.TryParse(rawUserId, out var userId) || userId <= 0) return false;
+
+        var user = await _db.Users.SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return false;
+        if (!HasRole(user, "Player")) return true;
+
+        var claimSessionId = principal.FindFirst("sid")?.Value;
+        if (string.IsNullOrWhiteSpace(claimSessionId)) return false;
+        return string.Equals(user.ActiveSessionId, claimSessionId, StringComparison.Ordinal);
+    }
+
     private static bool IsValidPin(string pin)
         => (pin.Length == 4 || pin.Length == 6) && pin.All(char.IsDigit);
 
@@ -389,13 +425,18 @@ public sealed class AuthService
         return roles.Any(r => string.Equals(r, role, StringComparison.OrdinalIgnoreCase));
     }
 
-    public static ClaimsPrincipal BuildPrincipal(AppUser user)
+    public static ClaimsPrincipal BuildPrincipal(AppUser user, string? activeSessionId = null)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.Name, user.Name),
             new("uid", user.Id.ToString())
         };
+
+        if (!string.IsNullOrWhiteSpace(activeSessionId))
+        {
+            claims.Add(new Claim("sid", activeSessionId));
+        }
 
         var roles = (user.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var role in roles)

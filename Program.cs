@@ -108,10 +108,27 @@ namespace Draughts
                             Console.WriteLine($"Cookie signed in: {context.Principal?.Identity?.Name}");
                             return Task.CompletedTask;
                         },
-                        OnValidatePrincipal = context =>
+                        OnValidatePrincipal = async context =>
                         {
                             Console.WriteLine($"Cookie validating principal: {context.Principal?.Identity?.Name}");
-                            return Task.CompletedTask;
+
+                            try
+                            {
+                                var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
+                                var principal = context.Principal;
+                                if (principal is null || !await authService.IsSessionValidAsync(principal))
+                                {
+                                    Console.WriteLine($"Cookie validation rejected: {context.Principal?.Identity?.Name}");
+                                    context.RejectPrincipal();
+                                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Cookie validation error: {ex.Message}");
+                                context.RejectPrincipal();
+                                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                            }
                         }
                     };
                 });
@@ -256,7 +273,7 @@ namespace Draughts
                 });
             });
 
-            app.MapGet("/logout", async (HttpContext ctx, DraughtsService Draughts, GameLogService gameLog) =>
+            app.MapGet("/logout", async (HttpContext ctx, DraughtsService Draughts, GameLogService gameLog, AuthService auth) =>
             {
                 var raw = ctx.User?.FindFirst("uid")?.Value;
                 var userName = ctx.User?.Identity?.Name ?? "Unknown";
@@ -265,6 +282,7 @@ namespace Draughts
                 {
                     Draughts.RemoveGamesForUser(uid);
                     _ = gameLog.LogAsync($"Player logout: {userName} (ID: {uid})");
+                    await auth.ClearPlayerSessionAsync(uid);
                 }
                 
                 // Clear all authentication cookies
@@ -941,7 +959,8 @@ namespace Draughts
                         return Results.Json(new { success = false, message = "User validation failed" });
                     }
 
-                    var principal = AuthService.BuildPrincipal(user);
+                    var activeSessionId = await auth.RotatePlayerSessionAsync(user);
+                    var principal = AuthService.BuildPrincipal(user, activeSessionId);
                     
                     // Get the MaxLoginHrs setting and use it for cookie expiration
                     var maxLoginHrs = await settings.GetMaxLoginHrsAsync();
@@ -994,7 +1013,8 @@ namespace Draughts
 
                     Console.WriteLine($"Login debug: Authentication successful for user '{user.Name}' (ID: {user.Id})");
                     
-                    var principal = AuthService.BuildPrincipal(user);
+                    var activeSessionId = await auth.RotatePlayerSessionAsync(user);
+                    var principal = AuthService.BuildPrincipal(user, activeSessionId);
                     Console.WriteLine($"Login debug: About to sign in principal");
                     
                     // Get the MaxLoginHrs setting and use it for cookie expiration

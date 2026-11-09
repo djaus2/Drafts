@@ -37,4 +37,7 @@ public sealed class AppUser
 
     [MaxLength(16)]
     public string? AdminDesktopFallbackTtsRegion { get; set; }
+
+    [MaxLength(64)]
+    public string? ActiveSessionId { get; set; }
 }

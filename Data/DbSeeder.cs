@@ -135,6 +135,11 @@ public static class DbSeeder
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"AdminDesktopFallbackTtsRegion\" TEXT NULL");
         }
 
+        if (!await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM pragma_table_info('Users') WHERE name='ActiveSessionId'").AnyAsync())
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"ActiveSessionId\" TEXT NULL");
+        }
+
         await db.SaveChangesAsync();
 
         // Create groups and memberships from auth.json (both for new and existing databases)
