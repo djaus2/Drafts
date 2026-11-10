@@ -5,7 +5,7 @@
 @using Draughts.Services
 @using Draughts.Data
 @inject AuthService Auth
-@inject IHttpContextAccessor HttpContextAccessor
+@inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject DraughtsService GameService
@@ -15,16 +15,14 @@
 
 <PageTitleHeading Title="Admin" HeadingLevel="2" />
 
-<p>You are logged in as <b>@(HttpContextAccessor.HttpContext?.User?.Identity?.Name)</b>.</p>
+<p>You are logged in as <b>@_currentUserName</b>.</p>
 
 <div style="display:flex;flex-direction:column;gap:6px">
     <a href="/admin/users">Manage players</a>
     <a href="/admin/groups">Manage groups</a>
     <a href="/player">Reset your password</a>
     <button type="button" @onclick="OpenLogViewer" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">View game logs</button>
-    <form method="get" action="/api/admin/download-database" style="display:inline;">
-    <button type="submit" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
-    </form>
+    <button type="button" @onclick="DownloadDatabaseBackup" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
     <button type="button" @onclick="ResetDatabase" style="text-align:left;padding:0;border:none;background:none;color:red;text-decoration:underline;cursor:pointer;">⚠️ Reset database (delete all data)</button>
 </div>
 
@@ -348,6 +346,8 @@ else
 
 @code {
     private int _creatorPlayerNumber = 1;
+    private int? _currentUserId;
+    private string _currentUserName = "Unknown";
     // private string _currentPin = "";
     // private string _newPin = "";
     // private string _pinMessage = "";
@@ -451,6 +451,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var principal = authState.User;
+        _currentUserName = principal?.Identity?.Name ?? "Unknown";
+        var uid = principal?.FindFirst("uid")?.Value;
+        if (int.TryParse(uid, out var parsedId))
+        {
+            _currentUserId = parsedId;
+        }
+
         var users = await Auth.ListUsersAsync();
         _userNames = users.ToDictionary(x => x.Id, x => x.Name ?? "");
         
@@ -887,6 +896,26 @@ else
         await LoadLogs();
     }
 
+    private async Task DownloadDatabaseBackup()
+    {
+        try
+        {
+            var contextId = await JS.InvokeAsync<string>("DraughtsAuth.getContextId");
+            if (string.IsNullOrWhiteSpace(contextId))
+            {
+                _settingsMessage = "Download failed: no active login context.";
+                return;
+            }
+
+            var encoded = Uri.EscapeDataString(contextId);
+            Nav.NavigateTo($"/api/admin/download-database?contextId={encoded}", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _settingsMessage = $"Download failed: {ex.Message}";
+        }
+    }
+
     private void CloseLogViewer()
     {
         _showLogViewer = false;
@@ -989,16 +1018,18 @@ else
     
     private int? GetCurrentUserId()
     {
-        var user = HttpContextAccessor.HttpContext?.User;
-        var raw = user?.FindFirst("uid")?.Value;
-        if (int.TryParse(raw, out var id)) return id;
+        if (_currentUserId.HasValue) return _currentUserId;
         
-        // Fallback: lookup by username if uid claim not found
-        var name = user?.Identity?.Name;
+        // Fallback: lookup by current principal name
+        var name = _currentUserName;
         if (!string.IsNullOrWhiteSpace(name))
         {
             var appUser = Auth.GetUserByNameAsync(name).GetAwaiter().GetResult();
-            if (appUser != null) return appUser.Id;
+            if (appUser != null)
+            {
+                _currentUserId = appUser.Id;
+                return appUser.Id;
+            }
         }
         
         return null;

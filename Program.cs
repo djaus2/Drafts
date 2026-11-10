@@ -2,8 +2,6 @@ using Draughts.Components;
 using Draughts.Data;
 using Draughts.Services;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using System.IO;
@@ -79,63 +77,6 @@ namespace Draughts
             builder.Services.AddScoped<DbAuthenticationStateProvider>();
             builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<DbAuthenticationStateProvider>());
 
-            builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-                .AddCookie(options =>
-                {
-                    options.LoginPath = "/login";
-                    options.LogoutPath = "/legacy-logout";
-                    options.AccessDeniedPath = "/login";
-                    
-                    // Azure-specific cookie settings
-                    if (builder.Environment.IsProduction())
-                    {
-                        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-                        options.Cookie.SameSite = SameSiteMode.Lax;
-                        options.Cookie.HttpOnly = true;
-                    }
-                    
-                    // Expiration is set per-login based on MaxLoginHrs setting
-                    // No sliding expiration - session expires at exact time
-                    options.SlidingExpiration = false;
-                    
-                    // Add logging for debugging
-                    options.Events = new CookieAuthenticationEvents
-                    {
-                        OnSigningIn = context =>
-                        {
-                            Console.WriteLine($"Cookie signing in: {context.Principal?.Identity?.Name}");
-                            return Task.CompletedTask;
-                        },
-                        OnSignedIn = context =>
-                        {
-                            Console.WriteLine($"Cookie signed in: {context.Principal?.Identity?.Name}");
-                            return Task.CompletedTask;
-                        },
-                        OnValidatePrincipal = async context =>
-                        {
-                            Console.WriteLine($"Cookie validating principal: {context.Principal?.Identity?.Name}");
-
-                            try
-                            {
-                                var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
-                                var principal = context.Principal;
-                                if (principal is null || !await authService.IsSessionValidAsync(principal))
-                                {
-                                    Console.WriteLine($"Cookie validation rejected: {context.Principal?.Identity?.Name}");
-                                    context.RejectPrincipal();
-                                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"Cookie validation error: {ex.Message}");
-                                context.RejectPrincipal();
-                                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                            }
-                        }
-                    };
-                });
-
             builder.Services.AddAuthorization();
 
             // Register the game service so multiple components can join the same game.
@@ -188,32 +129,38 @@ namespace Draughts
 
             app.UseAntiforgery();
 
-            app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapStaticAssets();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
-            app.MapGet("/api/admin/download-database", (HttpContext ctx) =>
+            app.MapGet("/api/admin/download-database", async (HttpContext ctx, AuthService auth, AppDbContext db, string? contextId) =>
             {
-                Console.WriteLine($"Download request received. User: {ctx.User.Identity?.Name}, Authenticated: {ctx.User.Identity?.IsAuthenticated}, IsAdmin: {ctx.User.IsInRole("Admin")}");
-                
-                if (!ctx.User.IsInRole("Admin"))
+                var user = await auth.GetUserByContextIdAsync(contextId ?? string.Empty, touch: true);
+                var isAdmin = user is not null && (user.Roles ?? string.Empty)
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase));
+
+                Console.WriteLine($"Download request received. ContextId present: {!string.IsNullOrWhiteSpace(contextId)}, User: {user?.Name}, IsAdmin: {isAdmin}");
+
+                if (!isAdmin)
                 {
-                    Console.WriteLine("User not in Admin role - forbidding access");
-                    return Results.Forbid();
+                    Console.WriteLine("Download request rejected: invalid DB auth context or non-admin user");
+                    return Results.Unauthorized();
                 }
 
                 try
                 {
-                    var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "auth.db");
-                    Console.WriteLine($"Database path: {dbPath}");
+                    var connectionString = db.Database.GetDbConnection().ConnectionString;
+                    var dbPath = ResolveSqliteDataSourcePath(connectionString);
+                    Console.WriteLine($"Database path from connection string: {dbPath ?? "<unresolved>"}");
+                    Console.WriteLine($"Connection string: {connectionString}");
                     
-                    if (!System.IO.File.Exists(dbPath))
+                    if (string.IsNullOrWhiteSpace(dbPath) || !System.IO.File.Exists(dbPath))
                     {
                         Console.WriteLine("Database file not found");
-                        return Results.NotFound("Database file not found");
+                        return Results.NotFound("Database file not found at resolved path");
                     }
 
                     // Create a temporary copy to avoid file locking issues
@@ -251,7 +198,23 @@ namespace Draughts
                     Console.WriteLine($"Database download error: {ex}");
                     return Results.Problem($"Error downloading database: {ex.Message}");
                 }
-            }).RequireAuthorization(builder => builder.RequireRole("Admin"));
+
+                static string? ResolveSqliteDataSourcePath(string? connectionString)
+                {
+                    if (string.IsNullOrWhiteSpace(connectionString)) return null;
+
+                    var parts = connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    var dataSourcePart = parts.FirstOrDefault(p =>
+                        p.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase));
+
+                    if (string.IsNullOrWhiteSpace(dataSourcePart)) return null;
+
+                    var value = dataSourcePart.Substring("Data Source=".Length).Trim().Trim('"');
+                    if (string.IsNullOrWhiteSpace(value)) return null;
+
+                    return value;
+                }
+            });
 
             app.MapGet("/debug/admin-check", async (AppDbContext db) =>
             {
@@ -936,9 +899,6 @@ namespace Draughts
                     await auth.ClearIsLoggedInAsync(uid);
                 }
 
-                // Clear all authentication cookies
-                await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                
                 // Clear all cookies including any persistent auth cookies
                 foreach (var cookie in ctx.Request.Cookies.Keys.ToList())
                 {
@@ -970,9 +930,6 @@ namespace Draughts
                     await auth.ClearIsLoggedInAsync(uid);
                 }
 
-                // Clear all authentication cookies
-                await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                
                 // Clear all cookies including any persistent auth cookies
                 foreach (var cookie in ctx.Request.Cookies.Keys.ToList())
                 {

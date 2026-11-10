@@ -37,10 +37,6 @@ public static class DbSeeder
                     AllowPlayerPinChange = true
                 });
             }
-
-            Console.WriteLine("DbSeeder: Creating users from auth.json...");
-            await CreateUsersFromAuthJson(db);
-            Console.WriteLine("DbSeeder: User creation completed");
         }
         else
         {
@@ -163,8 +159,9 @@ public static class DbSeeder
 
         await db.SaveChangesAsync();
 
-        // Create groups and memberships from auth.json (both for new and existing databases)
+        // Keep DB aligned with auth.json on every startup (groups first, then users)
         await CreateGroupsAndMembershipsFromAuthJson(db);
+        await CreateUsersFromAuthJson(db);
 
         await db.SaveChangesAsync();
     }
@@ -367,9 +364,9 @@ public static class DbSeeder
         var json = await File.ReadAllTextAsync(authJsonPath);
         var authExport = JsonSerializer.Deserialize<AuthExport>(json);
         
-        if (authExport?.Groups == null)
+        if (authExport?.Groups == null || authExport.Users == null)
         {
-            Console.WriteLine("Warning: No groups found in auth.json");
+            Console.WriteLine("Warning: Missing users/groups in auth.json");
             return;
         }
 
@@ -379,7 +376,7 @@ public static class DbSeeder
         foreach (var authGroup in authExport.Groups)
         {
             var existingGroup = await db.Groups.FirstOrDefaultAsync(x => x.Name == authGroup.Name);
-            Group group;
+            Group? group = null;
             
             if (existingGroup is null)
             {
@@ -388,6 +385,21 @@ public static class DbSeeder
                 if (ownerUserAuth != null)
                 {
                     var ownerUser = await db.Users.SingleOrDefaultAsync(x => x.Name == ownerUserAuth.Name);
+                    if (ownerUser == null)
+                    {
+                        var (ownerSalt, ownerHash) = PinHasher.HashPin(ownerUserAuth.Pin);
+                        ownerUser = new AppUser
+                        {
+                            Name = ownerUserAuth.Name,
+                            Roles = ownerUserAuth.Roles,
+                            PinSalt = ownerSalt,
+                            PinHash = ownerHash
+                        };
+                        db.Users.Add(ownerUser);
+                        await db.SaveChangesAsync();
+                        Console.WriteLine($"DbSeeder: Created missing owner user '{ownerUser.Name}' for group '{authGroup.Name}'");
+                    }
+
                     if (ownerUser != null)
                     {
                         group = new Group
@@ -403,7 +415,7 @@ public static class DbSeeder
                     }
                     else
                     {
-                        Console.WriteLine($"DbSeeder: Owner user '{ownerUserAuth.Name}' not found for group '{authGroup.Name}'");
+                        Console.WriteLine($"DbSeeder: Owner user '{ownerUserAuth.Name}' unavailable for group '{authGroup.Name}'");
                         continue;
                     }
                 }
@@ -419,27 +431,65 @@ public static class DbSeeder
                 Console.WriteLine($"DbSeeder: Using existing group '{group.Name}' with ID {group.Id}");
             }
 
-            // Add members (clear existing members first to avoid duplicates)
-            var existingMembers = await db.GroupMembers.Where(gm => gm.GroupId == group.Id).ToListAsync();
-            db.GroupMembers.RemoveRange(existingMembers);
-            await db.SaveChangesAsync();
+            if (group is null)
+            {
+                continue;
+            }
 
             foreach (var memberName in authGroup.Members)
             {
-                var memberUser = await db.Users.SingleOrDefaultAsync(x => x.Name == memberName);
+                var safeMemberName = (memberName ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(safeMemberName))
+                {
+                    continue;
+                }
+
+                var memberUser = await db.Users.SingleOrDefaultAsync(x => x.Name == safeMemberName);
                 if (memberUser != null)
                 {
-                    db.GroupMembers.Add(new GroupMember
+                    var exists = await db.GroupMembers.AnyAsync(gm => gm.GroupId == group.Id && gm.UserId == memberUser.Id);
+                    if (!exists)
                     {
-                        GroupId = group.Id,
-                        UserId = memberUser.Id,
-                        JoinedAtUtc = DateTime.UtcNow
-                    });
-                    Console.WriteLine($"DbSeeder: Added member '{memberName}' (ID: {memberUser.Id}) to group '{group.Name}'");
+                        db.GroupMembers.Add(new GroupMember
+                        {
+                            GroupId = group.Id,
+                            UserId = memberUser.Id,
+                            JoinedAtUtc = DateTime.UtcNow
+                        });
+                        Console.WriteLine($"DbSeeder: Added member '{safeMemberName}' (ID: {memberUser.Id}) to group '{group.Name}'");
+                    }
                 }
                 else
                 {
-                    Console.WriteLine($"DbSeeder: Member user '{memberName}' not found for group '{authGroup.Name}'");
+                    // Groups-first requirement: create missing users encountered while processing groups
+                    var memberAuthUser = authExport.Users.FirstOrDefault(u =>
+                        string.Equals(u.Name, safeMemberName, StringComparison.OrdinalIgnoreCase));
+
+                    if (memberAuthUser != null)
+                    {
+                        var (salt, hash) = PinHasher.HashPin(memberAuthUser.Pin);
+                        memberUser = new AppUser
+                        {
+                            Name = safeMemberName,
+                            Roles = memberAuthUser.Roles,
+                            PinSalt = salt,
+                            PinHash = hash
+                        };
+                        db.Users.Add(memberUser);
+                        await db.SaveChangesAsync();
+
+                        db.GroupMembers.Add(new GroupMember
+                        {
+                            GroupId = group.Id,
+                            UserId = memberUser.Id,
+                            JoinedAtUtc = DateTime.UtcNow
+                        });
+                        Console.WriteLine($"DbSeeder: Created missing user '{safeMemberName}' and added to group '{group.Name}'");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"DbSeeder: Member user '{safeMemberName}' not found in auth.json for group '{authGroup.Name}'");
+                    }
                 }
             }
         }

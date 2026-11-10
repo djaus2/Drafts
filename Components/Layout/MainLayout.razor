@@ -143,8 +143,9 @@
                 return false;
             }
 
-            // DB is authoritative for logged-in status
-            return await Auth.IsSessionValidAsync(authState!.User);
+            // DB context is authoritative for tab-scoped login status
+            var contextId = await JSRuntime.InvokeAsync<string>("DraughtsAuth.getContextId");
+            return await Auth.IsContextValidAsync(contextId, touch: true);
         }
         catch
         {

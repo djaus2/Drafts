@@ -470,6 +470,35 @@ public sealed class AuthService
         return await IsUserLoggedInAsync(userId);
     }
 
+    public async Task<bool> IsContextValidAsync(string contextId, bool touch)
+    {
+        contextId = (contextId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(contextId)) return false;
+
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var ctx = await _db.LoginContexts
+                .Include(x => x.User)
+                .SingleOrDefaultAsync(x => x.ContextId == contextId && x.IsActive);
+
+            if (ctx?.User is null) return false;
+            if (!ctx.User.IsLoggedIn) return false;
+
+            if (touch)
+            {
+                ctx.LastSeenUtc = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+
+            return true;
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
+    }
+
     public async Task<DbContextLoginResult> TryDbContextLoginAsync(string name, string pin)
     {
         name = (name ?? string.Empty).Trim();
