@@ -25,6 +25,12 @@ public sealed class AuthService
         AppUser? User,
         string? Error);
 
+    public sealed record LoggedInGroupMemberDto(
+        int GroupId,
+        string GroupName,
+        int UserId,
+        string UserName);
+
     public async Task<AppUser?> ValidateLoginAsync(string name, string pin)
     {
         name = (name ?? string.Empty).Trim();
@@ -205,6 +211,86 @@ public sealed class AuthService
 
     public async Task<List<Group>> GetUserGroupsAsync(int userId)
         => await _db.Groups.Include(g => g.OwnerUser).Include(g => g.Members).Where(g => g.Members.Any(m => m.UserId == userId)).OrderBy(g => g.Name).ToListAsync();
+
+    public async Task<List<LoggedInGroupMemberDto>> GetLoggedInUsersInUserGroupsAsync(int userId)
+    {
+        await LoginStateGuard.WaitAsync();
+        try
+        {
+            var myGroupIds = await _db.GroupMembers
+                .AsNoTracking()
+                .Where(x => x.UserId == userId)
+                .Select(x => x.GroupId)
+                .Distinct()
+                .ToListAsync();
+
+            if (myGroupIds.Count == 0)
+            {
+                return new List<LoggedInGroupMemberDto>();
+            }
+
+            var activeUserIds = await _db.LoginContexts
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .Select(x => x.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            if (activeUserIds.Count == 0)
+            {
+                return new List<LoggedInGroupMemberDto>();
+            }
+
+            var groupMembers = await _db.GroupMembers
+                .AsNoTracking()
+                .Where(x => myGroupIds.Contains(x.GroupId) && x.UserId != userId)
+                .Select(x => new { x.GroupId, x.UserId })
+                .ToListAsync();
+
+            var activeUserIdSet = activeUserIds.ToHashSet();
+            var activeMembers = groupMembers
+                .Where(x => activeUserIdSet.Contains(x.UserId))
+                .ToList();
+
+            if (activeMembers.Count == 0)
+            {
+                return new List<LoggedInGroupMemberDto>();
+            }
+
+            var groupIds = activeMembers.Select(x => x.GroupId).Distinct().ToList();
+            var userIds = activeMembers.Select(x => x.UserId).Distinct().ToList();
+
+            var groupNames = await _db.Groups
+                .AsNoTracking()
+                .Where(g => groupIds.Contains(g.Id))
+                .Select(g => new { g.Id, g.Name })
+                .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+            var userNames = await _db.Users
+                .AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.Name })
+                .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+            var result = activeMembers
+                .Where(x => groupNames.ContainsKey(x.GroupId) && userNames.ContainsKey(x.UserId))
+                .Select(x => new LoggedInGroupMemberDto(
+                    x.GroupId,
+                    groupNames[x.GroupId],
+                    x.UserId,
+                    userNames[x.UserId]))
+                .Distinct()
+                .OrderBy(x => x.GroupName)
+                .ThenBy(x => x.UserName)
+                .ToList();
+
+            return result;
+        }
+        finally
+        {
+            LoginStateGuard.Release();
+        }
+    }
 
     public async Task<Group?> CreateGroupAsync(string name, string? description, int ownerUserId)
     {
@@ -659,7 +745,7 @@ public sealed class AuthService
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
 
-        var identity = new ClaimsIdentity(claims, "Cookies");
+        var identity = new ClaimsIdentity(claims, "DbContext");
         var principal = new ClaimsPrincipal(identity);
         
         // Debug logging for Azure

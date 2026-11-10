@@ -52,6 +52,30 @@ else
     </div>
 }
 
+<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Who else is logged in</h4>
+
+@if (_loggedInGroupMembers.Any())
+{
+    <div style="max-width:420px;font-size:14px;margin-bottom:12px;">
+        @foreach (var group in _loggedInGroupMembers.GroupBy(x => new { x.GroupId, x.GroupName }).OrderBy(x => x.Key.GroupName))
+        {
+            <div style="margin-bottom:8px;">
+                <div style="font-weight:bold;">@group.Key.GroupName (@group.Count() online)</div>
+                @foreach (var member in group.OrderBy(x => x.UserName))
+                {
+                    <div style="padding:2px 0 2px 12px;">• @member.UserName</div>
+                }
+            </div>
+        }
+    </div>
+}
+else if (_userGroups?.Any() == true)
+{
+    <div style="max-width:420px;font-size:12px;opacity:0.85;margin-bottom:12px;">
+        Nobody else in your groups is currently logged in.
+    </div>
+}
+
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voice</h4>
 
 @if (_isPhoneClient)
@@ -440,6 +464,7 @@ else
 
     // Group selection
     private List<Draughts.Data.Group>? _userGroups;
+    private List<AuthService.LoggedInGroupMemberDto> _loggedInGroupMembers = new();
     private int _selectedGroupId = 0;
     private int? _cachedUserId = null;
 
@@ -614,6 +639,7 @@ else
             if (_cachedUserId.HasValue)
             {
                 _userGroups = await Auth.GetUserGroupsAsync(_cachedUserId.Value);
+                await RefreshLoggedInGroupMembers();
                 
                 // Load AI difficulty preference
                 await LoadAiDifficultyPreference();
@@ -646,12 +672,13 @@ else
             try
             {
                 await RefreshGames();
+                await RefreshLoggedInGroupMembers();
                 _ = InvokeAsync(StateHasChanged);
             }
             catch
             {
             }
-        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        }, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
         
         // Initialize session expiration tracking
         await InitializeSessionTimeout();
@@ -1343,6 +1370,24 @@ else
         
         System.Diagnostics.Debug.WriteLine("GetCurrentUserId debug: All methods failed, returning null");
         return null;
+    }
+
+    private async Task RefreshLoggedInGroupMembers()
+    {
+        if (!_cachedUserId.HasValue)
+        {
+            _loggedInGroupMembers = new List<AuthService.LoggedInGroupMemberDto>();
+            return;
+        }
+
+        try
+        {
+            _loggedInGroupMembers = await Auth.GetLoggedInUsersInUserGroupsAsync(_cachedUserId.Value);
+        }
+        catch
+        {
+            _loggedInGroupMembers = new List<AuthService.LoggedInGroupMemberDto>();
+        }
     }
 
     private async Task LoadAiDifficultyPreference()
