@@ -79,15 +79,22 @@
                 return;
             }
 
+            var authState = await DbAuthStateProvider.GetAuthenticationStateAsync();
+            var isAdmin = authState.User.IsInRole("Admin");
+
+            if (isAdmin)
+            {
+                Nav.NavigateTo("/admin");
+                return;
+            }
+
             if (!string.IsNullOrWhiteSpace(ReturnUrl) && Uri.IsWellFormedUriString(ReturnUrl, UriKind.Relative))
             {
                 Nav.NavigateTo(ReturnUrl);
                 return;
             }
 
-            var authState = await DbAuthStateProvider.GetAuthenticationStateAsync();
-            var isAdmin = authState.User.IsInRole("Admin");
-            Nav.NavigateTo(isAdmin ? "/admin" : "/player");
+            Nav.NavigateTo("/player");
         }
         finally
         {
