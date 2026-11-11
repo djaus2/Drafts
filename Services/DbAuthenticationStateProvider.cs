@@ -56,14 +56,14 @@ public sealed class DbAuthenticationStateProvider : AuthenticationStateProvider
         return (true, false, false, null);
     }
 
-    public async Task SignOutAsync()
+    public async Task SignOutAsync(bool isTimeout = false)
     {
         try
         {
             var contextId = await _js.InvokeAsync<string>("DraughtsAuth.getContextId");
             if (!string.IsNullOrWhiteSpace(contextId))
             {
-                await _auth.LogoutByContextIdAsync(contextId);
+                await _auth.LogoutByContextIdAsync(contextId, isTimeout);
             }
         }
         catch

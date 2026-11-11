@@ -684,10 +684,14 @@ public sealed class AuthService
         }
     }
 
-    public async Task LogoutByContextIdAsync(string contextId)
+    public async Task LogoutByContextIdAsync(string contextId, bool isTimeout = false)
     {
         contextId = (contextId ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(contextId)) return;
+
+        var shouldLog = false;
+        var logUserId = 0;
+        var logUserName = string.Empty;
 
         await LoginStateGuard.WaitAsync();
         try
@@ -710,10 +714,24 @@ public sealed class AuthService
             }
 
             await _db.SaveChangesAsync();
+
+            shouldLog = true;
+            logUserId = ctx.User.Id;
+            logUserName = ctx.User.Name ?? string.Empty;
         }
         finally
         {
             LoginStateGuard.Release();
+        }
+
+        if (shouldLog && logUserId > 0)
+        {
+            var logType = isTimeout ? LogType.PlayerTimeoutLogout : LogType.PlayerLogout;
+            var detail = isTimeout
+                ? $"Player {logUserName} logged out (session timeout)"
+                : $"Player {logUserName} logged out (user initiated)";
+
+            _ = _gameLog.LogPlayerActionAsync(logType, logUserId, detail);
         }
     }
 

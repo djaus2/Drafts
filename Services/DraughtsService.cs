@@ -98,12 +98,12 @@ namespace Draughts.Services
                 .ToList();
         }
 
-        public string CreateGame(int userId, int creatorPlayerNumber = 1, bool adminMode = false)
+        public string CreateGame(int userId, int creatorPlayerNumber = 1, bool adminMode = false, bool isAiGame = false)
         {
-            return CreateGame(userId, "", creatorPlayerNumber, adminMode, null);
+            return CreateGame(userId, "", creatorPlayerNumber, adminMode, null, isAiGame);
         }
 
-        public string CreateGame(int userId, string creatorName, int creatorPlayerNumber = 1, bool adminMode = false, int? groupId = null)
+        public string CreateGame(int userId, string creatorName, int creatorPlayerNumber = 1, bool adminMode = false, int? groupId = null, bool isAiGame = false)
         {
             var existing = FindActiveGameIdForUser(userId);
             if (!string.IsNullOrWhiteSpace(existing))
@@ -116,7 +116,8 @@ namespace Draughts.Services
             var game = new DraughtsGame(id)
             {
                 CreatedByUserId = userId,
-                GroupId = groupId
+                GroupId = groupId,
+                IsAiGame = isAiGame
             };
 
             game.AdminMode = adminMode;
@@ -149,6 +150,12 @@ namespace Draughts.Services
 
             // Log game creation
             _ = _gameLog.LogGameEventAsync(LogType.GameCreated, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Game created by {displayName}", null, groupId);
+
+            if (isAiGame)
+            {
+                var startDetails = $"Game started: initiator={displayName} (UserId={userId}), acceptor=AI";
+                _ = _gameLog.LogGameEventAsync(LogType.GameStarted, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), startDetails, null, groupId);
+            }
 
             OnGameUpdated(id);
             return id;
@@ -228,7 +235,10 @@ namespace Draughts.Services
                     
                     if (wasSecondPlayer)
                     {
-                        _ = _gameLog.LogGameEventAsync(LogType.GameStarted, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Game started - {userName ?? $"User {userId}"} joined as Player1", null, game.GroupId);
+                        var p1Name = string.IsNullOrWhiteSpace(game.Player1Name) ? $"User {game.Player1UserId}" : game.Player1Name;
+                        var p2Name = string.IsNullOrWhiteSpace(game.Player2Name) ? $"User {game.Player2UserId}" : game.Player2Name;
+                        var details = $"Game started: initiator={p2Name} (UserId={game.Player2UserId}), acceptor={p1Name} (UserId={game.Player1UserId})";
+                        _ = _gameLog.LogGameEventAsync(LogType.GameStarted, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), details, null, game.GroupId);
                     }
                     else
                     {
@@ -265,7 +275,10 @@ namespace Draughts.Services
                     
                     if (wasSecondPlayer)
                     {
-                        _ = _gameLog.LogGameEventAsync(LogType.GameStarted, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), $"Game started - {userName ?? $"User {userId}"} joined as Player2", null, game.GroupId);
+                        var p1Name = string.IsNullOrWhiteSpace(game.Player1Name) ? $"User {game.Player1UserId}" : game.Player1Name;
+                        var p2Name = string.IsNullOrWhiteSpace(game.Player2Name) ? $"User {game.Player2UserId}" : game.Player2Name;
+                        var details = $"Game started: initiator={p1Name} (UserId={game.Player1UserId}), acceptor={p2Name} (UserId={game.Player2UserId})";
+                        _ = _gameLog.LogGameEventAsync(LogType.GameStarted, userId, int.Parse(id, System.Globalization.NumberStyles.HexNumber), details, null, game.GroupId);
                     }
                     else
                     {
@@ -785,7 +798,7 @@ namespace Draughts.Services
             OnGameUpdated(id);
         }
 
-        private static void MarkFinished(DraughtsGame game)
+        private void MarkFinished(DraughtsGame game)
         {
             if (game.State == GameState.Finished)
             {
@@ -800,18 +813,25 @@ namespace Draughts.Services
 
             if (winner != 0)
             {
-                game.WinnerPlayer = winner;
+                MarkFinishedWithWinner(game, winner, "normal");
+                return;
             }
 
             if (!game.GameOverMessageSent)
             {
                 game.GameOverMessageSent = true;
-                var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
+                var text = "Game over.";
                 game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
+
+                var gameNum = int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber);
+                var drawDetails = game.IsAiGame
+                    ? $"Game outcome: draw/no winner, reason=normal, players={(string.IsNullOrWhiteSpace(game.Player1Name) ? $"User {game.Player1UserId}" : game.Player1Name)} vs AI"
+                    : $"Game outcome: draw/no winner, reason=normal";
+                _ = _gameLog.LogGameEventAsync(LogType.GameEnded, game.Player1UserId ?? 0, gameNum, drawDetails, null, game.GroupId);
             }
         }
 
-        private void MarkFinishedWithWinner(DraughtsGame game, int winner)
+        private void MarkFinishedWithWinner(DraughtsGame game, int winner, string outcomeReason = "normal")
         {
             if (game.State == GameState.Finished)
             {
@@ -840,20 +860,27 @@ namespace Draughts.Services
                 
                 if (winner == 0)
                 {
-                    _ = _gameLog.LogGameEventAsync(LogType.GameEnded, game.Player1UserId ?? 0, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), "Draw/No winner", null, game.GroupId);
+                    var drawDetails = game.IsAiGame
+                        ? $"Game outcome: draw/no winner, reason={outcomeReason}, players={game.Player1Name} vs AI"
+                        : $"Game outcome: draw/no winner, reason={outcomeReason}, players={winnerName} vs {loserName}";
+                    _ = _gameLog.LogGameEventAsync(LogType.GameEnded, game.Player1UserId ?? 0, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), drawDetails, null, game.GroupId);
                 }
                 else
                 {
                     var winnerUserId = winner == 1 ? game.Player1UserId : game.Player2UserId;
                     var loserUserId = winner == 1 ? game.Player2UserId : game.Player1UserId;
+
+                    var outcomeDetails = game.IsAiGame
+                        ? $"Game outcome: winner={winnerName} (Player{winner}), loser=AI, reason={outcomeReason}"
+                        : $"Game outcome: winner={winnerName} (Player{winner}), loser={loserName} (Player{loser}), reason={outcomeReason}";
                     
-                    if (winnerUserId.HasValue && loserUserId.HasValue)
+                    if (winnerUserId.HasValue && loserUserId.HasValue && !game.IsAiGame)
                     {
-                        _ = _gameLog.LogWinAsync(winnerUserId.Value, loserUserId.Value, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), $"Winner: {winnerName} (Player{winner}), Loser: {loserName} (Player{loser})", game.GroupId);
+                        _ = _gameLog.LogWinAsync(winnerUserId.Value, loserUserId.Value, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), outcomeDetails, game.GroupId);
                     }
                     else
                     {
-                        _ = _gameLog.LogGameEventAsync(LogType.GameEnded, winnerUserId ?? 0, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), $"Winner: {winnerName} (Player{winner}), Loser: {loserName} (Player{loser})", null, game.GroupId);
+                        _ = _gameLog.LogGameEventAsync(LogType.GameEnded, winnerUserId ?? 0, int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber), outcomeDetails, null, game.GroupId);
                     }
                 }
             }
@@ -1472,7 +1499,7 @@ namespace Draughts.Services
                 game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, userId, "System", concessionText));
 
                 // Mark the game as finished with the specified winner
-                MarkFinishedWithWinner(game, winnerPlayer);
+                MarkFinishedWithWinner(game, winnerPlayer, "concession");
                 game.Touch();
             }
 
@@ -1567,6 +1594,8 @@ namespace Draughts.Services
 
         public bool Player1Connected { get; set; } = false;
         public bool Player2Connected { get; set; } = false;
+
+        public bool IsAiGame { get; set; } = false;
 
         public bool HadSecondPlayerConnected { get; set; } = false;
 

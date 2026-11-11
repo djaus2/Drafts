@@ -6,6 +6,7 @@ public enum LogType
     PlayerLogin = 1,
     PlayerLogout = 2,
     PlayerPinChange = 3,
+    PlayerTimeoutLogout = 4,
     
     // Game lifecycle
     GameCreated = 10,

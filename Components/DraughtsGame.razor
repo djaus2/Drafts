@@ -901,14 +901,14 @@ else
             // Create AI game or regular game
             if (_isAiMode)
             {
-                _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1, false, null);
+                _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1, false, null, true);
                 Console.WriteLine($"[DraughtsGame] Created new AI game: {_gameId}");
                 // Navigate with AI parameters preserved
                 Nav.NavigateTo($"/Draughts?gameId={_gameId}&ai=true&aiDifficulty={_aiDifficultyLevel}", forceLoad: false);
             }
             else
             {
-                _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode, _groupId);
+                _gameId = GameService.CreateGame(_currentUserId, _currentUserName, creatorPlayerNumber, adminMode, _groupId, false);
                 Console.WriteLine($"[DraughtsGame] Created new multiplayer game: {_gameId}");
                 var urlParams = $"gameId={_gameId}";
                 if (_groupId.HasValue) urlParams += $"&groupId={_groupId}";
@@ -971,7 +971,7 @@ else
             Nav.NavigateTo("/login", forceLoad: true);
             return;
         }
-        _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1);
+        _gameId = GameService.CreateGame(_currentUserId, _currentUserName, 1, false, null, false);
         Nav.NavigateTo($"/Draughts?gameId={_gameId}", forceLoad: false);
         BeginJoin(_gameId);
         await InvokeAsync(StateHasChanged);
