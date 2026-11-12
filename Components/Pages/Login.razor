@@ -88,7 +88,9 @@
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(ReturnUrl) && Uri.IsWellFormedUriString(ReturnUrl, UriKind.Relative))
+            if (!string.IsNullOrWhiteSpace(ReturnUrl)
+                && Uri.IsWellFormedUriString(ReturnUrl, UriKind.Relative)
+                && !IsAdminRoute(ReturnUrl))
             {
                 Nav.NavigateTo(ReturnUrl);
                 return;
@@ -100,5 +102,14 @@
         {
             _isSubmitting = false;
         }
+    }
+
+    private static bool IsAdminRoute(string returnUrl)
+    {
+        var path = (returnUrl ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        path = path.Split('?', '#')[0];
+        return path.Equals("/admin", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/admin/", StringComparison.OrdinalIgnoreCase);
     }
 }
