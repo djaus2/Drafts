@@ -17,83 +17,93 @@
 
 <p>You are logged in as <b>@_currentUserName</b>.</p>
 
-<div style="display:flex;flex-direction:column;gap:6px">
-    <a href="/admin/users">Manage players</a>
-    <a href="/admin/groups">Manage groups</a>
-    <a href="/player">Reset your password</a>
-    <button type="button" @onclick="OpenLogViewer" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">View game logs</button>
-    <button type="button" @onclick="DownloadDatabaseBackup" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
-    <button type="button" @onclick="ResetDatabase" style="text-align:left;padding:0;border:none;background:none;color:red;text-decoration:underline;cursor:pointer;">⚠️ Reset database (delete all data)</button>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <button @onclick="ShowAdminTopSection" disabled="@(!_showSettingsSection)">Admin: Top</button>
+    <button @onclick="ShowAdminSettingsSection" disabled="@(_showSettingsSection)">Admin: Settings+</button>
 </div>
 
-<div style="max-width:360px;margin-top:12px;">
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
-        <div>Game Initiator is:</div>
-        <label style="display:flex;align-items:center;gap:6px;">
-            <input type="radio" name="creatorColor" value="1" checked="@(_creatorPlayerNumber == 1)" @onchange="(() => _creatorPlayerNumber = 1)" />
-            Black
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;">
-            <input type="radio" name="creatorColor" value="2" checked="@(_creatorPlayerNumber == 2)" @onchange="(() => _creatorPlayerNumber = 2)" />
-            White
-        </label>
+@if (!_showSettingsSection)
+{
+    <div style="display:flex;flex-direction:column;gap:6px">
+        <a href="/admin/users">Manage players</a>
+        <a href="/admin/groups">Manage groups</a>
+        <a href="/player">Reset your password</a>
+        <button type="button" @onclick="OpenLogViewer" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">View game logs</button>
+        <button type="button" @onclick="DownloadDatabaseBackup" style="text-align:left;padding:0;border:none;background:none;color:blue;text-decoration:underline;cursor:pointer;">Download database backup</button>
+        <button type="button" @onclick="ResetDatabase" style="text-align:left;padding:0;border:none;background:none;color:red;text-decoration:underline;cursor:pointer;">⚠️ Reset database (delete all data)</button>
     </div>
-    <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
-</div>
 
-<h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voices</h4>
-
-<div style="max-width:520px">
-    <div style="display:flex;flex-direction:column;gap:8px">
-        <button @onclick="LoadAdminVoicesFromUserGesture" disabled="@_checkingChromeVoices">Load voices</button>
-        <select @key="_adminVoicesLoaded" value="@_adminSelectedLanguage" @onchange="OnAdminLanguageChanged" disabled="@(!_adminVoicesLoaded)">
-            <option value="">All languages</option>
-            @foreach (var l in _adminLanguages)
-            {
-                <option @key="l" value="@l">@FormatLanguageLabel(l)</option>
-            }
-        </select>
-        <select @key="_adminSelectedLanguage" value="@_adminSelectedRegion" @onchange="OnAdminRegionChanged" disabled="@(!_adminRegions.Any())">
-            <option value="">All countries</option>
-            @foreach (var r in _adminRegions)
-            {
-                <option @key="r" value="@r">@FormatRegionLabel(_adminSelectedLanguage, r)</option>
-            }
-        </select>
-        <select @key="@($"{_adminSelectedLanguage}|{_adminSelectedRegion}")" value="@_adminFocusedVoiceKey" @onchange="OnAdminFocusedVoiceChanged" disabled="@(!_adminFilteredVoices.Any())">
-            <option value="">Select a voice</option>
-            @foreach (var v in _adminFilteredVoices)
-            {
-                <option @key="v.Key" value="@v.Key">@v.Label</option>
-            }
-        </select>
-        <div style="font-size:12px;opacity:0.85;">Loaded voices: @_adminAllVoices.Count. Allowed for players: @_adminSelectedVoiceTokens.Count.</div>
-        <div style="font-size:12px;opacity:0.85;">Raw browser voices: @_adminRawVoiceCount.@(_checkingChromeVoices ? " Loading…" : "")</div>
-        @if (_adminFilteredVoices.Any())
-        {
-            <div style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;border:1px solid #ddd;padding:8px;">
-                @foreach (var voice in _adminFilteredVoices)
-                {
-                    <label style="display:flex;align-items:flex-start;gap:8px;">
-                        <input type="checkbox" checked="@_adminSelectedVoiceTokens.Contains(voice.Token)" @onchange="@(e => OnAdminVoiceCheckedChanged(voice, e))" />
-                        <span>@voice.Label</span>
-                    </label>
-                }
-            </div>
-        }
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button @onclick="SelectAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Select filtered</button>
-            <button @onclick="ClearAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Clear filtered</button>
-            <button @onclick="ToggleShowSelectedAdminVoices" disabled="@(!_adminSelectedVoiceTokens.Any())">@(_adminShowSelectedVoicesOnly ? "Show all voices" : "Show selected voices")</button>
-            <button @onclick="SaveAllowedVoices" disabled="@(!_adminAllVoices.Any())">Save allowed voices</button>
+    <div style="max-width:360px;margin-top:12px;">
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+            <div>Game Initiator is:</div>
+            <label style="display:flex;align-items:center;gap:6px;">
+                <input type="radio" name="creatorColor" value="1" checked="@(_creatorPlayerNumber == 1)" @onchange="(() => _creatorPlayerNumber = 1)" />
+                Black
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;">
+                <input type="radio" name="creatorColor" value="2" checked="@(_creatorPlayerNumber == 2)" @onchange="(() => _creatorPlayerNumber = 2)" />
+                White
+            </label>
         </div>
-        @if (!string.IsNullOrWhiteSpace(_voiceCatalogMessage))
-        {
-            <div>@_voiceCatalogMessage</div>
-        }
+        <button style="width:100%;padding:10px 12px;" @onclick="StartNewGame">Start a new game</button>
     </div>
-</div>
 
+    <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Voices</h4>
+
+    <div style="max-width:520px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+            <button @onclick="LoadAdminVoicesFromUserGesture" disabled="@_checkingChromeVoices">Load voices</button>
+            <select @key="_adminVoicesLoaded" value="@_adminSelectedLanguage" @onchange="OnAdminLanguageChanged" disabled="@(!_adminVoicesLoaded)">
+                <option value="">All languages</option>
+                @foreach (var l in _adminLanguages)
+                {
+                    <option @key="l" value="@l">@FormatLanguageLabel(l)</option>
+                }
+            </select>
+            <select @key="_adminSelectedLanguage" value="@_adminSelectedRegion" @onchange="OnAdminRegionChanged" disabled="@(!_adminRegions.Any())">
+                <option value="">All countries</option>
+                @foreach (var r in _adminRegions)
+                {
+                    <option @key="r" value="@r">@FormatRegionLabel(_adminSelectedLanguage, r)</option>
+                }
+            </select>
+            <select @key="@($"{_adminSelectedLanguage}|{_adminSelectedRegion}")" value="@_adminFocusedVoiceKey" @onchange="OnAdminFocusedVoiceChanged" disabled="@(!_adminFilteredVoices.Any())">
+                <option value="">Select a voice</option>
+                @foreach (var v in _adminFilteredVoices)
+                {
+                    <option @key="v.Key" value="@v.Key">@v.Label</option>
+                }
+            </select>
+            <div style="font-size:12px;opacity:0.85;">Loaded voices: @_adminAllVoices.Count. Allowed for players: @_adminSelectedVoiceTokens.Count.</div>
+            <div style="font-size:12px;opacity:0.85;">Raw browser voices: @_adminRawVoiceCount.@(_checkingChromeVoices ? " Loading…" : "")</div>
+            @if (_adminFilteredVoices.Any())
+            {
+                <div style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;border:1px solid #ddd;padding:8px;">
+                    @foreach (var voice in _adminFilteredVoices)
+                    {
+                        <label style="display:flex;align-items:flex-start;gap:8px;">
+                            <input type="checkbox" checked="@_adminSelectedVoiceTokens.Contains(voice.Token)" @onchange="@(e => OnAdminVoiceCheckedChanged(voice, e))" />
+                            <span>@voice.Label</span>
+                        </label>
+                    }
+                </div>
+            }
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button @onclick="SelectAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Select filtered</button>
+                <button @onclick="ClearAllFilteredAdminVoices" disabled="@(!_adminFilteredVoices.Any())">Clear filtered</button>
+                <button @onclick="ToggleShowSelectedAdminVoices" disabled="@(!_adminSelectedVoiceTokens.Any())">@(_adminShowSelectedVoicesOnly ? "Show all voices" : "Show selected voices")</button>
+                <button @onclick="SaveAllowedVoices" disabled="@(!_adminAllVoices.Any())">Save allowed voices</button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_voiceCatalogMessage))
+            {
+                <div>@_voiceCatalogMessage</div>
+            }
+        </div>
+    </div>
+}
+
+@if (_showSettingsSection)
+{
 <h4 class="rainbow-heading rainbow-heading--sm" style="margin-top:18px;">Settings</h4>
 
 <div style="max-width:360px">
@@ -210,7 +220,8 @@ else
     </div>
 </div> 
 
-<LobbyChat />
+<!-- LobbyChat  / -->
+}
 
 @if (_showLogViewer)
 {
@@ -347,6 +358,7 @@ else
 
 @code {
     private int _creatorPlayerNumber = 1;
+    private bool _showSettingsSection = false;
     private int? _currentUserId;
     private string _currentUserName = "Unknown";
     // private string _currentPin = "";
@@ -449,6 +461,16 @@ else
     }
 
     private List<DraughtsService.GameListItem>? _games;
+
+    private void ShowAdminTopSection()
+    {
+        _showSettingsSection = false;
+    }
+
+    private void ShowAdminSettingsSection()
+    {
+        _showSettingsSection = true;
+    }
 
     protected override async Task OnInitializedAsync()
     {
