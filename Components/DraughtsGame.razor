@@ -781,6 +781,7 @@ else
         {
             if (!_connected) return;
             _ = InvokeAsync(StateHasChanged);
+            _voiceControls?.Refresh();
         }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
