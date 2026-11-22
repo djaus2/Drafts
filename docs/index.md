@@ -33,6 +33,7 @@ This folder contains progressive technical documentation for the Draughts/Checke
 
 ## 5) Voice / Speech
 
+- [GameVoice library (shared voice code)](game-voice-library.md)
 - [Speech Chat Implementation](speech-chat-implementation.md)
 - [Voice Chat Hybrid Duplex Plan](voice-chat-hybrid-duplex-plan.md)
 - [Voice Chat Duplex Upgrade Plan](voice-chat-duplex-upgrade-plan.md)

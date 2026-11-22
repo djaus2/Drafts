@@ -6,6 +6,7 @@
 @using Draughts.Components
 @inject DraughtsService GameService
 @inject AuthService Auth
+@inject VoiceRoomService Voice
 @inject SettingsService Settings
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
@@ -340,92 +341,32 @@ else
                 {
                     <div style="margin-top:12px;display:flex;flex-wrap:nowrap;gap:12px;align-items:center;width:100%;max-width:calc(100vw - 24px);">
                         <button class="game-btn" @onclick="SendChat">Send Txt</button>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <button class="game-voice-button" disabled="@(!CanPressToTalk)" x:Name="btnTalk"
-                                    @onpointerdown="OnTalkPointerDown"
-                                    @onpointerup="OnTalkPointerUp"
-                                    @onpointercancel="OnTalkPointerCancel"
-                                    @onpointerleave="OnTalkPointerLeave"
-                                    @onpointerdown:preventDefault="true"
-                                    @onpointerup:preventDefault="true">
-                                @if (IsVoiceMuted)
-                                {
-                                    <span style="font-size:18px;">🔇</span>
-                                }
-                                else
-                                {
-                                    <span style="font-size:18px;">🔊</span>
-                                }
-                                <span>@TalkButtonText</span>
-                            </button>
-                        </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <button class="game-voice-button" @onclick="ToggleMute" x:Name = "btnMute"
-                                    disabled="@(IsVoiceMuted && !CanUnmute)"
-                                    title="@MuteButtonTitle">
-                                @if (IsVoiceMuted)
-                                {
-                                    <span style="font-size:18px;">🔇</span>
-                                    <span>Unmute</span>
-                                }
-                                else
-                                {
-                                    <span style="font-size:18px;">🔊</span>
-                                    <span>Mute</span>
-                                }
-                            </button>
-                        </div>
+                        <VoiceControls @ref="_voiceControls"
+                                       RoomId="@_gameId"
+                                       UserId="@_currentUserId"
+                                       UserName="@_currentUserName"
+                                       Supported="@_voiceSupported"
+                                       SupportChecked="@_voiceSupportChecked"
+                                       TalkEnabled="@_talkEnabled"
+                                       TranscriptReceived="OnVoiceTranscript"
+                                       MessageRaised="OnVoiceMessage"
+                                       StatusChanged="OnVoiceStatusChanged" />
                     </div>
                 }
             </div>
-            @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
+            @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.Voice.MutedByUserName))
             {
-                <span style="font-size:16px;color:red">Muted by @_game.VoiceMutedByUserName</span>
+                <span style="font-size:16px;color:red">Muted by @_game.Voice.MutedByUserName</span>
             }
             else
             {
-                <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(_voiceStatus) ? (" " + _voiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
+                <p style="margin-top:8px;">@_message@(!string.IsNullOrWhiteSpace(VoiceStatus) ? (" " + VoiceStatus) : "")@(!string.IsNullOrWhiteSpace(_ttsStatus) ? (" " + _ttsStatus) : "")</p>
                 if (!string.IsNullOrWhiteSpace(_ttsDebug))
                 {
                     <p style="font-size:16px;color:#888;word-break:break-all;">TTS: @_ttsDebug</p>
                 }
             }
 
-           /* @if (_game?.HadSecondPlayerConnected == true)
-            {
-                <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;width:384px;max-width:calc(100vw - 24px);">
-                    <button class="game-btn" disabled="@(!CanPressToTalk)"
-                            @onpointerdown="OnTalkPointerDown"
-                            @onpointerup="OnTalkPointerUp"
-                            @onpointercancel="OnTalkPointerCancel"
-                            @onpointerleave="OnTalkPointerLeave"
-                            @onpointerdown:preventDefault="true"
-                            @onpointerup:preventDefault="true">
-                        @TalkButtonText
-                    </button>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        @if (IsVoiceMuted && !string.IsNullOrWhiteSpace(_game?.VoiceMutedByUserName))
-                        {
-                            <span style="font-size:14px;color:#666;">(muted by @_game.VoiceMutedByUserName)</span>
-                        }
-                        <button class="game-btn" @onclick="ToggleMute" 
-                                disabled="@(IsVoiceMuted && !CanUnmute)"
-                                style="background:@(IsVoiceMuted ? "#ffcccc" : "#f3f3f3");"
-                                title="@MuteButtonTitle">
-                            @if (IsVoiceMuted)
-                            {
-                                <span style="font-size:18px;">🔇</span>
-                                <span>Unmute</span>
-                            }
-                            else
-                            {
-                                <span style="font-size:18px;">🔊</span>
-                                <span>Mute</span>
-                            }
-                        </button>
-                    </div>
-                </div>
-            }*/
         }
         else
         {
@@ -500,19 +441,16 @@ else
     private const string VoicePrefix = "[VOICE] ";
     private const string VoiceMetaPrefix = "[VOICE-META]";
     private bool _talkEnabled;
-    private bool _pttHeld;
     private string _preferredTtsVoiceKey = "";
     private string _preferredTtsLanguage = "";
     private string _preferredTtsRegion = "";
     private bool _isPhoneClient;
     private bool _voiceSupported;
     private bool _voiceSupportChecked;
+    private VoiceControls? _voiceControls;
     private bool _hideVoiceInChat = true;
-    private string _voiceStatus = "";
     private string _ttsStatus = "";
     private int _ttsStatusVersion;
-    private DotNetObjectReference<DraughtsGame>? _voiceDotNetRef;
-    private System.Threading.Timer? _voiceHoldRenewTimer;
 
     private Draughts.Services.DraughtsGame? _game;
     private bool _connected = false;
@@ -633,29 +571,7 @@ else
         }
     }
 
-    private bool IsVoiceFloorHeldByOther
-    {
-        get
-        {
-            if (_game is null) return false;
-            if (!_game.VoiceFloorUserId.HasValue) return false;
-            if (_game.VoiceFloorUserId.Value == _currentUserId) return false;
-            if (!_game.VoiceFloorUntilUtc.HasValue) return false;
-            return _game.VoiceFloorUntilUtc.Value > DateTime.UtcNow;
-        }
-    }
 
-    private bool IsVoiceFloorHeldByMe
-    {
-        get
-        {
-            if (_game is null) return false;
-            if (!_game.VoiceFloorUserId.HasValue) return false;
-            if (_game.VoiceFloorUserId.Value != _currentUserId) return false;
-            if (!_game.VoiceFloorUntilUtc.HasValue) return false;
-            return _game.VoiceFloorUntilUtc.Value > DateTime.UtcNow;
-        }
-    }
 
     private bool IsAiDifficultyImplemented
     {
@@ -668,88 +584,19 @@ else
         }
     }
 
-    private bool CanPressToTalk => _voiceSupported && _talkEnabled && !_pttHeld && !IsVoiceFloorHeldByOther && !IsVoiceMuted;
-
-    private string TalkButtonText
-    {
-        get
-        {
-            if (!_voiceSupported) return "Talk not supported";
-            if (!_talkEnabled) return "Talk";
-            if (IsVoiceMuted) return "Muted";
-            if (_pttHeld) return "Talking…";
-            if (IsVoiceFloorHeldByOther) return "Other talking…";
-            return "Talk";
-        }
-    }
 
     private string GetConnectedMessage()
     {
         return _voiceSupportChecked && !_voiceSupported ? "Connected. Talk not supported" : "Connected.";
     }
 
-    private void UpdateVoiceStatusFromGame()
-    {
-        if (!_voiceSupportChecked)
-        {
-            _voiceStatus = "";
-            return;
-        }
 
-        if (!_voiceSupported)
-        {
-            _voiceStatus = "Talk not supported";
-            return;
-        }
+    private bool IsVoiceMuted => _game?.Voice.IsMuted ?? false;
 
-        if (!_talkEnabled)
-        {
-            _voiceStatus = "Talk is off";
-            return;
-        }
+    private string VoiceStatus => _voiceControls?.Status
+        ?? (!_voiceSupportChecked ? "" : _voiceSupported ? "Hold to talk" : "Talk not supported");
 
-        if (_pttHeld)
-        {
-            _voiceStatus = "Talking…";
-            return;
-        }
 
-        if (IsVoiceFloorHeldByOther)
-        {
-            var name = _game?.VoiceFloorUserName;
-            _voiceStatus = string.IsNullOrWhiteSpace(name) ? "Other talking…" : $"{name} talking…";
-            return;
-        }
-
-        _voiceStatus = "Hold to talk";
-    }
-
-    private bool IsVoiceMuted => _game?.VoiceMuted ?? false;
-
-    private bool CanUnmute => _game?.VoiceMutedByUserId == _currentUserId;
-
-    private string MuteButtonTitle
-    {
-        get
-        {
-            if (!IsVoiceMuted) return "Mute voice for both players";
-            if (CanUnmute) return "Unmute voice";
-            return $"Muted by {_game?.VoiceMutedByUserName ?? "other player"} - only they can unmute";
-        }
-    }
-
-    private async Task ToggleMute()
-    {
-        if (string.IsNullOrWhiteSpace(_gameId)) return;
-        if (_currentUserId <= 0) return;
-
-        var (ok, msg) = GameService.ToggleVoiceMute(_gameId, _currentUserId, _currentUserName);
-        if (!ok && !string.IsNullOrWhiteSpace(msg))
-        {
-            _message = msg;
-        }
-        await InvokeAsync(StateHasChanged);
-    }
 
     private void ToggleHideVoiceInChat()
     {
@@ -1051,7 +898,7 @@ else
         {
             if (!string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
             {
-                GameService.SetPreferredTtsSettingsForUser(_gameId, _currentUserId, _preferredTtsVoiceKey, _preferredTtsLanguage, _preferredTtsRegion);
+                Voice.SetPreference(_gameId, _currentUserId, _preferredTtsVoiceKey, _preferredTtsLanguage, _preferredTtsRegion);
             }
         }
         catch
@@ -1093,7 +940,6 @@ else
             }
         }
 
-        UpdateVoiceStatusFromGame();
 
         if (_game is not null
             && _game.ForcedJumpFromR.HasValue
@@ -1232,15 +1078,14 @@ else
         {
             try
             {
-                await JS.InvokeAsync<bool>("DraughtsVoice.installTtsUnlocker");
-                _voiceSupported = await JS.InvokeAsync<bool>("DraughtsVoice.isSupported");
+                await JS.InvokeAsync<bool>("GameVoice.installTtsUnlocker");
+                _voiceSupported = await JS.InvokeAsync<bool>("GameVoice.isSupported");
                 _voiceSupportChecked = true;
                 _talkEnabled = _voiceSupported;
-                _voiceStatus = _voiceSupported ? "Hold to talk" : "Talk not supported in this browser";
 
                 try
                 {
-                    _isPhoneClient = await JS.InvokeAsync<bool>("DraughtsVoice.isProbablyPhone");
+                    _isPhoneClient = await JS.InvokeAsync<bool>("GameVoice.isProbablyPhone");
                 }
                 catch
                 {
@@ -1256,7 +1101,7 @@ else
                     {
                         if (!string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
                         {
-                            GameService.SetPreferredTtsSettingsForUser(_gameId, _currentUserId, null, null, null);
+                            Voice.SetPreference(_gameId, _currentUserId, null, null, null);
                         }
                     }
                     catch
@@ -1270,7 +1115,6 @@ else
             {
                 _voiceSupported = false;
                 _voiceSupportChecked = true;
-                _voiceStatus = "Talk not supported";
             }
         }
     }
@@ -1456,7 +1300,7 @@ else
         if (!_talkEnabled) return;
         if (_game is null) return;
         if (_currentUserId <= 0) return;
-        if (_game.VoiceMuted) return;
+        if (_game.Voice.IsMuted) return;
 
         if (fromChatIndex < 0) fromChatIndex = 0;
         if (fromChatIndex < _lastVoiceSpokenChatIndex) fromChatIndex = _lastVoiceSpokenChatIndex;
@@ -1470,7 +1314,7 @@ else
         {
             try
             {
-                await JS.InvokeAsync<bool>("DraughtsVoice.unlockTts");
+                await JS.InvokeAsync<bool>("GameVoice.unlockTts");
             }
             catch
             {
@@ -1493,9 +1337,9 @@ else
                 string? voiceRegion = null;
                 try
                 {
-                    voiceKey = _game?.GetPreferredTtsVoiceForUserId(m.SenderUserId);
-                    voiceLanguage = _game?.GetPreferredTtsLanguageForUserId(m.SenderUserId);
-                    voiceRegion = _game?.GetPreferredTtsRegionForUserId(m.SenderUserId);
+                    voiceKey = _game?.Voice.GetPreferredVoiceKey(m.SenderUserId);
+                    voiceLanguage = _game?.Voice.GetPreferredLanguage(m.SenderUserId);
+                    voiceRegion = _game?.Voice.GetPreferredRegion(m.SenderUserId);
                 }
                 catch
                 {
@@ -1537,8 +1381,8 @@ else
                 try
                 {
                     var voiceLabel = _isPhoneClient
-                        ? await JS.InvokeAsync<string>("DraughtsVoice.speakDefaultAndDescribe", payload)
-                        : await JS.InvokeAsync<string>("DraughtsVoice.speakAndDescribe", payload, voiceKey, voiceLanguage, voiceRegion);
+                        ? await JS.InvokeAsync<string>("GameVoice.speakDefaultAndDescribe", payload)
+                        : await JS.InvokeAsync<string>("GameVoice.speakAndDescribe", payload, voiceKey, voiceLanguage, voiceRegion);
                     if (string.IsNullOrWhiteSpace(voiceLabel)) voiceLabel = "Default voice";
 
                     await JS.InvokeVoidAsync(
@@ -1552,7 +1396,7 @@ else
                     {
                         try
                         {
-                            var inspect = await JS.InvokeAsync<VoiceInspectResult>("DraughtsVoice.inspectVoiceMatch", voiceKey, voiceLanguage, voiceRegion);
+                            var inspect = await JS.InvokeAsync<VoiceInspectResult>("GameVoice.inspectVoiceMatch", voiceKey, voiceLanguage, voiceRegion);
                             if (inspect is not null)
                             {
                                 var keyText = string.IsNullOrWhiteSpace(inspect.preferredKey) ? "(empty)" : inspect.preferredKey;
@@ -1591,14 +1435,13 @@ else
                 catch
                 {
                     var ok = _isPhoneClient
-                        ? await JS.InvokeAsync<bool>("DraughtsVoice.speakDefault", payload)
-                        : await JS.InvokeAsync<bool>("DraughtsVoice.speak", payload, voiceKey, voiceLanguage, voiceRegion);
+                        ? await JS.InvokeAsync<bool>("GameVoice.speakDefault", payload)
+                        : await JS.InvokeAsync<bool>("GameVoice.speak", payload, voiceKey, voiceLanguage, voiceRegion);
                     _ = ok;
                 }
 
                 try
                 {
-                    UpdateVoiceStatusFromGame();
                     await InvokeAsync(StateHasChanged);
                 }
                 catch
@@ -2118,107 +1961,19 @@ else
         _ = InvokeAsync(StateHasChanged);
     }
 
-    [JSInvokable]
-    public Task OnVoiceTranscript(string text)
+    private Task OnVoiceTranscript(string text)
     {
-        // Note: _pttHeld may already be false since JS flush is delayed after button release
         if (string.IsNullOrWhiteSpace(_gameId)) return Task.CompletedTask;
         if (_currentUserId <= 0) return Task.CompletedTask;
-        if (string.IsNullOrWhiteSpace(text)) return Task.CompletedTask;
-        if (_game?.VoiceMuted == true) return Task.CompletedTask;
 
-        var clean = text.Trim();
-        // Voice preference is shared via SetPreferredTtsVoiceForUser on join, no need for metadata in messages
-        GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, VoicePrefix + clean);
+        GameService.AddChatMessage(_gameId, _currentUserId, _currentUserName, VoicePrefix + text);
         return Task.CompletedTask;
     }
 
-    [JSInvokable]
-    public Task OnVoiceError(string error)
+    private void OnVoiceMessage(string message) => _message = message;
+
+    private void OnVoiceStatusChanged()
     {
-        var text = (error ?? string.Empty).Trim();
-        _voiceStatus = string.IsNullOrWhiteSpace(text)
-            ? "Mic error"
-            : $"Mic error: {text}";
-        return InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable]
-    public Task OnVoiceEnded()
-    {
-        return Task.CompletedTask;
-    }
-
-    private async Task OnTalkPointerDown()
-    {
-        if (!_voiceSupported) return;
-        if (!_talkEnabled) return;
-        if (_pttHeld) return;
-        if (IsVoiceFloorHeldByOther) return;
-
-        _pttHeld = true;
-        _voiceStatus = "Talking…";
-
-        if (!string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
-        {
-            GameService.TryAcquireVoiceFloor(_gameId, _currentUserId, _currentUserName);
-        }
-
-        _voiceDotNetRef ??= DotNetObjectReference.Create(this);
-
-        try
-        {
-            await JS.InvokeAsync<bool>("DraughtsVoice.start", _voiceDotNetRef);
-        }
-        catch
-        {
-        }
-
-        _voiceHoldRenewTimer?.Dispose();
-        _voiceHoldRenewTimer = new System.Threading.Timer(_ =>
-        {
-            if (!_pttHeld) return;
-            if (string.IsNullOrWhiteSpace(_gameId)) return;
-            if (_currentUserId <= 0) return;
-            GameService.TryAcquireVoiceFloor(_gameId, _currentUserId, _currentUserName);
-        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task OnTalkPointerUp()
-    {
-        if (!_pttHeld) return;
-        _pttHeld = false;
-
-        _voiceHoldRenewTimer?.Dispose();
-        _voiceHoldRenewTimer = null;
-
-        if (!string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
-        {
-            GameService.ReleaseVoiceFloor(_gameId, _currentUserId);
-        }
-
-        try
-        {
-            await JS.InvokeAsync<bool>("DraughtsVoice.stop");
-        }
-        catch
-        {
-        }
-
-        UpdateVoiceStatusFromGame();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task OnTalkPointerCancel()
-    {
-        await OnTalkPointerUp();
-    }
-
-    private async Task OnTalkPointerLeave()
-    {
-        await OnTalkPointerUp();
     }
 
     public void Dispose()
@@ -2232,24 +1987,6 @@ else
         {
         }
 
-        try
-        {
-            _voiceHoldRenewTimer?.Dispose();
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            if (_pttHeld && !string.IsNullOrWhiteSpace(_gameId) && _currentUserId > 0)
-            {
-                GameService.ReleaseVoiceFloor(_gameId, _currentUserId);
-            }
-        }
-        catch
-        {
-        }
 
         _dotNetRef?.Dispose();
     }

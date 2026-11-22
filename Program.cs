@@ -1,3 +1,4 @@
+using GameVoice;
 using Draughts.Components;
 using Draughts.Data;
 using Draughts.Services;
@@ -81,6 +82,9 @@ namespace Draughts
             builder.Services.AddSingleton<LobbyChatService>();
             builder.Services.AddSingleton<SettingsService>();
             builder.Services.AddSingleton<UsableMsVoiceService>();
+            builder.Services.AddSingleton<IVoiceCatalog>(sp => sp.GetRequiredService<UsableMsVoiceService>());
+            builder.Services.AddSingleton<IVoiceRoomHost>(sp => sp.GetRequiredService<DraughtsService>());
+            builder.Services.AddGameVoice();
             builder.Services.AddSingleton<GameLogService>();
             builder.Services.AddSingleton<AiService>();
             builder.Services.AddHostedService<GameTimeoutReaper>();

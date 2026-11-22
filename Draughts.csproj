@@ -36,4 +36,8 @@
     <Folder Include="Properties\PublishProfiles\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="GameVoice" Version="1.0.0-preview.1" />
+  </ItemGroup>
+
 </Project>
