@@ -1,5 +1,7 @@
 # Speech Chat Implementation
 
+> **Update:** the voice code described here now lives in the shared GameVoice package. `window.DraughtsVoice` is now `window.GameVoice`, and the voice floor/mute/preference state is a `VoiceRoom`. See [GameVoice library](game-voice-library.md).
+
 ## Overview
 Implementation of text-to-speech (TTS) and speech recognition features for the Draughts application, enabling voice-based communication and accessibility enhancements.
 

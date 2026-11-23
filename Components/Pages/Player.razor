@@ -369,39 +369,6 @@ else
 
 <LobbyChat CurrentUserId="@_cachedUserId" />
 
-<script>
-  window.DraughtsVoice = window.DraughtsVoice || {};
-  window.DraughtsVoice.version = 'player-voices-2026-03-09a';
-  window.DraughtsVoice.ping = function () {
-    try {
-      return window.DraughtsVoice.version || 'unknown';
-    } catch (e) {
-      return 'ping-error';
-    }
-  };
-  window.DraughtsVoice.getVoicesCount = function () {
-    try {
-      var vs = window.DraughtsVoice.getVoices();
-      return (vs && vs.length) ? vs.length : 0;
-    } catch (e) {
-      return -1;
-    }
-  };
-  window.DraughtsVoice.isProbablyPhone = function () {
-    try {
-      var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
-      ua = (ua || '').toLowerCase();
-      if (ua.indexOf('android') >= 0) return true;
-      if (ua.indexOf('iphone') >= 0) return true;
-      if (ua.indexOf('ipad') >= 0) return true;
-      if (ua.indexOf('ipod') >= 0) return true;
-      if (ua.indexOf('mobile') >= 0) return true;
-      return false;
-    } catch (e) {
-      return false;
-    }
-  };
- </script>
 
 @code {
     private string _selectedGameId = "";
@@ -486,7 +453,7 @@ else
         // Handle voice initialization (from second method)
         try
         {
-            _isPhoneClient = await JS.InvokeAsync<bool>("DraughtsVoice.isProbablyPhone");
+            _isPhoneClient = await JS.InvokeAsync<bool>("GameVoice.isProbablyPhone");
         }
         catch
         {
@@ -558,7 +525,7 @@ else
         {
             try
             {
-                await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
+                await JS.InvokeAsync<bool>("GameVoice.warmupVoices");
                 await LoadVoicesAsync();
             }
             catch
@@ -768,7 +735,7 @@ else
 
         try
         {
-            await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
+            await JS.InvokeAsync<bool>("GameVoice.warmupVoices");
         }
         catch
         {
@@ -798,7 +765,7 @@ else
 
         try
         {
-            await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
+            await JS.InvokeAsync<bool>("GameVoice.warmupVoices");
         }
         catch
         {
@@ -862,7 +829,7 @@ else
 
             try
             {
-                await JS.InvokeAsync<bool>("DraughtsVoice.warmupVoices");
+                await JS.InvokeAsync<bool>("GameVoice.warmupVoices");
             }
             catch (Exception exWarm)
             {
@@ -899,12 +866,12 @@ else
         try
         {
             using var pingCts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-            ping = await JS.InvokeAsync<string>("DraughtsVoice.ping", pingCts.Token);
+            ping = await JS.InvokeAsync<string>("GameVoice.ping", pingCts.Token);
 
             try
             {
                 using var c0Cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-                var count0 = await JS.InvokeAsync<int>("DraughtsVoice.getVoicesCount", c0Cts.Token);
+                var count0 = await JS.InvokeAsync<int>("GameVoice.getVoicesCount", c0Cts.Token);
                 c0 = $"c0:{count0}";
             }
             catch
@@ -926,7 +893,7 @@ else
             try
             {
                 using var c1Cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                var count1 = await JS.InvokeAsync<int>("DraughtsVoice.getVoicesAsyncCount", c1Cts.Token);
+                var count1 = await JS.InvokeAsync<int>("GameVoice.getVoicesAsyncCount", c1Cts.Token);
                 c1 = $"c1:{count1}";
             }
             catch
@@ -937,7 +904,7 @@ else
             try
             {
                 using var c2Cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-                var count2 = await JS.InvokeAsync<int>("DraughtsVoice.getVoicesCount", c2Cts.Token);
+                var count2 = await JS.InvokeAsync<int>("GameVoice.getVoicesCount", c2Cts.Token);
                 c2 = $"c2:{count2}";
             }
             catch
@@ -946,7 +913,7 @@ else
             }
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(16));
-            var raw = await JS.InvokeAsync<List<VoiceInfo>>("DraughtsVoice.getVoicesAsync", cts.Token);
+            var raw = await JS.InvokeAsync<List<VoiceInfo>>("GameVoice.getVoicesAsync", cts.Token);
             rawCount = raw?.Count ?? 0;
             _allVoices = (raw ?? new List<VoiceInfo>())
                 .Select(v =>

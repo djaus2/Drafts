@@ -56,35 +56,6 @@
     }
 </div>
 
-<script>
-  window.lobbyChat = window.lobbyChat || {};
-  window.lobbyChat.scrollToBottom = function (el) {
-    try {
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
-    } catch (e) {
-    }
-  };
-
-  window.lobbyChat.wireEnterToSend = function (el, dotNetRef) {
-    try {
-      if (!el || !dotNetRef) return;
-      if (el.__lobbyEnterWired) return;
-      el.__lobbyEnterWired = true;
-      el.addEventListener('keydown', function (ev) {
-        try {
-          if (ev.key === 'Enter') {
-            ev.preventDefault();
-            dotNetRef.invokeMethodAsync('OnChatEnterFromJs');
-          }
-        } catch (e) {
-        }
-      });
-    } catch (e) {
-    }
-  };
-</script>
-
 @code {
     private ElementReference _chatInRef;
     private ElementReference _chatOutRef;
@@ -255,7 +226,7 @@
             try
             {
                 _dotNetRef ??= DotNetObjectReference.Create(this);
-                await JS.InvokeVoidAsync("lobbyChat.wireEnterToSend", _chatOutRef, _dotNetRef);
+                await JS.InvokeVoidAsync("GameChat.wireEnterToSend", _chatOutRef, _dotNetRef);
             }
             catch
             {
@@ -267,7 +238,7 @@
             _scrollPending = false;
             try
             {
-                await JS.InvokeVoidAsync("lobbyChat.scrollToBottom", _chatInRef);
+                await JS.InvokeVoidAsync("GameChat.scrollToBottom", _chatInRef);
             }
             catch
             {
