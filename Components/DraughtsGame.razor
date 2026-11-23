@@ -1054,7 +1054,7 @@ else
             try
             {
                 _dotNetRef ??= DotNetObjectReference.Create(this);
-                await JS.InvokeVoidAsync("DraughtsChat.wireEnterToSend", _chatOutRef, _dotNetRef);
+                await JS.InvokeVoidAsync("GameChat.wireEnterToSend", _chatOutRef, _dotNetRef);
                 _chatWired = true;
             }
             catch
@@ -1067,8 +1067,8 @@ else
             try
             {
                 _chatScrollPending = false;
-                await JS.InvokeVoidAsync("DraughtsChat.scrollToBottom", _chatInRef);
-                await JS.InvokeVoidAsync("DraughtsChat.scrollToBottom", _chatOutRef);
+                await JS.InvokeVoidAsync("GameChat.scrollToBottom", _chatInRef);
+                await JS.InvokeVoidAsync("GameChat.scrollToBottom", _chatOutRef);
             }
             catch
             {
@@ -1274,13 +1274,7 @@ else
         if (startIndex < 0) startIndex = 0;
         if (startIndex >= game.ChatMessages.Count) return "";
 
-        var hideVoice = _hideVoiceInChat;
-        var lines = game.ChatMessages
-            .Skip(startIndex)
-            .Where(m => !hideVoice || !m.Text.StartsWith(VoicePrefix, StringComparison.OrdinalIgnoreCase))
-            .Select(m => $"{m.SenderName}: {m.Text ?? string.Empty}");
-
-        return string.Join("\n", lines);
+        return game.ChatMessages.Format(startIndex, _hideVoiceInChat);
     }
 
     private async Task ClearChatReceive()

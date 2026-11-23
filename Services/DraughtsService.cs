@@ -320,8 +320,8 @@ namespace Draughts.Services
                 var p1VoiceText = string.IsNullOrWhiteSpace(p1Voice) ? "(default voice)" : p1Voice;
                 var p2VoiceText = string.IsNullOrWhiteSpace(p2Voice) ? "(default voice)" : p2Voice;
 
-                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p1Name}: voice={p1VoiceText}"));
-                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", $"{p2Name}: voice={p2VoiceText}"));
+                game.ChatMessages.Add(new ChatMessage(DateTime.UtcNow, 0, "System", $"{p1Name}: voice={p1VoiceText}"));
+                game.ChatMessages.Add(new ChatMessage(DateTime.UtcNow, 0, "System", $"{p2Name}: voice={p2VoiceText}"));
                 game.VoiceInfoAnnounced = true;
                 game.Touch();
                 did = true;
@@ -394,7 +394,7 @@ namespace Draughts.Services
 
             lock (game)
             {
-                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, senderUserId, senderName ?? string.Empty, text));
+                game.ChatMessages.Add(new ChatMessage(DateTime.UtcNow, senderUserId, senderName ?? string.Empty, text));
                 game.Touch();
             }
 
@@ -822,7 +822,7 @@ namespace Draughts.Services
             {
                 game.GameOverMessageSent = true;
                 var text = "Game over.";
-                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
+                game.ChatMessages.Add(new ChatMessage(DateTime.UtcNow, 0, "System", text));
 
                 var gameNum = int.Parse(game.Id, System.Globalization.NumberStyles.HexNumber);
                 var drawDetails = game.IsAiGame
@@ -849,7 +849,7 @@ namespace Draughts.Services
             {
                 game.GameOverMessageSent = true;
                 var text = winner == 0 ? "Game over." : $"Game over. Player {winner} wins.";
-                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, 0, "System", text));
+                game.ChatMessages.Add(new ChatMessage(DateTime.UtcNow, 0, "System", text));
                 
                 // Log game end with winner and loser
                 var loser = winner == 1 ? 2 : (winner == 2 ? 1 : 0);
@@ -1063,7 +1063,7 @@ namespace Draughts.Services
                             killMsg = true;
                             game.IdleKillMessageSent = true;
                             game.KillAfterUtc = now + killGrace;
-                            game.ChatMessages.Add(new DraughtsGame.ChatMessage(
+                            game.ChatMessages.Add(new ChatMessage(
                                 now,
                                 0,
                                 "System",
@@ -1075,7 +1075,7 @@ namespace Draughts.Services
                         warn = true;
                         game.IdleWarningSent = true;
 
-                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
+                        game.ChatMessages.Add(new ChatMessage(
                             now,
                             0,
                             "System",
@@ -1144,7 +1144,7 @@ namespace Draughts.Services
                         shouldRemove = true;
                         
                         // Add a system message before removing
-                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
+                        game.ChatMessages.Add(new ChatMessage(
                             now,
                             0,
                             "System",
@@ -1155,7 +1155,7 @@ namespace Draughts.Services
                         shouldWarn = true;
                         game.GameTimeWarningSent = true;
                         
-                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
+                        game.ChatMessages.Add(new ChatMessage(
                             now,
                             0,
                             "System",
@@ -1221,7 +1221,7 @@ namespace Draughts.Services
                         shouldRemove = true;
                         
                         // Add a system message before removing
-                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
+                        game.ChatMessages.Add(new ChatMessage(
                             now,
                             0,
                             "System",
@@ -1236,7 +1236,7 @@ namespace Draughts.Services
                         var remainingMins = Math.Max(0, (int)remaining.TotalMinutes);
                         var remainingSecs = Math.Max(0, remaining.Seconds);
                         
-                        game.ChatMessages.Add(new DraughtsGame.ChatMessage(
+                        game.ChatMessages.Add(new ChatMessage(
                             now,
                             0,
                             "System",
@@ -1315,7 +1315,7 @@ namespace Draughts.Services
 
                 // Add concession message to chat
                 var concessionText = $"{userName} conceded. Player {winnerPlayer} wins!";
-                game.ChatMessages.Add(new DraughtsGame.ChatMessage(DateTime.UtcNow, userId, "System", concessionText));
+                game.ChatMessages.Add(new ChatMessage(DateTime.UtcNow, userId, "System", concessionText));
 
                 // Mark the game as finished with the specified winner
                 MarkFinishedWithWinner(game, winnerPlayer, "concession");
@@ -1423,9 +1423,7 @@ namespace Draughts.Services
         /// <summary>Voice floor, mute and per-user TTS preferences (GameVoice).</summary>
         public VoiceRoom Voice { get; } = new();
 
-        public sealed record ChatMessage(DateTime Utc, int SenderUserId, string SenderName, string Text);
-
-        public List<ChatMessage> ChatMessages { get; } = new();
+        public ChatLog ChatMessages { get; } = new();
 
         public sealed record BoardPos(int R, int C);
 
