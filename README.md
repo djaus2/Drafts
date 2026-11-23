@@ -4,7 +4,7 @@
 >
 > **Latest:** AI as the second player! 3 Levels Easy/Moderate/Random(Easiest) ... _Game algorithms mode coming_
 
-> **Voice:** speech recognition, TTS and the voice floor come from the shared [GameVoice](https://github.com/djaus2/GameVoice) package on [nuget.org](https://www.nuget.org/packages/GameVoice); see [docs/game-voice-library.md](docs/game-voice-library.md).
+> **Chat and voice:** lobby and in-game text chat, speech recognition, TTS and the voice floor come from the shared [GameVoice](https://github.com/djaus2/GameVoice) package on [nuget.org](https://www.nuget.org/packages/GameVoice); see [docs/game-voice-library.md](docs/game-voice-library.md).
 
 <div style="text-align: center; margin: 20px 0;">
     <img src="https://github.com/djaus2/Drafts/blob/master/wwwroot/Images/TheBoard.png"          "

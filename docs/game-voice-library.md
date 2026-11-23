@@ -1,6 +1,6 @@
 # GameVoice library (shared voice code)
 
-Voice chat in this app now comes from the [GameVoice](https://github.com/djaus2/GameVoice) Razor class library,
+Voice and text chat in this app now come from the [GameVoice](https://github.com/djaus2/GameVoice) Razor class library,
 published as the [`GameVoice`](https://www.nuget.org/packages/GameVoice) package on nuget.org. The same package is used by Draughts and Reversi and
 is designed to be adopted by WalkieTalkie and a future Chess app.
 
