@@ -1,7 +1,7 @@
 # GameVoice library (shared voice code)
 
 Voice chat in this app now comes from the [GameVoice](https://github.com/djaus2/GameVoice) Razor class library,
-published as the `GameVoice` NuGet package on GitHub Packages. The same package is used by Draughts and Reversi and
+published as the [`GameVoice`](https://www.nuget.org/packages/GameVoice) package on nuget.org. The same package is used by Draughts and Reversi and
 is designed to be adopted by WalkieTalkie and a future Chess app.
 
 ## What moved to GameVoice
@@ -27,17 +27,9 @@ the admin voice catalogue pages and the per-user voice columns in the `Users` ta
 - `Components/App.razor` loads `_content/GameVoice/gameVoice.js` before `js/draughtsGame.js`.
 - `DraughtsGame.razor` renders `<VoiceControls>` and posts each transcript to chat with the `[VOICE] ` prefix.
 
-## Building: GitHub Packages token
+## Building
 
-`nuget.config` adds the `github-djaus2` source for the `GameVoice` package only. GitHub Packages needs a
-token with `read:packages` even for restore. Once per machine (Visual Studio uses the same user config):
-
-```bash
-dotnet nuget update source github-djaus2 --username <github-user> --password <PAT> --store-password-in-clear-text --configfile %APPDATA%\NuGet\NuGet.Config
-```
-
-If that fails because the source isn't in your user config, use `dotnet nuget add source https://nuget.pkg.github.com/djaus2/index.json --name github-djaus2` with the same options.
-Never commit the token. Any build server that restores packages (for example an Azure or GitHub Actions build) needs the same credential.
+`GameVoice` restores from nuget.org like any other package; no extra package source or token is needed.
 
 ## Updating GameVoice
 
