@@ -37,7 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="GameVoice" Version="1.1.0" />
+    <PackageReference Include="GameVoice" Version="*" />
   </ItemGroup>
 
 </Project>

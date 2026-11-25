@@ -36,5 +36,5 @@ the admin voice catalogue pages and the per-user voice columns in the `Users` ta
 
 ## Updating GameVoice
 
-Change the library in the GameVoice repo, push a `vX.Y.Z` tag to publish, then bump
-`<PackageReference Include="GameVoice" Version="X.Y.Z" />` in `Draughts.csproj`.
+Change the library in the GameVoice repo and push a `vX.Y.Z` tag to publish. `Draughts.csproj` references
+`<PackageReference Include="GameVoice" Version="*" />`, so the next restore picks up the newest stable version from nuget.org (on an existing checkout run `dotnet restore --force-evaluate` to refresh it).
