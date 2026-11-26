@@ -348,6 +348,7 @@ else
                                        Supported="@_voiceSupported"
                                        SupportChecked="@_voiceSupportChecked"
                                        TalkEnabled="@_talkEnabled"
+                                       RecognitionLanguage="@_recognitionLanguage"
                                        TranscriptReceived="OnVoiceTranscript"
                                        MessageRaised="OnVoiceMessage"
                                        StatusChanged="OnVoiceStatusChanged" />
@@ -448,6 +449,7 @@ else
     private bool _voiceSupported;
     private bool _voiceSupportChecked;
     private VoiceControls? _voiceControls;
+    private string _recognitionLanguage = SettingsService.DefaultSpeechRecognitionLanguage;
     private bool _hideVoiceInChat = true;
     private string _ttsStatus = "";
     private int _ttsStatusVersion;
@@ -607,6 +609,7 @@ else
     {
         // Clear any existing game state to ensure fresh start
         ClearGameState();
+        _recognitionLanguage = await Settings.GetSpeechRecognitionLanguageAsync();
         
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;

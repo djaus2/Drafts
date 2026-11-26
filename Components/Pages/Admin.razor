@@ -150,6 +150,20 @@
             <i><b>Note:</b> When disabled, only Admins can change PINs</i>
         </label>
         <label style="display:flex;flex-direction:column;gap:4px">
+            Speech recognition language
+            <select @bind="_speechRecognitionLanguage">
+                @if (!SpeechRecognitionLanguages.Any(l => string.Equals(l.Code, _speechRecognitionLanguage, StringComparison.OrdinalIgnoreCase)))
+                {
+                    <option value="@_speechRecognitionLanguage">@_speechRecognitionLanguage</option>
+                }
+                @foreach (var lang in SpeechRecognitionLanguages)
+                {
+                    <option value="@lang.Code">@lang.Name (@lang.Code)</option>
+                }
+            </select>
+            <i>Language players speak when talking. Applies to everyone.</i>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px">
             Last move highlight color
             <select @bind="_lastMoveHighlightColor">
                 @foreach (var item in HighlightColorOptions)
@@ -389,6 +403,15 @@ else
     private double _multiJumpGraceSeconds = 1.5;
     private bool _gameInitiatorGoesFirst = true;
     private bool _allowPlayerPinChange = true;
+    private string _speechRecognitionLanguage = SettingsService.DefaultSpeechRecognitionLanguage;
+
+    private static readonly (string Code, string Name)[] SpeechRecognitionLanguages =
+    {
+        ("en-AU", "English (Australia)"), ("en-GB", "English (UK)"), ("en-NZ", "English (New Zealand)"),
+        ("en-US", "English (US)"), ("de-DE", "German"), ("es-ES", "Spanish"), ("fi-FI", "Finnish"),
+        ("fr-FR", "French"), ("it-IT", "Italian"), ("ja-JP", "Japanese"), ("nl-NL", "Dutch"),
+        ("pt-BR", "Portuguese (Brazil)"), ("zh-CN", "Chinese (Mandarin)")
+    };
     private string _settingsMessage = "";
     private string _voiceCatalogMessage = "";
     private bool _checkingChromeVoices;
@@ -499,6 +522,7 @@ else
         _multiJumpGraceSeconds = await Settings.GetMultiJumpGraceSecondsAsync();
         _gameInitiatorGoesFirst = await Settings.GetGameInitiatorGoesFirstAsync();
         _allowPlayerPinChange = await Settings.GetAllowPlayerPinChangeAsync();
+        _speechRecognitionLanguage = await Settings.GetSpeechRecognitionLanguageAsync();
         _chromeUsableVoices = UsableMsVoices.GetVoices("chrome").ToList();
         _adminSelectedVoiceTokens = _chromeUsableVoices
             .Select(x => x.Token)
@@ -543,7 +567,9 @@ else
         var ok8 = await Settings.UpdateMultiJumpGraceSecondsAsync(_multiJumpGraceSeconds);
         var ok9 = await Settings.UpdateGameInitiatorGoesFirstAsync(_gameInitiatorGoesFirst);
         var ok10 = await Settings.UpdateAllowPlayerPinChangeAsync(_allowPlayerPinChange);
-        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10) ? "Saved." : "Invalid value.";
+        var ok11 = await Settings.UpdateSpeechRecognitionLanguageAsync(_speechRecognitionLanguage);
+        if (ok11) _speechRecognitionLanguage = await Settings.GetSpeechRecognitionLanguageAsync();
+        _settingsMessage = (ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 && ok11) ? "Saved." : "Invalid value.";
     }
 
     private async Task LoadAdminVoicesFromUserGesture()
